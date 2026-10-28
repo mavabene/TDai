@@ -17,6 +17,7 @@ was performed. The workspace was not a Git repository when assessed.
 On October 28, the workspace was connected to the owner's GitHub repository.
 See [repository setup](docs/DEVELOPMENT.md#repository-and-document-maintenance)
 for the remote and tracking policy.
+The initial code/documentation baseline has been committed and pushed to `main`.
 The selected code-tracking scope and fingerprints are in
 [current code inventory](docs/CURRENT_CODE.md). Box updates are on hold to preserve
 the differing PLC project already in that folder.

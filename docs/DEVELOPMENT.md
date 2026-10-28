@@ -143,6 +143,10 @@ On October 28, 2026, this workspace was initialized as a Git repository on `main
 with `origin` set to `https://github.com/mavabene/TDai.git`. The remote advertised
 no branches or commits when inspected. Initialization itself staged, committed,
 and pushed no files. The selected initial code inventory is recorded below.
+The initial baseline was subsequently committed and pushed to `origin/main` on
+October 28, 2026. Remote write access is verified. The committed contents of all
+24 code/archive/library files match their recorded SHA-256 fingerprints; supplied
+reference documents are also preserved byte-for-byte in Git.
 Repository-local `http.sslBackend=schannel` uses Windows certificate validation
 because Git's OpenSSL certificate-chain check failed on this connection.
 Certificate verification remains enabled.
@@ -204,8 +208,8 @@ every deletion target before mutation; paths must not recurse into one another.
 A verified local copy establishes that the Box-synced folder received the files.
 Report cloud upload completion only when Box sync status provides that evidence.
 Writing outside this workspace may require a destination-specific filesystem
-permission when the actual path is known. No backup, scheduled synchronization,
-or GitHub upload has been performed under this workflow yet.
+permission when writes are enabled. Box backup remains on hold, and no scheduled
+synchronization is enabled. The GitHub baseline push succeeded separately.
 
 Before handoff, verify internal links and source keys, check source identities,
 and reconcile affected summaries with actual results. Update README's current
