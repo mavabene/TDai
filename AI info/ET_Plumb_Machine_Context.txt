@@ -1,0 +1,229 @@
+ET PLUMB — MACHINE GEOMETRY AND GPS TARGETING CONTEXT
+Revision: 0.6 — explicitly defines X-slide motion opposite to GPS X
+Date: October 27, 2026
+
+PURPOSE AND EVIDENCE
+
+This document gives an AI agent the physical and software context needed to reason about the machine's positioning geometry. It combines the owner's description with a targeted review of these CODESYS text exports:
+
+PLC: exports_ojjo_TD3_cr711S_530v1.zip
+HMI: exports_ojjo_TD3_cr1203_530v1.zip
+
+The PLC is an ifm CR711S; the HMI is an ifm CR1203. This is a context reference, not a complete code review or a verified kinematic specification. Explicit owner descriptions below establish the intended physical model. Code observations describe the supplied version and may include approximations or unresolved implementation issues. Items marked UNCONFIRMED must not be silently assumed in future calculations.
+
+1. MACHINE AND FOUNDATION INSTALLATION
+
+The machine is a diesel-powered, hydraulically operated drilling rig used to install ground screws approximately 1.5 to 2.5 m long for utility-scale solar foundations.
+
+Most foundations use two battered screws: screws installed at an intentional angle from vertical, rather than plumb. Their intended geometry brings the two legs together at a designated point in space. The completed foundation has a specified reference point that must coincide with the design location supplied through a PNEZD file. The design point is not necessarily a screw's ground-entry point or its tip.
+
+Some product types use additional screws or different geometry. Do not apply the standard two-leg geometry to every foundation.
+
+PNEZD fields are:
+  P: point identifier.
+  N: Northing.
+  E: Easting.
+  Z: elevation.
+  D: description. In this application, the description can encode installation parameters; it is not merely a display label.
+
+2. REFERENCE POINTS AND PRODUCT-SPECIFIC CALIBRATION
+
+Target plate: the GPS reference plate, also called the truss cap holder. It has physical reference marks, including a WP mark and a pin mark.
+
+The term WORKPOINT (WP) is ambiguous and must be qualified:
+  Geometric workpoint: the intended intersection of the two battered legs.
+  Target-plate WP mark: the physical mark on the target plate representing that workpoint when the plate is appropriately positioned.
+  Code variables containing WP: their meaning must be established from context; the name alone does not identify which of these meanings is intended.
+
+COR means Center of Rotator. The geometric workpoint generally corresponds to COR. This arrangement is useful because rotating to the right to install the right leg and to the left to install the left leg brings the two leg axes to the same intended intersection. Do not assume exact coincidence for every product or operating configuration.
+
+The mast and lower crowd are positioned to align the target-plate WP mark with COR for the calibration/installation reference arrangement. This alignment is a physical positioning condition, not a permanent rigid coincidence: the target plate moves with the lower crowd, and the relationship can change during screw driving. Selected PLC target adjustments compensate for residual misalignment during assembly/crimping.
+
+SI — OLDER PRODUCT AND REFERENCE CONVENTION:
+  The supplied PNEZD point corresponds to the workpoint/COR reference.
+  GPS calibration uses the WP mark on the target plate.
+  The mast and lower crowd are positioned so that this WP mark coincides with COR.
+  In this reference arrangement, the PNEZD point, geometric workpoint, target-plate WP mark, and COR are intended to coincide.
+
+EARTH TRUSS — CURRENT PIN REFERENCE CONVENTION:
+  The supplied PNEZD point corresponds to the pin location.
+  GPS calibration uses the PIN mark on the target plate.
+  The target plate is positioned so its WP mark aligns with COR.
+  The PIN mark is the reference positioned to the PNEZD target. It must not be assumed to coincide with COR or with the WP mark.
+  The product geometry relates the pin reference to the geometric workpoint/COR arrangement. Numerical offsets must be taken from the appropriate product geometry and code.
+
+The owner intends pin-based referencing for future products as well. SI retains its workpoint-based convention in the current description; do not silently apply a future convention to the supplied SI code or data.
+
+These distinctions separate three questions:
+  Which physical target-plate mark is used for GPS calibration?
+  Which foundation reference does the PNEZD point specify?
+  Where is the geometric leg intersection relative to COR and the selected reference?
+
+The supplied code contains product- and state-dependent target adjustments, including motor side-leg, third-leg, high-workpoint, predicted mast-pitch movement, outrigger/pedestal movement, and assembly offsets between mast/lower-crowd position and COR. Consequently, the effective target can differ from the original PNEZD point while still producing the intended finished foundation.
+
+The owner has established the physical alignment used for calibration. Exact mast-slide and lower-crowd numerical positions, product-specific pin-to-WP offsets, and any configuration exceptions remain details to retrieve or confirm when needed for a calculation.
+
+3. MACHINE COORDINATE CONVENTION
+
+The owner's stated machine directions are:
+  +X: forward, along the longitudinal centerline toward the front.
+  -X: rearward, toward the mast/operator end.
+  +Y: right when standing behind the machine and looking forward.
+  -Y: left from that same viewpoint.
+  +Z: upward.
+  -Z: downward.
+
+For a level machine:
+  Facing North: +X = North, +Y = East, +Z = Up.
+  Facing South: +X = South, +Y = West, +Z = Up.
+
+Forward/right/up is a LEFT-HANDED coordinate convention. Do not insert these axes directly into a standard right-handed rotation matrix without accounting for the convention. A positive mechanical joint angle, a compass heading, and a positive mathematical rotation are separate definitions.
+
+For ideal, level-machine horizontal coordinates only, if H is machine compass heading measured clockwise from North:
+  delta_N = x*cos(H) - y*sin(H)
+  delta_E = x*sin(H) + y*cos(H)
+  delta_Z = z
+
+Use consistent units and degree-aware trigonometry. These equations describe horizontal coordinates at heading H; they omit base pitch and roll.
+
+GPS OFFSET FRAME — OWNER CONFIRMED:
+The GPS system aligns X/Y with the TARGET PLATE, not the chassis. GPS Z is always gravity-vertical (plumb), positive upward. A positive translational offset instructs the reference to move in the positive direction of the corresponding GPS axis. For example, +100 mm X means move 100 mm in the target-plate-aligned +X direction; +100 mm Y means move right in the plate-aligned frame; +100 mm Z means move upward by 100 mm vertically.
+
+Do not interpret GPS X/Y as chassis-forward/chassis-right when the plate is turned relative to the chassis. Do not rotate the plumb GPS Z component with mast pitch/roll as though it were a raw coordinate in a rigidly tilted plate frame. The exact horizontal projection/attitude convention for X/Y when the plate is pitched or rolled still needs to be established for a full 3D derivation. Always state the origin and attitude of the frame used in a calculation.
+
+4. ARTICULATED POSITIONING MECHANISM
+
+The principal positioning chain is:
+  Chassis boom-swing pivot -> boom-swing arm -> yaw pivot -> yaw arm with X-slide extension -> Z-slide/mast assembly -> active reference point.
+
+Boom swing:
+  The boom-swing pivot is near the middle of the machine.
+  Nominal pivot-to-pivot arm length is 135 cm.
+  At zero boom-swing angle, the arm extends rearward along approximately -X.
+  Hydraulic cylinders rotate the arm about its pivot.
+  Positive boom-swing angle swings the rearward arm to the operator's RIGHT, viewed from behind the machine looking forward.
+
+Yaw:
+  The yaw pivot is at the far end of the boom-swing arm.
+  Nominal yaw-pivot-to-drill-rod length at zero X-slide extension is 135 cm.
+  At zero boom-swing and yaw angles, the yaw arm also extends rearward, approximately along -X.
+  Hydraulic cylinders change yaw angle.
+  Increasing positive yaw feedback swings the rearward yaw arm to the operator's LEFT, viewed from behind the machine looking forward. Boom-swing and yaw therefore have opposite reported positive rotation directions.
+  GpsSetTargets treats yaw feedback as an angle relative to the boom-swing frame, with an explicit sign correction in the heading calculation.
+
+The two arms are approximately on the machine centerline at zero angle. Their small physical lateral offsets can be ignored for the initial simplified model. They may matter in a later calibration or accuracy analysis.
+
+With both joints at zero and X-slide extension at zero, the simplified horizontal chain places the drill-rod line approximately 270 cm rearward of the boom-swing pivot. This does not specify the full 3D position of WP, COR, or pin.
+
+X-slide:
+  The X-slide changes effective yaw-arm reach over approximately 30 cm of travel.
+  GpsSetTargets uses:
+    effective_yaw_length_cm = YAW_PIVOT_TO_DRILL_ROD
+                              + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR
+  Increasing X-slide position lengthens the rearward-reaching arm.
+  OWNER-CONFIRMED SIGN: positive X-slide actuator movement is in the NEGATIVE GPS X direction.
+  Example: increasing X-slide position from 0 cm to 30 cm moves the reference 30 cm in GPS -X, with other positions held fixed in the stated aligned geometry.
+  For this sign convention and aligned geometry:
+    delta_reference_x_gps_cm = -delta_x_slide_position_cm
+  Conversely, correcting a positive GPS X offset requires DECREASING X-slide position when using X-slide alone. Correcting a negative GPS X offset requires INCREASING X-slide position.
+  Distinguish movement from reported error: for a fixed target, a -30 cm reference displacement increases the GPS movement-to-target X offset by +300 mm in this geometry.
+  This establishes the actuator-to-GPS sign relationship. For arbitrary pitched/rolled configurations, use the actual geometry to calculate displacement components rather than assuming the full slide travel always projects one-to-one onto GPS X.
+
+Z-slide travel, rotator roll, and pitch — owner confirmed:
+  The Z-slide backbone is at the yaw-arm end and is supported by the pitch backbone.
+  Z-slide motion carries the rotator up and down along the Z-slide backbone. This travel provides vertical positioning when the assembly is upright.
+  The rotator rolls the mast assembly about COR. The lower crowd and target plate are carried with that rolling mast assembly.
+  Rotator roll does NOT roll the Z-slide backbone. Distinguish the non-rolling Z-slide backbone from the mast assembly supported on it.
+  Pitch motion tilts the ENTIRE assembly, including the Z-slide backbone and its supported rotator, mast, lower crowd, and target plate.
+  When the assembly is pitched, travel along the Z-slide can produce coupled horizontal and vertical displacement. Do not assume slide travel is always identical to gravity-vertical movement.
+  Exact pitch and roll zero positions, positive signs, pivot coordinates, and numerical offsets still need to be established for a complete 3D model.
+
+Mounting relationships:
+  Pitch backbone -> Z-slide backbone.
+  The rotator travels along the Z-slide backbone and provides roll of the mast assembly.
+  The lower crowd rides on the mast.
+  The target plate/truss cap holder rides on the lower crowd.
+  The GNSS antennas are mounted at the top of the Z-slide.
+
+Keep three motions separate: translation of the rotator along the Z-slide, roll of the mast assembly relative to the Z-slide backbone, and pitch of the entire assembly including that backbone. The phrase "roll the Z-slide assembly" is misleading if it implies that the backbone rolls with the mast.
+
+The antenna location and the target plate are different physical locations on the mechanism. The target plate is downstream of the mast and lower-crowd motions; its position must not be treated as the antenna position.
+
+5. GPS INTERFACE AND CONTROL OBJECTIVE
+
+The GPS system corrects GNSS antenna information for yaw, pitch, and roll using its configured reference geometry. It provides translational movement-to-target offsets and an angular orientation error for the target plate relative to the desired orientation. The antennas themselves are not the point being targeted.
+
+IMPORTANT LIMITATION — OWNER CONFIRMED:
+The GPS system does not independently know changes in antenna-to-target-plate geometry caused by mast or lower-crowd motion. This geometry changes during screw driving. Attitude correction does not establish that the reported GPS offsets continuously locate the actual moving target plate. Their interpretation depends on the configured reference geometry and any active PLC-supplied target adjustment.
+
+The interface values already include the GPS system's attitude correction. Additional PLC compensation addresses particular geometry or installation requirements, mainly during crimping; do not assume continuous compensation throughout screw driving. Avoid applying the same correction twice.
+
+PLC-TO-GPS TARGET ADJUSTMENTS — OWNER CONFIRMED:
+The PLC can modify the GPS target location through a CAN message. Maintain separate concepts for the original design PNEZD location, the effective target after PLC adjustment, the GPS-configured reference, and the actual moving target plate.
+
+Two principal uses are:
+  Third-leg installation: a motor foundation has three legs. Installing the third leg often requires relocating COR to a slightly different working location so the third leg aligns with the final foundation target. The PLC sends a target adjustment for this intermediate installation geometry. This does not redefine the desired finished foundation location.
+  Crimping: after screw driving, the lower crowd and mast may not return exactly to their desired positions relative to COR. The PLC adjusts the GPS target to compensate for that residual geometry difference.
+
+The reviewed code supports this architecture: setGPSpNEZdTargetAdjust combines product/operation adjustments with a mast/lower-crowd-to-COR correction, converts the relevant vectors into world coordinates, and produces PNEZD_ADJUST_NORTHING, PNEZD_ADJUST_EASTING, and PNEZD_ADJUST_Z in millimeters. GPSdata packs these adjustment values into outgoing GPS CAN messages. During assembly, the mast-frame axial correction includes:
+  delta_mast_mm = 10 * ((pNVM1^.LOWER_CROWD_COR_POS - lower_crowd_position_cm)
+                       + (MAST_SLIDE_COR_POS - mast_slide_position_cm))
+The code transforms that mast-frame correction using its heading/pitch/roll conventions before combining it with other adjustments. This is a description of the implementation, not a verification of every transform or transmitted byte.
+
+Do not equate GPS on-target status with proof that the actual target plate is at the design point in every screw-drive state. Evaluate the active reference geometry, target adjustments, and installation stage together.
+
+The PLC uses these values and current actuator feedback to calculate target positions for boom swing, yaw, X-slide, and Z-slide. Position and orientation are coupled: changing boom swing changes both endpoint position and downstream orientation, so yaw must also be considered.
+
+Owner-confirmed interpretation: positive displacement means move in the positive GPS-axis direction; X/Y are target-plate-aligned and Z is plumb. Apply this interpretation to the normalized interface values used for targeting, while respecting any vendor-specific CAN decoding conversions. A positive heading offset similarly calls for correction in the GPS-positive angular direction; its physical clockwise/counterclockwise sense must be documented separately from boom-swing and yaw feedback signs.
+
+Keep angular error separate from absolute heading. The HMI receive declaration describes GPS_ABSOLUTE_HEADING as clockwise from North. That does not establish the sign or zero direction of GPS_HEADING.OFFSET or either mechanical joint angle.
+
+6. VERIFIED SOFTWARE CONVENTIONS IN 530v1
+
+Units and indexing:
+  GPS_X/Y/Z displacement offsets are handled in millimeters by GpsSetTargets.
+  GpsSetTargets divides these offsets by 10 for its centimeter-based geometry.
+  Linear actuator feedback used there is in centimeters.
+  Angular quantities used there are degrees; SIN_DEG/COS_DEG/ASIN_DEG are degree-based.
+  Some 3D geometry vectors elsewhere are in millimeters. Do not apply one global unit assumption to all geometry variables.
+
+  GPS_HEADING = 1 -> yaw actuator target.
+  GPS_X       = 2 -> X-slide actuator target.
+  GPS_Y       = 3 -> boom-swing actuator target.
+  GPS_Z       = 4 -> Z-slide actuator target.
+
+These are control-channel associations, not four independent Cartesian mechanisms. In particular, GPS_Y.TARGET_POSITION is a boom-swing angle, while GPS_Y.OFFSET is a lateral displacement.
+
+Relevant execution:
+  GPSdata in manageCan3 receives vendor-dependent GPS CAN data and populates GPS_OFFSETS/GPS_AXES. Decoding can include unit and sign conversions; for example, the StonEx Z value is negated on reception.
+  GpsUpdate calls GpsSetTargets with current GPS_AXES offsets.
+  GpsSetTargets transforms through the yaw-pivot and boom-swing-pivot geometry and calculates actuator target positions.
+  GpsUpdate also evaluates reach, targeting tolerances, readiness, and filtered targets.
+  Target calculation alone does not mean motion is commanded; actuator execution also depends on operating state, selections, and interlocks.
+  setGPSpNEZdTargetAdjust calculates product/state-specific Northing, Easting, and Z adjustments.
+  The HMI receives GPS data through RECEIVE_7_GPS and uses it in operator/data-recording functions, including CaptureAsBuiltEvents. The reviewed target calculation is on the PLC.
+
+7. CODE CAUTIONS FOR FUTURE AI AGENTS
+
+The source uses names such as TD frame, WP frame, mast frame, truss frame, and world frame. A label in a comment is not enough to establish a transform's mathematical meaning; trace the actual variables and operations.
+
+Some comments are inconsistent. For example, ROTATE_BS_ARM describes positive X toward the rear operator, while the owner and GpsSetTargets input comments describe positive X forward. ROTATE_BS_ARM's executable initialization places the boom endpoint at [-L, 0, 0]. Preserve the owner's stated physical directions and flag disagreements rather than silently reversing an axis.
+
+Rotation helpers explicitly change angle signs, and some support left-handed coordinates. Identify which conversion helper and coordinate convention a particular call uses.
+
+GpsSetTargets contains a TODO about pitch-correction signs and uses Z_ADJUST_FINAL in the X correction without assigning it in that function's implementation. Treat the pitch compensation as an implementation requiring separate review, not as a validated reference equation.
+
+8. REMAINING DETAILS FOR A COMPLETE 3D SPECIFICATION
+
+The owner has confirmed left-handed coordinates, positive movement-to-target offsets, target-plate-aligned X/Y, plumb Z, the opposite boom-swing/yaw signs, and the mounting relationships above. These are established facts, not open questions.
+
+Details still needed when a calculation depends on them:
+  A. Numerical WP and pin locations on the target plate, their offsets from COR for each product, and the active reference by operation.
+  B. Pitch and rotator positive directions, zero poses, pivot coordinates, and numerical transform offsets. The owner has confirmed which assemblies pitch and roll and that the rotator travels along the Z-slide backbone.
+  C. The GPS definition of target-plate-aligned X/Y when the plate is pitched or rolled, including any horizontal projection convention.
+  D. Exact nominal mast-slide and lower-crowd numerical positions for the confirmed calibration arrangement: target-plate WP mark aligned with COR; calibrate to WP for SI and pin for Earth Truss. The GPS does not independently track changes in those slide positions; selected PLC target adjustments provide compensation.
+  E. The physical clockwise/counterclockwise meaning of positive GPS heading error, distinct from mechanical yaw feedback.
+
+INSTRUCTIONS TO AN AI USING THIS DOCUMENT
+
+Use this document as the physical context and the supplied code as evidence of implementation. State the frame, origin, units, reference point, and sign convention for every derived result. Keep physical displacement distinct from actuator position and orientation error. Qualify workpoint as the geometric leg intersection or the target-plate WP mark, and identify whether the current product uses a WP-based or pin-based PNEZD/calibration reference. Ask about unresolved definitions when they affect the answer. Distinguish observed code behavior from intended behavior and proposed changes. Do not assume access to source archives unless they are supplied in the current working context.

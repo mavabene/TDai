@@ -1,0 +1,7 @@
+# Preserve binary project/library/archive contents exactly.
+*.project binary
+*.library binary
+*.zip binary
+
+# Documentation uses consistent line endings.
+*.md text eol=lf

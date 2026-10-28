@@ -1,0 +1,41 @@
+# Track the maintained records and selected current code, not historical trees.
+/*
+!/.gitignore
+!/.gitattributes
+!/AGENTS.md
+!/README.md
+!/TODO.md
+!/docs/
+!/AI info/
+!/Production_dev/
+!/Library/
+
+/Production_dev/*
+!/Production_dev/TD3-Auto/
+!/Production_dev/TD3-HMI/
+!/Production_dev/libraries/
+
+/Production_dev/TD3-Auto/*
+!/Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v1.project
+!/Production_dev/TD3-Auto/exports_ojjo_TD3_cr711S_530v1.zip
+/Production_dev/TD3-HMI/*
+!/Production_dev/TD3-HMI/ojjo_TD3_cr1203_530v1.project
+!/Production_dev/TD3-HMI/exports_ojjo_TD3_cr1203_530v1.zip
+
+# Owner selected all existing library binaries for the initial baseline.
+/Production_dev/libraries/*
+!/Production_dev/libraries/*.library
+/Library/*
+!/Library/*.library
+
+# Generated files are not maintained source.
+*.opt
+*.~u
+*.precompilecache
+*.compileinfo
+*.bootinfo
+*.bootinfo_guids
+*.imgcache
+*.swp
+*.tmp
+__pycache__/
