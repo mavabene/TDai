@@ -39,3 +39,4 @@ workflow, including the hold on the differing Box PLC project.
 | `Production_dev/libraries/td3_3101011_SP21.library` | 341878 | `09b39f6f5a590b308c75d958e7bc45b5aca9dc080915c32b02cb11ed634135c9` |
 | `Production_dev/libraries/td3_31011.library` | 191247 | `63bbf6fd30ab55fa87fc3de19aaa0bed77ad80a03ee4f900482144eb969ac1b5` |
 | `Production_dev/libraries/td3_31012.library` | 191915 | `3931e3bc37a78029ae3db0a2609619f508a7815741ac02f734fd763cb58a6930` |
+| `Production_dev/libraries/td3_31013.library` | 192339 | `9477b938677f88fa90d11a846b160d429a415be7ca1ac68733bed3e24f2969b7` |

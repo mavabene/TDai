@@ -5,3 +5,8 @@
 
 # Documentation uses consistent line endings.
 *.md text eol=lf
+/.gitignore text eol=lf
+/.gitattributes text eol=lf
+
+# Preserve supplied reference documents byte-for-byte for provenance hashes.
+"AI info/**" -text

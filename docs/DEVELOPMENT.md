@@ -152,7 +152,7 @@ library binaries for the initial baseline. Track the 530v1 PLC/HMI `.project`
 files and export archives under `Production_dev`, all `.library` files under
 `Library` and `Production_dev/libraries`, and maintained records. See
 [CURRENT_CODE](CURRENT_CODE.md) for the fingerprinted inventory and its limits.
-The initial selection includes 19 library binaries, including GPS and older
+The initial selection includes 20 library binaries, including GPS and older
 versions; inclusion does not mean every library is used by the current projects.
 Historical application versions under `Production` and generated IDE/cache files
 are excluded from Git. They have not been deleted from the local workspace.
