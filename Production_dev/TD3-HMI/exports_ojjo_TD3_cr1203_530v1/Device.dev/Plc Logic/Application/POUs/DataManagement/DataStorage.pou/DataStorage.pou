@@ -1,0 +1,282 @@
+
+(********************** Declaration ****************************)
+PROGRAM DataStorage
+VAR
+	// global vars managed by PLC_PRG are not synhronous with this separate PRG!
+	(* *********************** USB insert handling *********************** *)
+	EXEC_03: ifmDevice.LinuxSysCallAsync;
+	ASYNC_03: executeLinuxAsync;
+	USB_TON_03 : TON;
+	COMMAND_USB: STRING[255];
+
+	(* *********************** Cycle time monitoring *********************** *)
+	EXEC_02: ifmDevice.LinuxSysCallAsync;
+	ASYNC_02: executeLinuxAsync;
+	USB_TON_02 : TON;
+	COMMAND_CYCLE: STRING[255];
+
+	FH_CYCLE: RTS_IEC_HANDLE := RTS_INVALID_HANDLE;
+	CYCLE_TIME_FILENAME: STRING;
+
+	// used in mulitiple methods, so update here
+	CYCLE_STEP_LOCAL: INT;
+	CYCLE_STEP_LAST: INT := -1;
+	IS_NEW_CYCLE_STEP: BOOL := FALSE;
+	
+	START_TIME_SECONDS: REAL := 0.0;
+	ELAPSED_TIME_SECONDS: REAL;
+
+	(* *********************** Screw drive recording *********************** *)
+	EXEC_01: ifmDevice.LinuxSysCallAsync;
+	ASYNC_01: executeLinuxAsync;
+	USB_TON_01 : TON;
+	COMMAND_SCREW: STRING[255];
+
+	FH_SCREW_DRIVE: RTS_IEC_HANDLE;
+	SCREW_DRIVE_FILENAME: STRING;
+	
+	(* *********************** Config Settings Data  ************************ *)
+	
+	DIRECTORY_CONFIG_DATA: STRING := 'ConfigData';
+	// write
+	EXEC_CONFIG_DATA: ifmDevice.LinuxSysCallAsync;
+	ASYNC_CONFIG_DATA: executeLinuxAsync;
+	USB_TON_CONFIG_DATA : TON;
+	COMMAND_CONFIG_DATA: STRING[255];	
+
+	FH_CONFIG_DATA: RTS_IEC_HANDLE;
+	CONFIG_DATA_FILENAME: STRING;
+	USB_CONFIG_FILE_SIZE : LWORD;
+	USB_CONFIG_FILE_RESULT : RTS_IEC_RESULT;
+	CHECK_FILE_WRITTEN : BOOL := FALSE;
+	// read
+	CONFIG_JSON_TRANSFER_STARTED : BOOL := FALSE;
+	CONFIG_JSON_TRANSFER_WAS_BUSY : BOOL := FALSE;
+	
+	(* *********************** GPS As Built data *********************** *)
+	
+	EXEC_GPS_AB: ifmDevice.LinuxSysCallAsync;
+	ASYNC_GPS_AB: executeLinuxAsync;
+	USB_TON_GPS_AB : TON;
+	COMMAND_GPS_AB: STRING[255];
+	
+	FH_GPS_AB: RTS_IEC_HANDLE;
+	GPS_AB_FILENAME: STRING;
+	
+	
+	
+	GPS_AB_COLLECTION_INIT: BOOL := TRUE; // Every time machine starts this will be true, turn it false after first header written
+	
+	WAS_CRIMPED_IN_AUTO: BOOL;
+	
+	
+	// vvvvvv Data streaming vvvvvv
+	
+	udiAsBuiltScrewEnqueueFailures : UDINT := 0;
+	udiAsBuiltFoundationEnqueueFailures : UDINT := 0;
+	
+	// ^^^^^^^^^^^^^^^^ DATA STREAMING ^^^^^^^^^^^^^^^^
+	
+		(* *********************** Track Assist Accuracy Data Collection *********************** *)
+	
+	EXEC_TA_ACC_DATA: ifmDevice.LinuxSysCallAsync;
+	ASYNC_TA_ACC_DATA: executeLinuxAsync;
+	USB_TON_TA_ACC_DATA : TON;
+	COMMAND_TA_ACC_DATA: STRING[255];
+	
+	TA_ACC_COLLECTION_INIT: BOOL := TRUE; // Every time machine starts this will be true, turn it false after first header written
+
+	FH_TA_ACC_DATA: RTS_IEC_HANDLE := RTS_INVALID_HANDLE;
+	TA_ACC_DATA_FILENAME: STRING;
+	
+	// *********************************************************
+	
+	GPS_MONITOR_DIVISOR: INT := 30;
+	GPS_MONITOR_COUNT: INT := 0;
+
+	(* State variables. *)
+	STATE: eDataAcqState := DATA_ACQ_IDLE;
+	RESULT: eDataAcqErr := DATA_ERR_NONE;
+
+	TIME_ACQUISITION_START: REAL;
+	
+	LAST_SCREW_NUMBER: UDINT := 0;
+	
+	MACHINE_MODE_LAST: INT;
+	IS_NEW_MACHINE_MODE: BOOL;
+	MACHINE_STATE_LAST : STRING(50);
+	IS_NEW_MACHINE_STATE: BOOL;
+	
+	sys_Us_start: SYSTIME;
+	sys_Us_end: SYSTIME;
+	WriteTimeMS: REAL;
+	
+	WRITE_TIME_MAX: REAL;
+	WRITE_TIME_AVG: REAL;
+	WRITE_TIME_SUM: REAL := 0;
+	WRITE_TIME_COUNT: LINT := 0;
+	
+
+	(* Debug. *)
+	LOG_DEBUG: BOOL := FALSE;
+	NUM_LINES: INT := 0;
+	NUM_POINTS: INT := 20;
+	DATAPOINTS: INT := 0;
+	LOG_RESULT: STRING := 'None';
+	LOG_STATE: STRING := 'Idle';
+	USB_COUNT: INT := 0;
+	ASYNC_EXECUTING: BOOL := FALSE;
+
+	(* Sample frequency. *)
+	SAMPLE_COUNT: INT := 0;
+	
+	(* Transfer to USB handling. *)
+	USB_01: ifmDevice.USBstorageHandler;
+	
+	(* *********************** Overall variables. *********************** *)
+
+	(* Machine serial number, date and time from RTC are the tracking elements of the data. *)
+	DATETIME: STRING;
+	YEAR: STRING;
+	MONTH: STRING;
+	DAY: STRING;
+	HOUR: STRING;
+	MINUTE: STRING;
+	SECOND: STRING;
+	
+	LAST_usiNumOfUSBdevice: USINT := 255;
+	DIRECTORY_CYCLE_TIME: STRING := 'CycleTime';
+	DIRECTORY_SCREW_DRIVE: STRING := 'ScrewDrive';
+	DIRECTORY_STOPWATCH: STRING := 'Stopwatch';
+	
+	// ***** GPS *****
+	DIRECTORY_GPS_AB_DATA: STRING := 'GpsAsBuilt';
+	DIRECTORY_TA_DATA: STRING := 'TrackAssistAccuracy';
+	// ***************
+	
+	NEEDS_INIT: BOOL := TRUE;
+
+	TEMPORARY_FILENAME: STRING;
+	TEMPORARY_FILENAME_GPS: STRING;
+	TEMPORARY_FILENAME_TA_ACC: STRING;
+	TEMPORARY_FILENAME_CONFIG_DATA: STRING;
+
+	(* Output file handling. *)
+	DATA: STRING[16383];
+	APPEND : STRING(255); // facilitate StrConcatA for longer DATA strings than 255 bytes
+	LR_TMP: LREAL;
+	BYTES_WRITTEN: LWORD;
+	ERROR: BOOL := FALSE;
+	ERROR_OPEN: RTS_IEC_RESULT;
+	ERROR_WRITE: RTS_IEC_RESULT;
+	PLC_FILENAME: STRING := '/home/Ojjo/data/ScrewDrive.log';
+	DIAG_INFO: ifmTypes2.eDIAG_INFO;
+	DATA_COPIED: BOOL;
+	
+	(* Parse JSON *)
+	JSON_DATA_FACTORY : JSON.JSONDataFactory;
+	pJSON_DATA : POINTER TO JSON.JSONData;
+
+	JSON_BYTE_ARRAY_READER : JSON.JSONByteArrayReader;
+
+	JSON_READER_EXECUTE : BOOL;
+	JSON_READER_STARTED : BOOL;
+
+	JSON_CLEAR_ERROR : JSON.ERROR;
+
+	JSON_TEXT_LENGTH : INT;
+	JSON_CHAR_INDEX : INT;
+
+	(* Temporary parsed values. *)
+
+	TMP_PARSE_OK : BOOL;
+	PARSING_CONFIG_JSON : BOOL := FALSE;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+(* This code gets called every 100 milliseconds.  The sample frequency can be setup as a multiple of this. *)
+
+IF NEEDS_INIT = TRUE THEN
+	STATE := DATA_ACQ_IDLE;
+	NEEDS_INIT := FALSE;
+	RESULT := DATA_ERR_UNKNOWN;
+	LAST_SCREW_NUMBER := SCREW_NUMBER_TRANSMIT;
+	IS_NEW_CYCLE_STEP := FALSE;
+END_IF
+
+(* Detect a new P in this task. These are one-scan pulses. *)
+IS_NEW_PILE_LOCATION := FALSE;
+
+IF (RECEIVE_7_GPS.GPS_PNEZD_P <> '')
+    AND (RECEIVE_7_GPS.GPS_PNEZD_P <> DS_GPS_PNEZD_P_LAST) THEN
+
+    DS_GPS_PNEZD_P_LAST := RECEIVE_7_GPS.GPS_PNEZD_P;
+    IS_NEW_PILE_LOCATION := TRUE;
+END_IF
+
+(* DATETIME := ifmFileUtil.RTC_To_String(DATE_TIME); *)
+
+(* Monitor the USB to see if someone puts in or removes a stick. *)
+LAST_usiNumOfUSBdevice := USB_01.usiNumOfUSBdevice;
+CYCLE_STEP_LOCAL := CYCLE_STEP;
+IS_NEW_CYCLE_STEP := (CYCLE_STEP_LOCAL <> CYCLE_STEP_LAST);
+
+IS_NEW_MACHINE_MODE := (MACHINE_MODE_LAST <> MACHINE_MODE_TRANSMIT);
+IS_NEW_MACHINE_STATE := (MACHINE_STATE_LAST <> Received_Strings.MACHINE_STATE);
+
+
+// IF LAST_SCREW_DRIVE_COMPLETE_REASON = eDataCollection.NEW_SCREW_DRIVE AND SCREW_DRIVE_COMPLETE_REASON <> eDataCollection.NEW_SCREW_DRIVE THEN
+// 	SCREW_EVENT_NEEDS_RECORDING := TRUE;
+// 	LAST_SCREW_DRIVE_COMPLETE_REASON := RECEIVE_6.SCREW_DRIVE_COMPLETE_REASON;
+// END_IF
+
+
+USB_COUNT := USB_COUNT + 1;
+IF USB_COUNT = 10 THEN
+	USB_COUNT := 0;
+	USB_01(xEnable := TRUE, eDiagInfo => DIAG_INFO);
+END_IF
+
+(* No sense logging if we don't have a place to put it. *)
+// IF USB_01.usiNumOfUSBdevice = 0 THEN
+// 	RETURN;
+// END_IF
+
+(* *********************** Setup directory structure on new USB drive. *********************** *)
+handleUsbInsert();
+
+(* *********************** CYCLE TIME TRACKING ********************************)
+cycleTimeTracking();
+
+(* *********************** SCREW DRIVE DETAILED DATA *********************** *)
+screwDriveRecord();
+
+(* ************************* Track Assist Accuracy ************************* *)
+trackAssTargetBoxData();
+
+(* ********************* GPS offsets per truss tracking ********************* *)
+(* Queue As-Built snapshots captured by the 10 ms PLC_PRG task.
+   Leave each ready flag set if enqueue fails; retry next DataStorage scan. *)
+
+
+FoundationAsBuilt();
+
+(* ********************** Settings Configuration Data ********************** *)
+handleConfigFiles();
+
+(*  Process
+- Create folders on USB with handleUsbInsert
+- build a local file with a file name for pertinent data.  
+- write data to this file as needed
+- close file
+- build linux command (string) to copy local file to USB
+- when file is closed, use prepLinuxAsync to load command and start process (trigger xExecute)
+- executeLinuxAsync FB instance must run every cycle to complete process.  It runs and monitors ifmDevice.LinuxSysCallAsync.
+- - ifmDevice.LinuxSysCallAsync in executeLinuxAsync is the FB that actually executes the Linux command
+- - when the command finishes xExecute is turned off
+*)
+
+MACHINE_MODE_LAST := MACHINE_MODE_TRANSMIT;
+CYCLE_STEP_LAST := CYCLE_STEP_LOCAL;
+MACHINE_STATE_LAST := Received_Strings.MACHINE_STATE;

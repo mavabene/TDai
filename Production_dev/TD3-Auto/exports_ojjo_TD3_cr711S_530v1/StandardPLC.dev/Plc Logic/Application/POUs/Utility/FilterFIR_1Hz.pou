@@ -1,0 +1,99 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK FilterFIR_1Hz
+VAR_INPUT
+	CURRENT: REAL;
+END_VAR
+VAR_OUTPUT
+	OUTPUT: REAL;
+END_VAR
+VAR
+	FILTERED: LREAL;
+	S_INDEX: INT;
+	C_INDEX: INT;
+	THIS_SAMPLE: INT;
+	(* Filter design from:
+	
+		http://t-filter.engineerjs.com/
+		
+		Setup was:
+			1) Sampling frequency of 100 Hz
+			2) Passband of 0-20 Hz, allowable ripple 2 dB
+			3) Stop band of 30-50 Hz, attenuation of -40 dB
+		
+		**** NOTE THAT THIS WEBSITE GIVES COEFFICIENTS WITH A DC GAIN, SO THEY MUST BE ADJUSTED IF YOU WANT GAIN
+			OF 1 !!!  THIS HAS BEEN DONE BELOW ****
+	*)
+	FILTER_LENGTH: INT := 17;
+	COEFFS: ARRAY[1..17] OF LREAL :=
+		// Adjusted coefficients.
+		[
+		-0.018466956,
+		-0.026334832,
+		0.012466087,
+		0.046426111,
+		-0.016120938,
+		-0.09793869,
+		0.018467072,
+		0.329006851,
+		0.504990589,
+		0.329006851,
+		0.018467072,
+		-0.09793869,
+		-0.016120938,
+		0.046426111,
+		0.012466087,
+		-0.026334832,
+		-0.018466956
+		];
+	(*
+		// Original, unadjusted coefficients.
+		[
+		-0.01761620746745279
+		-0.02512162084078525
+		0.011891791089827448
+		0.044287320103642586
+		-0.015378267333919879
+		-0.09342678220164234
+		0.01761631840433051
+		0.3138499342846734
+		0.48172633081244537
+		0.3138499342846734
+		0.01761631840433051
+		-0.09342678220164234
+		-0.015378267333919879
+		0.044287320103642586
+		0.011891791089827448
+		-0.02512162084078525
+		-0.01761620746745279
+		];
+	*)
+	SAMPLES: ARRAY[1..17] OF REAL;
+	NEXT_SAMPLE: INT := 1;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* Store away the sample. *)
+SAMPLES[NEXT_SAMPLE] := CURRENT;
+
+(* Calculate the filter output. *)
+FILTERED := 0.0;
+S_INDEX := NEXT_SAMPLE;
+FOR C_INDEX := 1 TO FILTER_LENGTH DO
+	FILTERED := FILTERED + COEFFS[C_INDEX] * SAMPLES[S_INDEX];
+	IF S_INDEX = 1 THEN
+		S_INDEX := FILTER_LENGTH;
+	ELSE
+		S_INDEX := S_INDEX - 1;
+	END_IF
+END_FOR
+
+(* Bump and wrap to ready for next sample. *)
+IF NEXT_SAMPLE = FILTER_LENGTH THEN
+	NEXT_SAMPLE := 1;
+ELSE
+	NEXT_SAMPLE := NEXT_SAMPLE + 1;
+END_IF
+
+OUTPUT := TO_REAL(FILTERED);

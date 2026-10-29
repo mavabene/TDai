@@ -1,0 +1,32 @@
+
+(********************** Declaration ****************************)
+(* 	These var names correlate to HMI_UINTS array values.  
+	To add persistent UINTs, just add name here and call via HMI_UINTS[ENUM_NAME]
+	!! If you change positions, persistent memory will be affected! !!
+	** Updates here must be made in both PLC and HMI code **
+*)
+TYPE eHMI_SettingsUints :
+(
+	MAST_LOADED_TRANSITION_PRESSURE := 1,
+	eHMI_SettingsUints_RESERVED_2 := 2,
+	eHMI_SettingsUints_RESERVED_3 := 3,
+	eHMI_SettingsUints_RESERVED_4 := 4,
+	eHMI_SettingsUints_RESERVED_5 := 5,
+	eHMI_SettingsUints_RESERVED_6 := 6,
+	eHMI_SettingsUints_RESERVED_7 := 7,
+	eHMI_SettingsUints_RESERVED_8 := 8,
+	eHMI_SettingsUints_RESERVED_9 := 9,
+	eHMI_SettingsUints_RESERVED_10 := 10,
+	eHMI_SettingsUints_RESERVED_11 := 11,
+	eHMI_SettingsUints_RESERVED_12 := 12,
+	eHMI_SettingsUints_RESERVED_13 := 13,
+	eHMI_SettingsUints_RESERVED_14 := 14,
+	eHMI_SettingsUints_RESERVED_15 := 15,
+	eHMI_SettingsUints_RESERVED_16 := 16,
+	eHMI_SettingsUints_RESERVED_17 := 17,
+	eHMI_SettingsUints_RESERVED_18 := 18,
+	eHMI_SettingsUints_RESERVED_19 := 19,
+	eHMI_SettingsUints_RESERVED_20 := 20
+	
+);
+END_TYPE

@@ -1,0 +1,97 @@
+
+(********************** Declaration ****************************)
+//This gobal variable list is received via the network.
+//Sender: Imported from file '..\TD3-Auto\PLC_TRANSMIT_7.gvl'
+//Protocol: UDP
+
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+	(* Flag to let the HMI know it has valid data. *)
+	HMI_RECEIVED_PLC_DATA_7: BOOL := FALSE;
+	HMI_PLC_SYNCH_7_TOP: BOOL := FALSE;
+
+	XMIT_7_COUNT: DWORD := 0;
+
+	(* ---------- GPS data ---------- *)
+	GPS_AXES: ARRAY [1..6] OF sGPSaxis; // set to greater than NUM_GPS_AXES
+	NUMBER_GPS_AXES: INT := 4; // set = to NUM_GPS_AXES
+	GPS_PNEZD_P: STRING(21); // "Pole id" 3 packets * 3 bytes
+	GPS_PNEZD_N: REAL := 0; // Northing
+	GPS_PNEZD_E: REAL := 0; // Easting
+	GPS_PNEZD_Z: REAL := 0; // "Vertical"
+	GPS_PNEZD_D: STRING(63); // "Description" 9 packets * 7 bytes
+	GPS_VELOCITY: INT := 0;
+	GPS_RTK_FIXED: BOOL := FALSE;
+	GPS_VENDOR_VALUE: UINT := 0;
+	// bitmask: 0: all autotarget off; 1-4: axis autotarget on; 10: autotarget in range; 11 autotarget on target
+	GPS_AUTOTARGET_SELECTION_VALUE: UINT := 0; 
+	(*GPS_AUTOTARGET_STATUS.0 = 
+							 .10: all gps axes are in range for autotarget
+							 .11: all gps axes are on target  
+							 .12: gps fixed solution for 5s and autotarget on    *)
+	GPS_AUTOTARGET_STATUS: UINT := 0; // 
+	GPS_HRMS: INT := 66;
+	GPS_VRMS: INT := 66;
+	GPS_PDOP: REAL := 66;
+	GPS_NUM_SAT: USINT := 0;
+	GPS_READY: BOOL := FALSE;
+	GPS_MIN_HRMS: USINT := 25; 
+	GPS_MIN_VRMS: USINT := 35; 
+	// correlates to eGPS values [GPS_HEADING .. GPS_Z, GPS_AXIS_IN_RANGE .. GPS_AXIS_ON_TARGET] see sPersistent_4 for description
+	GPS_AXES_SETTINGS_VALUES: ARRAY [1..NUM_GPS_AXES, 7..8] OF REAL; 
+	GPS_GENERAL_SETTINGS_VALUES: ARRAY [1..15] OF REAL;
+	GPS_RTK_SIGNAL_DELAY: USINT := 66;
+	GPS_INDICATE_AXIS_IN_RANGE: ARRAY [1..4] OF BOOL;
+	GPS_CAN_RX_ERROR, GPS_CAN_TX_ERROR: BOOL := FALSE;
+	GPS_CAN_RX_INTERVAL: DWORD;
+	GPS_CAN_RX_MSGS: UINT := 0;
+	GPS_CAN_TX_MSGS: UINT := 0;
+	GPS_RWP_CYCLE_TIME:  DWORD := 0;
+	
+	GPS_TRUSS_CYCLE: eGPS_Status := 0; // 0 means don't use GPS; otherwise it indicates cycle number
+// 	GPS_DATA_COLLECTION_CURRENT: sGPScycleData;
+	
+	TA_STATUS_FLAG : eDataCollection := eDataCollection.TA_WASNT_USED; 
+	
+	//debug
+	GPS_DATA_COLLECTION_RESPONSE_TIME: INT := 888;
+	GPS_THIRD_LEG_ADJUST_ON: BOOL := FALSE;
+	
+	GPS_ABSOLUTE_HEADING: REAL := 0; // Absolute heading in degrees, going CW from North
+	
+	// Screw params 
+	SCREW_PARAMETERS_CURRENT: sScrewParams; // current variable parameters related to screw drive
+	SCREW_PARAMETERS_PNEZD: sScrewParams; // screw parameters from pnezD description field
+	SCREW_PARAMETERS_D_VALID: BOOL := FALSE;
+	//SCREW_PARAMS_CALLED: sScrewParams; // deliver requested custom recipe from memory
+	
+	// corrected pitch value - mast inclinometer is not always able to be calibrated, so this is a more accurate value
+	CORRECTED_MAST_PITCH: REAL := 0;
+	
+	PRELOAD_PLUMB_MAST: BOOL := FALSE;
+	
+	//(*
+	// temp third leg diag
+	//NX3LGdiag_GPS_ADJ_X: LINT := 0;
+	NX3LGdiag_CALC_ADJ_X: LINT := 0;
+	//NX3LGdiag_PITCH_X_DELTA: REAL := 0;
+	//NX3LGdiag_PITCH_Z_DELTA: REAL := 0; //*)
+	
+	// temp testing - moved from GPS_Settings so we can see what is happening on HMI during testing
+	PNEZD_ADJUST_NORTHING: LINT := 0; // adjust Northing coordinates (mm)
+	PNEZD_ADJUST_EASTING: LINT := 0; // adjust Easting coordinates (mm)
+	PNEZD_ADJUST_Z: INT := 0; // adjust Northing coordinates (mm))
+	
+	// How much did we shorten the wp to side leg Average Top of Leg by
+	HIGH_WP_SIDE_LEG_AXIS_REDUCTION: REAL := 0; // cm
+	HIGH_WP_SIDE_LEG_Y_OFFSET: REAL := 0;
+	ROW_HEADING_CALC: REAL := 0;
+	
+	// determine Track Assist accuracy
+	TA_OFFSETS: ARRAY [1..4] OF REAL := [0.0, 0.0, 0.0, 0.0];
+	
+	// debug
+	//debug: ARRAY [0..100] OF REAL := [100(0)];
+	
+	HMI_PLC_SYNCH_7_BOTTOM: BOOL := FALSE;
+END_VAR

@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION drillBitHoverPosition : REAL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// First put the drill bit tip at the chuck level.
+drillBitHoverPosition := pNVM1^.UPPER_CROWD_DRILL_STEEL + (pNVM1^.DRILL_BIT_LENGTH - pNVM1^.DRILL_BIT_THREAD_LENGTH);
+// Then subtract how far the chuck is above the ground and add the 5 cm.
+drillBitHoverPosition := drillBItHoverPosition - CHUCK_TO_GROUND + 5;
+

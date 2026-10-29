@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION drillCurrentExtent : REAL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// Both crowd positions are referenced with positive up and negative down, as is the mast slide.  The drill tip is
+//	positioned in drilling by moving both crowds (everything else is stationary) and possibly the mast slide.
+//	Se we can get a meaningful position of the drill with respect to the ground by adding these three positions.
+//
+// This is meant to be used during one screw drive cycle only.  Please don't use this across operations where the
+//	Z slide is moved, or the boom lift or joint lift or pitch.
+drillCurrentExtent := AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR + AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR + AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR;

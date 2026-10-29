@@ -1,0 +1,432 @@
+
+(********************** Declaration ****************************)
+(* handle all pNEZd target adjustments here *)
+(* be careful to not feedback z offset into logic (eg use z offset to adjust offset then use new z offset to adjust offset then.. also reset vector before calculating again*)
+FUNCTION setGPSpNEZdTargetAdjust : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	NORTHING_ADJUST: REAL := 0;
+	EASTING_ADJUST: REAL := 0;
+	Z_ADJUST: REAL := 0;
+	//pNEZd_LOCATION_ADJUST_VECTOR : Vector3D := [0,0,0];
+	PRE_ROTATION_VECTOR: Vector3D := [0,0,0];
+	POST_ROTATION_VECTOR: Vector3D := [0,0,0];
+	//TRANSFORM_ROTATION: Rotation3D := [0,0,0];
+	TRUSS_TO_WORLD_FRAME_ROTATION: Rotation3D := [0,0,0];
+	TRUSS_TO_WORLD_FRAME_VECTOR: Vector3D := [0,0,0];
+	WORLD_FRAME_pNEZd_ADJUST_VECTOR: Vector3D := [0,0,0];
+	TRUSS_TO_WORLD_FRAME_HEADING_ADJUST: REAL;
+	MAST_TO_WORLD_FRAME_HEADING_ADJUST: REAL;
+// 	(* ---  to sum for total offset --- *)
+// 	// * TRUSS FRAME *
+// 	// when we can't get to the wp, have to do side adjusts.  Often the case for Earth Truss motor
+// 	HIGH_WP_SIDE_LEG_ADJUST: Vector3D; 
+// 	// measure change in wp positiong when pedestal presses machine up
+// 	VERT_TO_PITCHED_MAST_ADJ: Vector3D; 
+// 	// adjusting wp when mast and LC are not inalignment with rotator and we need to know where the TCH is
+// 	MAST_AND_LOWERCROWD_TO_COR_ADJUST: Vector3D;
+// 	// NXT1 motor trusses need adjustment for third leg:
+// 	NXT1_LOCATION_ADJUST: Vector3D;
+// 	// Earth Truss 2.0 need adjustments for all trusses
+// 	ET2_LOCATION_ADJUST: Vector3D;
+// 	// predict adjustment from putting pedestal down (lifts front of machine thus shifting COR in x and z)
+// 	PEDESTAL_ADJ_PREDICT: Vector3D;
+// 	// sum all vectors in truss frame before orienting to WORLD FRAME
+// 	TRUSS_FRAME_VECTOR_SUM: Vector3D;
+// 	// side leg
+	Z_SLIDE_AVAILABLE_MOVE_MM : REAL;
+	Z_SLIDE_MARGIN_MM : REAL := 10;
+	i: USINT;
+	// ensure third leg offset activated before activating mast pitch correction as it uses z offset as reference
+	RESET_VECTOR: Vector3D := [0,0,0]; // subtract back out if previous not 0
+	// testing
+	// use this to simulate one time conditions from test button
+// 	test_latch: BOOL := FALSE;
+// 	ET2_Test_last: USINT := 0;
+	TARGET_Z_SLIDE_POS: REAL := 0; // cm
+	PLANNED_Z_OFFSET_FROM_STD_TRUSS_WP: REAL := 0; // adjustment from wp to wp or pin to pin from standard (array) truss (pnezd reference)
+	PLANNED_Z_OFFSET_NXT_SI_WP_TO_THIRD_LEG_REFERENCE: REAL := 0;
+	NEEDED_Z_SLIDE_MOVE: REAL := 0; // mm
+	THIRD_LEG_ADJUST_Z_SLIDE_BUFFER: REAL := 100; // mm, allow for actuator movements affecting z pos
+	ET2_TEST_OFF: BOOL := FALSE;
+	//PLANNED_Z_SLIDE_MOVE: REAL := 0;
+	//ZeroZ_resum:BOOL;
+END_VAR
+
+(********************** Implementation ****************************)
+// reset
+TRUSS_FRAME_VECTOR_SUM := ZERO_VECTOR;
+// IF GPS_CALIBRATE THEN
+// 	PNEZD_ADJUST_NORTHING := 0; // adjust Northing coordinates (mm)
+// 	PNEZD_ADJUST_EASTING := 0; // adjust Easting coordinates (mm)
+// 	PNEZD_ADJUST_Z := 0; // adjust Northing coordinates (mm))
+// 	GPS_THIRD_LEG_ADJUST_ON := FALSE; // set to true below if true
+// 	RETURN;
+// ELS
+IF ET2_TEST > 70 THEN
+	// test specific values
+	IF ET2_TEST = 80 THEN
+		TRUSS_FRAME_VECTOR_SUM[rot.pX] := 1000; 
+	ELSIF ET2_TEST = 90 THEN
+		TRUSS_FRAME_VECTOR_SUM[rot.pY] := 1000;
+	ELSIF ET2_TEST = 100 THEN
+		TRUSS_FRAME_VECTOR_SUM[rot.pZ] := 1000;
+	ELSIF ET2_TEST = 110 THEN
+		TRUSS_FRAME_VECTOR_SUM[rot.pX] := 1000; 
+		TRUSS_FRAME_VECTOR_SUM[rot.pY] := 1000;
+		TRUSS_FRAME_VECTOR_SUM[rot.pZ] := 1000;
+	END_IF
+	PNEZD_ADJUST_NORTHING := TO_LINT(TRUSS_FRAME_VECTOR_SUM[rot.pX]); // adjust Northing coordinates (mm)
+	PNEZD_ADJUST_EASTING := TO_LINT(TRUSS_FRAME_VECTOR_SUM[rot.pY]); // adjust Easting coordinates (mm)
+	PNEZD_ADJUST_Z := TO_INT(TRUSS_FRAME_VECTOR_SUM[rot.pZ]); // adjust Northing coordinates (mm))
+	RETURN;
+ELSIF ET2_TEST = 86 THEN
+	NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+	NXT_MOTOR_SIDE_LEG_ADJUST := ZERO_VECTOR;
+	HIGH_WP_SIDE_LEG_ADJUST := ZERO_VECTOR;
+	PEDESTAL_ADJ_PREDICT := ZERO_VECTOR;
+	VERT_TO_PITCHED_MAST_ADJ := ZERO_VECTOR;
+END_IF
+
+// if testing values ignore machine states
+ET2_TEST_OFF := (ET2_TEST = 0);
+
+// test reset
+IF ET2_Test_last <> ET2_TEST THEN
+	test_latch := FALSE;
+	ET2_Test_last := ET2_TEST;
+END_IF
+
+// leave everything as is
+// IF NOT AUTOMATIC THEN
+// 	RETURN;
+// END_IF
+
+(* ** RESET VALUES WHEN NEW POINT SIGHTED OR RESTARTING POSITIONING ** *)
+IF IS_NEW_PILE_LOCATION OR
+	((MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_CROWDS_DOWN)) 
+	OR (ET2_TEST = 86) THEN
+	PNEZD_ADJUST_NORTHING := 0;
+	PNEZD_ADJUST_EASTING := 0;
+	PNEZD_ADJUST_Z := 0; 
+	HIGH_WP_SIDE_LEG_ADJUST := ZERO_VECTOR;
+	VERT_TO_PITCHED_MAST_ADJ := ZERO_VECTOR;
+	NXT_LOCATION_ADJUST := ZERO_VECTOR;
+	NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+	NXT_MOTOR_SIDE_LEG_ADJUST := ZERO_VECTOR;
+	PEDESTAL_ADJ_PREDICT := ZERO_VECTOR;
+	TRUSS_FRAME_VECTOR_SUM := ZERO_VECTOR;
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_WORLD_FRAME := ZERO_VECTOR;
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME := ZERO_VECTOR;
+END_IF
+
+(* ----- TRUSS FRAME ----- *)
+(* --- calculate all offsets for TD driving North in world frame (ie Truss Frame). pNEZd references pin --- *)
+
+// ** NXT **
+GPS_THIRD_LEG_ADJUST_ON := FALSE; // set to true below if true
+IF isNxtProduct_perHMI() THEN
+	
+	IF (isNXTmotorTruss_perScrewParams() AND ET2_TEST_OFF) OR (ET2_TEST = 2) OR (ET2_TEST = 4) OR (ET2_TEST = 31) OR (ET2_TEST = 32) OR (ET2_TEST = 33) THEN //THEN
+		// get crimp location. call once and make sure if assembling/crimping only the crimp offset is called
+		
+		IF	(isNXTmotorSideLeg_perRemote() AND ET2_TEST_OFF) OR (ET2_TEST = 2) OR (ET2_TEST = 4) THEN
+		// crimping
+			IF (isTrussBeingAssembled() AND ET2_TEST_OFF) OR (ET2_TEST = 2) THEN 
+				// motor crimp COR location is slightly below array crimp COR location
+				NXT_MOTOR_SIDE_LEG_ADJUST := NXT_MOTOR_CRIMP_OFFSET;
+			ELSE
+				// adjust target from regular wp to motor side leg wp
+				NXT_MOTOR_SIDE_LEG_ADJUST := NXT_MOTOR_SIDE_LEG_WP_OFFSET;
+			
+			END_IF
+		ELSE
+			NXT_MOTOR_SIDE_LEG_ADJUST := ZERO_VECTOR;
+		END_IF
+		
+		// third leg adjustments: third leg tracking, rwp adjust, screw mode TL adjust; 
+		IF (isNXTmotorThirdLeg_perRemote() AND (SCREW_PARAMETERS_CURRENT.NS_PITCH <> 90) AND (SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE <> 222) AND ET2_TEST_OFF) 
+			OR (ET2_TEST = 31) OR (ET2_TEST = 32) OR (ET2_TEST = 33)   
+			THEN 
+
+			IF // get 3 leg position // *** this has to happen after pitch calc adjust *** 
+				((MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_NORMAL) AND AUTOMATIC ) // ensure we are close so terrain is likely similar
+				OR
+				(MACHINE_MODE = RWP_MODE)
+				OR
+				((MACHINE_MODE = SCREW_MODE) AND (NOT isTrussBeingAssembled()))//NOT isTrussBeingAssembled())
+				OR (ET2_TEST = 31) OR (ET2_TEST = 32) OR (ET2_TEST = 33) 
+				THEN // ****** this relies on GPS Z which changes and feeds back ******
+				// use set values so no gps z feedback issue
+			
+				// in TL_ADJUST we don't change the z position, we just adjust x to the current z
+				IF (ET2_TEST = 31) OR (ET2_TEST = 32) OR (ET2_TEST = 33)  THEN
+					PLANNED_Z_OFFSET_FROM_STD_TRUSS_WP := 101.6 + ET2_TEST_Z_OFFSET_VALUE;
+				ELSIF (MACHINE_MODE = SCREW_MODE) THEN
+					// z offsets should be kept = zero so we can keep calling
+					PLANNED_Z_OFFSET_FROM_STD_TRUSS_WP := 
+						-GPS_AXES[GPS_Z].OFFSET // change direction to get distance from wp instead of to wp
+						/ COS_DEG(SCREW_PARAMETERS_CURRENT.NS_PITCH);
+				ELSE // TRACK MODE and RWP MODE use pitch prediction z to determine x offset for third leg
+					PLANNED_Z_OFFSET_FROM_STD_TRUSS_WP := 
+						TO_REAL(-RAW_PITCHING_MAST_WP_OFFSETS[rot.pZ]); 
+				END_IF
+				NXT_MOTOR_THIRD_LEG_ADJUST := getNXTMotorPinTo3lTargetVector(
+					PLANNED_Z_OFFSET_FROM_STD_WP_MM := PLANNED_Z_OFFSET_FROM_STD_TRUSS_WP,
+					PLANNED_Z_SLIDE_MOVE := 0,
+					NXT_STD_WP_TO_3LWP := NXT_PNEZD_REF_TO_3L_WP_OFFSET,
+					TRUSS_FRAME_3L_ANGLE := SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE);
+				// set z reference to crimp point (pin at pin)
+				NXT_MOTOR_THIRD_LEG_ADJUST[rot.pZ] := 0;
+				GPS_THIRD_LEG_ADJUST_ON := TRUE;
+			ELSE
+				NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+			END_IF
+		ELSE
+			NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+		END_IF
+	ELSE
+		NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+		NXT_MOTOR_SIDE_LEG_ADJUST := ZERO_VECTOR;
+	END_IF
+ELSE
+	NXT_MOTOR_THIRD_LEG_ADJUST := ZERO_VECTOR;
+	NXT_MOTOR_SIDE_LEG_ADJUST := ZERO_VECTOR;
+END_IF
+
+(* -- PREDICT VERTICAL TO PITCHED MAST CHANGE -- *)
+// only need for predictive positioning in tracking and rwp
+IF 	(isNXTmotorThirdLeg_perRemote() //AND AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR < 15 AND NOT isTrussBeingAssembled()) 
+		
+		AND
+		((MACHINE_MODE = TRACK_MODE) 
+			OR 
+		(MACHINE_MODE = RWP_MODE)))// AND AUTOMATIC AND isRwpModeStateChange() ) ) 
+		OR 
+		(ET2_TEST = 5)
+		OR 
+		(ET2_TEST = 33)
+	THEN  // switches
+		IF 	(
+				((MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_NORMAL) 
+				AND AUTOMATIC ) //AND (NOT GPS_TRACK_MODE_NORMAL_TRACK_POS)) 
+				OR
+				(MACHINE_MODE = RWP_MODE)
+				OR 
+				(ET2_TEST = 5)
+				OR 
+				(ET2_TEST = 33)
+			)   
+			THEN
+			
+			IF ABS(GPS_AXES[GPS_X].OFFSET) > 300 
+				OR 
+				(ET2_TEST = 5)
+				OR 
+				(ET2_TEST = 33)  
+				THEN 
+			
+				// 30 is about the minimum z slide pos to account for varied terrain
+				// referencing crimp point - the one point we should always be able to reach
+				IF (ET2_TEST = 5) OR (ET2_TEST = 33)  THEN
+					TARGET_Z_SLIDE_POS := 80;
+				ELSE
+					TARGET_Z_SLIDE_POS := 
+							(
+								AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR + 
+								(
+									// should be referencing crimp pos per ET2 Adjust above
+									0.1 * (GPS_AXES[GPS_Z].OFFSET)
+	// 								0.1 * ( ET2_MTR_PIN_TO_CRIMP[rot.pZ] + GPS_AXES[GPS_Z].OFFSET) 
+									/ 
+									(
+									COS_DEG(MAST_PITCH.POSITION_ENGR)*
+									COS_DEG(AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR)
+									) 
+								)
+							) ; 
+				END_IF
+					RAW_PITCHING_MAST_WP_OFFSETS :=
+						PITCHING_MAST_WP_OFFSETS(	
+								// use the PITCH frame values to find the absolute tilt:
+								(ABS(SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE + SCREW_PARAMETERS_CURRENT.NS_PITCH)), 
+								TARGET_Z_SLIDE_POS, 
+								SCREW_PARAMETERS_CURRENT.NS_PITCH ); 
+					// keep z offset zero so it doesn't feedback into calc:
+					VERT_TO_PITCHED_MAST_ADJ := ZERO_VECTOR;
+					VERT_TO_PITCHED_MAST_ADJ[rot.pX] := RAW_PITCHING_MAST_WP_OFFSETS[rot.pX];
+					
+					test_latch := TRUE;
+				
+			END_IF
+		ELSE
+			VERT_TO_PITCHED_MAST_ADJ := ZERO_VECTOR;
+		END_IF
+ELSE
+	VERT_TO_PITCHED_MAST_ADJ := ZERO_VECTOR;
+END_IF
+
+
+(* -- HIGH WORK POINT (ET2 side motor and other trusses that can't reach wp) -- *)
+// check for High WP:
+IF 	((MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_NORMAL) AND (NOT GPS_TRACK_MODE_NORMAL_TRACK_POS) AND isZeroVector(HIGH_WP_SIDE_LEG_ADJUST) ) // ensure we are close so terrain is likely similar
+	OR
+	((MACHINE_MODE = RWP_MODE) AND (RWP_STATE = RWP_STATE_GPS_FAST_TARGET) AND isRwpModeStateChange())
+	OR 
+	(ET2_TEST = 7)
+	THEN
+	IF 	isHighWP(5.0) AND (MACHINE_MODE = TRACK_MODE) OR
+		isHighWP(2.0) AND (MACHINE_MODE = RWP_MODE) 
+		OR 
+			(ET2_TEST = 7)
+		THEN 
+		WP_HEIGHT_LATCH := WP_HIGH;
+	ELSE
+		WP_HEIGHT_LATCH := WP_NONE;
+	END_IF
+END_IF
+(* --- High WP --- *)
+
+// adjust for High WP
+IF ( (WP_HEIGHT_LATCH = WP_HIGH) AND 
+		(	((MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_NORMAL)) 
+			OR
+			(MACHINE_MODE = RWP_MODE)
+			OR
+			((MACHINE_MODE = SCREW_MODE) AND (NOT isTrussBeingAssembled()) ) 
+		) )
+		OR (ET2_TEST = 7)
+	THEN//	
+
+	// set target offset
+	IF 	(
+			( 
+				(MACHINE_MODE = TRACK_MODE) 
+				OR 
+				(MACHINE_MODE = RWP_MODE AND ((RWP_STATE = RWP_STATE_GPS_FAST_TARGET) OR (RWP_STATE = RWP_STATE_GPS_FINE_TARGET))) 
+			)
+			AND NOT GpsAxisInRange(GPS_Z)
+		)
+		OR ((ET2_TEST = 7) AND (ABS(HIGH_WP_SIDE_LEG_AXIS_REDUCTION) < 25))
+		THEN
+		HIGH_WP_SIDE_LEG_AXIS_REDUCTION := HIGH_WP_SIDE_LEG_AXIS_REDUCTION - 5;
+	// reset so we can fine tune
+	ELSIF MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_ENTRY THEN
+		HIGH_WP_SIDE_LEG_AXIS_REDUCTION := 0.0;
+	END_IF
+	HIGH_WP_SIDE_LEG_Y_OFFSET := HIGH_WP_SIDE_LEG_AXIS_REDUCTION * TAN_DEG(SCREW_PARAMETERS_PNEZD.TRUSS_SIDE_LEG_ANGLE);
+
+	HIGH_WP_SIDE_LEG_ADJUST[rot.pZ] := HIGH_WP_SIDE_LEG_AXIS_REDUCTION;
+	// if right leg we want the positive value (in TRUSS FRAME), if left, the negative
+	// we include SCREW_STATE_PREPARE_TO_LOAD to give the system time to send and receive offsets and calculate targets for INITIAL_ROTATE
+	IF ((MACHINE_MODE = SCREW_MODE) AND NOT isTrussBeingAssembled()) OR (ET2_TEST = 71) THEN
+		IF (getScrewSide() = SCREW_RIGHT) THEN
+			HIGH_WP_SIDE_LEG_ADJUST[rot.pY] := ABS(HIGH_WP_SIDE_LEG_Y_OFFSET);
+		ELSE 
+			HIGH_WP_SIDE_LEG_ADJUST[rot.pY] := -ABS(HIGH_WP_SIDE_LEG_Y_OFFSET);
+		END_IF
+	ELSE
+		HIGH_WP_SIDE_LEG_ADJUST[rot.pY] := 0.0;
+	END_IF
+	test_latch := TRUE;
+ELSE
+	HIGH_WP_SIDE_LEG_ADJUST := ZERO_VECTOR;
+END_IF
+
+(* -- PEDESTAL OFFSET ADJUSTMENT (adjust for approximate pedestal pushing machine up from ground) -- *)
+IF 	(MACHINE_MODE = TRACK_MODE AND ((TRACK_STATE = TRACK_STATE_CROWDS_DOWN) OR (TRACK_STATE = TRACK_STATE_NORMAL)) AND NOT isNewModeEnabled()) // don't want this to flash on when track state still TRACK_STATE_NORMAL immediately on mode change - it affects data collection if gps offsets on
+	OR 
+	( (MACHINE_MODE = RWP_MODE) AND 
+	  ((RWP_STATE = RWP_STATE_ENTRY) OR (RWP_STATE = RWP_STATE_SELECT_OPERATION)) )
+	OR (ET2_TEST = 6)  OR (ET2_TEST = 33) THEN // adjust for outrigger lifting machine effect on gps offsets
+	IF isTrackModeStateChange() OR (ET2_TEST = 6) OR (ET2_TEST = 33) THEN
+		PEDESTAL_ADJ_PREDICT[rot.pX] := pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRACKING_X_ADJUST];
+		PEDESTAL_ADJ_PREDICT[rot.pZ] := pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRACKING_Z_ADJUST];
+	END_IF
+	// ^^^^^^ end debug ^^^^^^
+ELSE
+	PEDESTAL_ADJ_PREDICT := ZERO_VECTOR;
+END_IF
+
+(* -- SUM TRUSS FRAME vectors -- *)
+
+TRUSS_FRAME_VECTOR_SUM := 
+	addVectors(NXT_MOTOR_THIRD_LEG_ADJUST,
+	addVectors(NXT_MOTOR_SIDE_LEG_ADJUST,
+	addVectors(HIGH_WP_SIDE_LEG_ADJUST, 
+	addVectors(PEDESTAL_ADJ_PREDICT, 
+			   VERT_TO_PITCHED_MAST_ADJ))));
+
+(* -- CONVERT TRUSS FRAME TO WORLD FRAME -- *)
+(* --- WORLD FRAME --- *)
+(* --- WORLD FRAME --- *)
+IF (ET2_TEST <> 0) THEN
+	IF isNXT_SI_perHMI() THEN
+		TRUSS_TO_WORLD_FRAME_HEADING_ADJUST := 90;
+	ELSE
+		TRUSS_TO_WORLD_FRAME_HEADING_ADJUST := 0;
+	END_IF
+ELSE
+	IF isNXT_SI_perHMI() AND isNXTmotorTruss_perScrewParams() THEN
+// 	IF isNXT_SImotorTruss() THEN
+		TRUSS_TO_WORLD_FRAME_HEADING_ADJUST := getHeadingNormalizedNESW(45);
+	ELSE
+		TRUSS_TO_WORLD_FRAME_HEADING_ADJUST := getHeadingNormalizedNESW(45) - getRowHeadingNormalizedNE(10);
+	END_IF
+END_IF
+
+// pitch vector in machine frame
+IF SCREW_PARAMETERS_CURRENT.NS_PITCH <> 0 THEN
+	TRUSS_TO_WORLD_FRAME_ROTATION := BUILD_ROTATION( 0, -SCREW_PARAMETERS_CURRENT.NS_PITCH, 0);
+	TRUSS_TO_WORLD_FRAME_VECTOR := CONVERT_TRUSS_FRAME_TO_WORLD_FRAME(TRUSS_FRAME_VECTOR_SUM , TRUSS_TO_WORLD_FRAME_ROTATION);
+ELSE
+	TRUSS_TO_WORLD_FRAME_VECTOR := TRUSS_FRAME_VECTOR_SUM;
+END_IF
+
+// rotate to machine
+TRUSS_TO_WORLD_FRAME_ROTATION := BUILD_ROTATION( TRUSS_TO_WORLD_FRAME_HEADING_ADJUST, 0, 0);
+TRUSS_TO_WORLD_FRAME_VECTOR := CONVERT_TRUSS_FRAME_TO_WORLD_FRAME(TRUSS_TO_WORLD_FRAME_VECTOR, TRUSS_TO_WORLD_FRAME_ROTATION);
+
+(* --- MAST FRAME --- *)
+(* --- ADJUSTMENT FOR TCH NOT BEING CENTERED ON ROTATOR --- *)
+IF isTrussBeingAssembled() THEN //(MACHINE_MODE = SCREW_MODE) AND NOT isMotorThirdLeg() THEN	
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME := ZERO_VECTOR;	
+	// 	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME[rot.pZ] := TO_INT( (10.0 * (LOWER_CROWD_AT_WP - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR)  +
+	// 							   10.0 * (MAST_SLIDE_AT_WP - AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR)) 
+	// 								* COS_DEG(MAST_PITCH.POSITION_ENGR) * COS_DEG(AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR));
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME[rot.pZ] := 10.0 * 	// cm to mm
+															// we don't correct for pitch here because it's corrected when mast frame converted to world
+// 															((LOWER_CROWD_AT_WP - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR)  +
+// 															(MAST_SLIDE_AT_WP - AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR));
+															((pNVM1^.LOWER_CROWD_COR_POS - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR)  +
+															(MAST_SLIDE_COR_POS - AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR));
+	(* 	we don't have to correct because we care about where the workpoint 
+			WILL BE in RWP, not where it is now, so it's fine to take z off rotator center, 
+			as that's where LC and Mast will line up to anyway *)
+ELSE
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME := ZERO_VECTOR; 
+END_IF
+
+(* -- CONVERT MAST FRAME TO WORLD FRAME -- *)
+(* --- WORLD FRAME --- *)
+IF ET2_TEST_OFF THEN
+	IF isNXT_SI_perHMI() THEN
+		MAST_TO_WORLD_FRAME_HEADING_ADJUST := 90;
+	ELSE
+		MAST_TO_WORLD_FRAME_HEADING_ADJUST := 0;
+	END_IF
+	
+ELSE
+	MAST_TO_WORLD_FRAME_HEADING_ADJUST := getRowHeadingNormalizedNE(10) - GPS_AXES[GPS_HEADING].OFFSET;
+END_IF
+
+MAST_TO_WORLD_FRAME_ROTATION := BUILD_ROTATION( MAST_TO_WORLD_FRAME_HEADING_ADJUST, MAST_PITCH.POSITION_ENGR, AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR);
+MAST_AND_LOWERCROWD_TO_COR_ADJUST_WORLD_FRAME := CONVERT_MAST_FRAME_TO_WORLD_FRAME(MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME, MAST_TO_WORLD_FRAME_ROTATION);
+
+WORLD_FRAME_pNEZd_ADJUST_VECTOR := addVectors(TRUSS_TO_WORLD_FRAME_VECTOR, MAST_AND_LOWERCROWD_TO_COR_ADJUST_WORLD_FRAME);
+
+PNEZD_ADJUST_NORTHING := TO_LINT(WORLD_FRAME_pNEZd_ADJUST_VECTOR[rot.pX]); // adjust Northing coordinates (mm)
+PNEZD_ADJUST_EASTING := TO_LINT(WORLD_FRAME_pNEZd_ADJUST_VECTOR[rot.pY]); // adjust Easting coordinates (mm)
+PNEZD_ADJUST_Z := TO_INT(WORLD_FRAME_pNEZd_ADJUST_VECTOR[rot.pZ]); // adjust Northing coordinates (mm))
+

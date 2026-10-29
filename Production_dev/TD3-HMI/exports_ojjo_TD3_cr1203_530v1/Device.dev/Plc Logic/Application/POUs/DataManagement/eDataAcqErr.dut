@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+TYPE eDataAcqErr :
+	(
+		DATA_ERR_NONE := 0,
+		DATA_ERR_UNKNOWN := -1,
+		DATA_ERR_WRITE := -2,
+		DATA_ERR_COPY := -3,
+		DATA_ERR_USB := -4,
+		DATA_ERR_OPEN := -5,
+		DATA_ERR_2 := -6,
+		DATA_ERR_3 := -7,
+		DATA_ERR_4 := -8
+	);
+END_TYPE

@@ -1,0 +1,53 @@
+
+(********************** Declaration ****************************)
+(* This file contains settings and conditions for GPS positioning *)
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+	
+	GPS_TIMEOUT_ACTIVATED: BOOL := FALSE;
+	GPS_AUTOTARGET_ACTUATE: BOOL := FALSE; // initiate gps actuator movements
+	GPS_TRACK_MODE_PRE_TARGET_ACTIVE: BOOL := FALSE; // Start moving actuators as TD is tracking near to target
+	GPS_TRACK_MODE_NORMAL_TRACK_POS: BOOL := TRUE; // FALSE for preposition, TRUE for normal tracking position
+	GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET: ARRAY [1..3] OF UINT := [15, 2000, 600]; // [heading, x, y] (deg, mm, mm) distance within which rough autotargeting during tracking begins
+	GPS_OFFSETS: ARRAY [1..4] OF REAL := [4(0)]; //[HEADING, X, Y, Z], for updating from GPS provider
+	
+	 // maximize range for actual targeting.  Indicating lamps are more restrictive
+	 // distance from endpoints to restrict actuator targeting to
+	GPS_FIXED_RANGE_MARGIN: ARRAY [1..4] OF REAL := [2.0, 1.0, 2.0, 0.5]; //[yaw - deg, xslide - cm, boom swing - deg, z slide - cm]
+	GPS_NX_TLM_X_ADJUST_MARGIN: REAL := 7; // distance from limits of x actuator that provides adequate margin in Screw Mode for NX third leg adjustment to target;
+	// midpoint used to calculate HMI settable +/- limits from
+	GPS_ACTUATOR_MIDPOINT: ARRAY [1..4] OF REAL := [0, 15.0, 0, 82.75]; //[deg, cm, deg, cm]
+	
+	//GPS_YAW_AND_Y_SET: BOOL := FALSE;  // used to stop adjusting yaw and y when on target, so x and z can work off feedback, here in case we need to fine tune autotargeting
+	
+	// move truss driver to target point at correct orientation, with operator watching.
+	GPS_TRACK_ASSIST_ACTIVE: BOOL := FALSE;
+	GPS_TRACK_ASSIST_JOYSTICK_LIMIT: USINT := 70; //
+	
+	X_SLIDE_TRACK_POS_GPS: REAL := 10; // tighter to machine for easier targeting and more stable antennas during movement, also errs on "downhill" side of x slide
+	
+	// used to build PNEZD messages from StonEx
+	GPS_P_MSGS: ARRAY [0..2] OF STRING(7);
+	GPS_D_MSGS: ARRAY [0..8] OF STRING(7);
+	MSG_LONG_ERROR_POLE: USINT := 0;
+	MSG_LONG_ERROR_DESC: USINT := 0;
+	
+	// return to GPSdata after debug
+	PNEZD_TEXT_RESET: BOOL := TRUE;
+	PNEZD_PD_RX_CTR: USINT := 0; // count messages received
+
+	FWP_TRUSS_CAP_CLEARED: BOOL := FALSE;
+	FWP_LC_TO_ZSLIDE_TRANSITION_MARGIN: REAL := 4; // height above LOWER_CROWD_AT_WP where LC to Z slide transition occurs
+	
+	// maintain constant truss cap height when assembling truss cap
+	Z_SLIDE_POS_ENTERING_RETURN_TO_WP: REAL;
+	LOWER_CROWD_POS_ENTERING_RETURN_TO_WP: REAL;
+	
+	IS_NEW_PILE_LOCATION: BOOL := FALSE;
+	// used with Track Assist to auto advance to Screw Mode
+	AUTO_MODE_ADVANCE: BOOL := FALSE;
+	
+	// on target indications
+	GPS_ON_TARGET_RWP: REAL := 0.8;
+
+END_VAR

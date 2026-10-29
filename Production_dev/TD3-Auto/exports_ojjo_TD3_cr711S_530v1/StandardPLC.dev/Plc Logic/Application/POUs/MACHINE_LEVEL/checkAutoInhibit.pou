@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK checkAutoInhibit
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF FEEDBACK_FAILED OR ANY_VALVE_FAILED THEN
+	AUTOMATIC_ALLOWED := FALSE;
+ELSE
+	AUTOMATIC_ALLOWED := TRUE;
+END_IF

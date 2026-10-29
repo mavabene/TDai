@@ -1,0 +1,31 @@
+
+(********************** Declaration ****************************)
+(*
+	Use gps to determine whether WP is physically within range of Yaw, Boom Swing, X-slide, and Z-slide.
+*)
+FUNCTION GpsTargetInRangeActual : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	i: INT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+GpsTargetInRangeActual := FALSE;
+GpsTargetInRangeActual := GPS_READY AND
+						( GPS_AXES[GPS_HEADING].RANGE_STATUS >= TO_UINT(GPS_AXIS_IN_RANGE ) ) AND
+						( GPS_AXES[GPS_X].RANGE_STATUS >= TO_UINT(GPS_AXIS_IN_RANGE ) ) AND
+						( GPS_AXES[GPS_Y].RANGE_STATUS >= TO_UINT(GPS_AXIS_IN_RANGE ) ) AND
+						( GPS_AXES[GPS_Z].RANGE_STATUS >= TO_UINT(GPS_AXIS_IN_RANGE ) )
+						;
+	
+IF GPS_THIRD_LEG_ADJUST_ON THEN // 1 cm looser than indication 
+	GpsTargetInRangeActual := GpsTargetInRangeActual AND 
+		(
+			(GPS_AXES[GPS_X].TARGET_POSITION < 
+				(GPS_AXES[GPS_X].AXIS_RANGE_MAX - GPS_NX_TLM_X_ADJUST_MARGIN + 1)) 
+			AND 
+			(GPS_AXES[GPS_X].TARGET_POSITION > 
+				(GPS_AXES[GPS_X].AXIS_RANGE_MIN + GPS_NX_TLM_X_ADJUST_MARGIN - 1))
+		) ;
+END_IF

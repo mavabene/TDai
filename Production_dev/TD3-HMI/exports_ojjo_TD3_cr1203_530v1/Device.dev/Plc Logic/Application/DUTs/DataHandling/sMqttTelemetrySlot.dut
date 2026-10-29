@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+TYPE sMqttTelemetrySlot :
+STRUCT
+    STATE : eMqttSlotState;
+    MESSAGE_ID : UINT;
+    PRIORITY : UINT;
+    TOPIC_NAME : WSTRING(80);
+    RETAIN_MSG : BOOL;
+    CONTROL : BOOL;
+    PAYLOAD_SIZE : UDINT;
+    PAYLOAD : STRING(4095);
+END_STRUCT
+END_TYPE

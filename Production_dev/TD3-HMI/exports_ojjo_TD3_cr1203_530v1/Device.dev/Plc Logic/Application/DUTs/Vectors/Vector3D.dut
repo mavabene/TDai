@@ -1,0 +1,7 @@
+
+(********************** Declaration ****************************)
+TYPE Vector3D : ARRAY [1 .. 3] OF REAL;
+
+END_TYPE
+
+// Vector coordinates for 3D transformations

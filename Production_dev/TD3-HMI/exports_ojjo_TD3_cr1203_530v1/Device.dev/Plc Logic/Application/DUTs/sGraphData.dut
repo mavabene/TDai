@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+TYPE sGraphData :
+STRUCT
+	X_REF: LREAL; // x axis reference point
+	Y_REF: LREAL; // y axis reference point
+	X_DATA: ARRAY[1..20] OF LREAL; // x axis of graph
+	Y_DATA: ARRAY[1..20] OF LREAL; // y axis of graph
+	RefCount  : INT := 1;    // "number of points" to draw
+    MeasCount : INT := 1;
+END_STRUCT
+END_TYPE

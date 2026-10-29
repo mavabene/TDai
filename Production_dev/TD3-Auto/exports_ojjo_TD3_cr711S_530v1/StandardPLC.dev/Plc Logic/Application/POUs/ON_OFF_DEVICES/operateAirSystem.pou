@@ -1,0 +1,253 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateAirSystem
+VAR_INPUT
+END_VAR
+VAR
+	operateAirCompressorA_01: operateAirCompressorA;
+	operateAirCompressorB_01: operateAirCompressorB;
+	
+	NEEDS_INIT: BOOL := TRUE;
+	ENABLED: BOOL := TRUE;
+
+	(* Balance of these are all used locally. *)
+	DRIFTER_VALVE_POS_SETPOINT: USINT := 0;
+	(* Force repositioning on the first time. *)
+	DRIFTER_VALVE_POS_SETPOINT_LAST: USINT := 255;
+
+	(* All air valve communications from here down. *)	
+	Can_TX3: ifmRCAN.CAN_Tx;
+	Can_RX3: ifmRCAN.CAN_Rx;
+	Can_ENABLE3: ifmRCAN.CAN_Enable;
+	INIT_DIAG, RX_DIAG, TX_DIAG: ifmTYPES.DIAG_INFO;
+	CHANNEL: ifmDEVICE.CAN_CHANNEL := ifmDEVICE.CHAN_3;
+
+	TON_0: TON;
+	READ_NOW: BOOL := FALSE;
+	MOVE_NOW: BOOL := FALSE;
+	FIRST_TIME: BOOL := TRUE;
+	ENABLE: BOOL := TRUE;	
+
+	airFlowCalc_01: airFlowCalc;
+	AIR_FLOW_OUT: REAL;
+	TABLE_INDEX: INT := 0;
+	
+	SPEED: USINT := 100;	
+	EXTENDED: BOOL := TRUE;
+	(* CanBus address of the valve. *)
+	ID: USINT := 190;
+	DATA_GO_READ: ARRAY[0..7] OF USINT := [0, 16#EF, 0, 0, 0, 0, 0, 0];
+	DATA_GO_XXX: ARRAY[0..7] OF USINT := [100, 100, 0, 0, 0, 0, 0, 0];
+	DATA_READ: ARRAY[0..7] OF USINT;
+	
+	RX_NUM: USINT;
+	RX_AVAILABLE: UINT;
+	
+END_VAR
+(********************** Implementation ****************************)
+(*
+	Control the system that runs the air compressor.  The basic operation of this BOSS 80201 AHBI compressor is:
+	- Send a signal to the compressor that we want it to begin monitoring, and reporting status.
+	- Monitor the status returned by the compressor.
+	- When the compressor returns that it is OK to operate, run hydraulic fluid to it.
+*)
+
+IF TIME_SECONDS < AIR_STARTUP_DELAY THEN
+	(* Don't start the compressor when everything else is powering up. *)
+	DRIFTER_VALVE_INIT_ERROR := TRUE;
+	DRIFTER_VALVE_RX_ERROR := TRUE;
+	DRIFTER_VALVE_TX_ERROR := TRUE;
+	
+	RETURN;
+END_IF
+
+// All 3.1 and above machines have BOSS "B" model (software controls).  3.0 machines came with the "A" model,
+//	but can be retrofitted with the "B" model.
+IF pNVM4^.MACHINE_COMPRESSOR = 1 THEN
+	operateAirCompressorB_01(NEEDS_INIT := NEEDS_INIT);
+ELSE
+	operateAirCompressorA_01(NEEDS_INIT := NEEDS_INIT);
+END_IF
+
+NEEDS_INIT := FALSE;
+
+IF MACHINE_MODE <> IDLE_MODE AND
+	(NOT LOAD_UNLOAD_ONLY) AND
+	COMPRESSOR_TURNED_ON AND (HYDRAULIC_TEMP > COMPRESSOR_SUPPLY_TEMP_MINIMUM) THEN
+	(* After warm-up is confirmed, we can use the compressor.  This is three state:
+		1) Toggle up means air is on.
+		2) Toggle middle means air is off.
+		3) Toggle down means automatic control of air is enabled.
+	*)
+	IF REMOTE.RTCB2_UP THEN
+		(* Up. *)
+		DRIFTER_AIR_OPEN_SETPOINT := 100;
+	ELSIF NOT REMOTE.RTCB2_DN THEN
+		(* Middle. *)
+		DRIFTER_AIR_OPEN_SETPOINT := 0;
+	ELSE
+		(* Automated drifter air here. *)
+		IF (MACHINE_MODE = SCREW_MODE) AND
+			(
+				(
+					(
+						(
+							// Normal screw drive here...
+							(
+								SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE AND 
+									(
+										HARD_SOIL_DETECTED OR 
+										(pNVM4^.HMI_BOOLS[SOFT_SOIL_ABOVE_GROUND_AIR_ON] AND NOT pNVM4^.HMI_BOOLS[SOFT_SOIL_CONE_ON_SCREW_TIP])
+									)
+							) OR
+							SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE OR
+							SCREW_STATE = SCREW_STATE_DRILL_EXTEND OR
+							// In screw drive, air is always on when soil is hard, on only when drill bit is the
+							//	plug gap away from the bottom of the screw.  This is the going into the ground condition.
+							(
+								SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND 
+									(
+											HARD_SOIL_DETECTED OR SS_PLUG_GAP OR 
+											(pNVM4^.HMI_BOOLS[SOFT_SOIL_ABOVE_GROUND_AIR_ON] AND NOT pNVM4^.HMI_BOOLS[SOFT_SOIL_CONE_ON_SCREW_TIP])
+									)
+							) OR
+							SCREW_STATE = SCREW_STATE_DRILL_REVERSE OR
+							// Stall detect and operator assist here
+							SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+							SCREW_STATE = SCREW_STATE_DRILL_RETURN OR
+							SCREW_STATE = SCREW_STATE_DRIVE_ASSIST OR
+							SCREW_STATE = SCREW_STATE_BRIEF_HAMMER OR // 
+							SCREW_STATE = SCREW_STATE_RETURN_TO_DRIVE OR
+							SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END OR
+							SCREW_STATE = SCREW_STATE_LC_REWIND OR
+							SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE OR
+							SCREW_STATE = SCREW_STATE_CLEAR_SPOILS
+						) AND
+						(
+							AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR <
+							(SCREW_START_POS - pNVM1^.SCREW_TIP_TO_GROUND - pNVM1^.AIR_ON_DISTANCE)
+						)
+					)
+				)
+				OR
+				(
+					(
+						(
+							SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE OR
+							SCREW_STATE = SCREW_STATE_DRILL_REVERSE OR
+							SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+							SCREW_STATE = SCREW_STATE_DRILL_RETURN OR
+							// Changed this at Gemini... we want air on when retracting to help clear the screw.
+							(SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND (NOT UPPER_CROWD_REVEALING AND NOT UPPER_CROWD_DONE_REVEALING)) OR
+							SCREW_STATE = SCREW_STATE_UNLOAD_SCREW
+						) AND
+						(
+							AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR <
+							//(UPPER_CROWD_DRIVE_END_POS + SCREW_LENGTH_CM - pNVM1^.AIR_OFF_DISTANCE)
+							(DRILL_TIP_BELOW_CHUCK - pNVM1^.AIR_OFF_DISTANCE)
+						)
+					)
+				)
+				OR
+				(
+					(SCREW_STATE = SCREW_STATE_DRIVE_SCREW) AND
+					(UPPER_CROWD_REVEALING OR UPPER_CROWD_DONE_REVEALING) AND
+					(DRILL_TIP_BELOW_CHUCK > pNVM1^.AIR_OFF_DISTANCE)
+				)
+			)
+			THEN
+				(* Inserting screw, we've reached our "air on" distance. *)
+				IF pNVM1^.AIR_FLOW_REDUCED THEN
+					airFlowCalc_01(UR_PRESSURE_FILTERED := UPPER_ROTARY_PRESSURE_FILTERED,
+						AIR_FLOW_OUT => AIR_FLOW_OUT);
+					DRIFTER_AIR_OPEN_SETPOINT := TO_USINT(AIR_FLOW_OUT);
+				ELSE
+					IF (
+						SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE OR
+						SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE OR
+						SCREW_STATE = SCREW_STATE_DRILL_EXTEND
+					) THEN
+						// Use the smallest effective valve opening.  This should be the lowest air flow that gives modest
+						//	spoils clearing, to prevent the bit from clogging in these "surface drilling" states. 
+						DRIFTER_AIR_OPEN_SETPOINT := TO_USINT(pNVM4^.AIR_FLOW_OUTPUT[1]);
+					ELSE
+						DRIFTER_AIR_OPEN_SETPOINT := 100;
+					END_IF
+				END_IF
+		ELSE
+			DRIFTER_AIR_OPEN_SETPOINT := 0;
+		END_IF
+	END_IF
+ELSE
+	DRIFTER_AIR_OPEN_SETPOINT := 0;
+END_IF
+
+IF DRIFTER_AIR_OPEN_FORCE.FORCED THEN
+	IF REMOTE.RMB2_RE THEN
+		TABLE_INDEX := TABLE_INDEX + 1;
+		IF TABLE_INDEX > FLOW_TABLE_SIZE THEN
+			TABLE_INDEX := 0;
+		END_IF
+	END_IF
+	
+	IF DRIFTER_AIR_OPEN_FORCE.DOUT_STATE THEN
+		IF TABLE_INDEX = 0 THEN
+			DRIFTER_AIR_OPEN_SETPOINT := 100;
+		ELSE
+			DRIFTER_AIR_OPEN_SETPOINT := TO_USINT(pNVM4^.AIR_FLOW_OUTPUT[TABLE_INDEX]);
+		END_IF
+	ELSE
+		DRIFTER_AIR_OPEN_SETPOINT := 0; //DRIFTER_AIR_OPEN_FORCE.USINT_STATE;
+	END_IF
+ELSE
+	// Whenever air is unforced, we reset this value so next time the air is forced on, we will
+	//	force to 100%.
+	TABLE_INDEX := 0;
+END_IF
+DRIFTER_VALVE_POS_SETPOINT := DRIFTER_AIR_OPEN_SETPOINT;
+	
+IF DRIFTER_VALVE_POS_SETPOINT <> DRIFTER_VALVE_POS_SETPOINT_LAST THEN
+	MOVE_NOW := TRUE;
+END_IF
+
+IF FIRST_TIME THEN
+	FIRST_TIME := FALSE;
+	Can_ENABLE3(xENABLE := TRUE, eChannel := CHANNEL, eBaudrate := ifmDevice.CAN_BAUDRATE.KBAUD_250,
+		xERROR => DRIFTER_VALVE_INIT_ERROR, eDiagInfo => INIT_DIAG);
+END_IF
+
+TON_0(IN := ENABLE, PT := T#100MS, Q => READ_NOW);
+IF READ_NOW THEN
+	ENABLE := FALSE;
+ELSE
+	ENABLE := TRUE;
+END_IF
+
+IF READ_NOW THEN
+	READ_NOW := FALSE;
+	Can_TX3(xEnable := TRUE, xError => DRIFTER_VALVE_TX_ERROR, eDiagInfo => TX_DIAG, eChannel := CHANNEL, udiID := 16#18EABE01,
+		xExtended := EXTENDED, usiDLC := 8, aData := DATA_GO_READ);
+	
+	IF MOVE_NOW THEN
+		MOVE_NOW := FALSE;
+		DRIFTER_VALVE_POS_SETPOINT_LAST := DRIFTER_VALVE_POS_SETPOINT;
+		DATA_GO_XXX[0] := DRIFTER_VALVE_POS_SETPOINT;
+		DATA_GO_XXX[1] := SPEED;
+		Can_TX3(xEnable := TRUE, xError => DRIFTER_VALVE_TX_ERROR, eDiagInfo => TX_DIAG, eChannel := CHANNEL, udiID := 16#18EFBE01,
+			xExtended := EXTENDED, usiDLC := 8, aData := DATA_GO_XXX);
+		IF NOT DRIFTER_VALVE_TX_ERROR THEN
+			DRIFTER_VALVE_TX_MSGS := DRIFTER_VALVE_TX_MSGS + 1;
+		END_IF
+	END_IF
+END_IF
+
+RX_AVAILABLE := 1;
+WHILE TO_BOOL(RX_AVAILABLE) DO
+	Can_RX3(eChannel := CHANNEL, xExtended := EXTENDED, aData => DATA_READ, usiDLC => RX_NUM, uiAvailable => RX_AVAILABLE,
+		xEnable := TRUE, xError => DRIFTER_VALVE_RX_ERROR, eDiagInfo => RX_DIAG, udiID := 16#18EF01BE);
+	IF RX_AVAILABLE <> 0 THEN
+		DRIFTER_AIR_OPEN_ACTUAL := DATA_READ[2];
+		DRIFTER_VALVE_RX_MSGS := DRIFTER_VALVE_RX_MSGS + 1;
+	END_IF
+END_WHILE
+

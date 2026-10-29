@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+// static settings
+// using UINT and bitmask so can add vars without adding whole sPersistent cycle - it already exists for this UINT
+
+TYPE eGPS_Selection : // 0 - 15 bit mask positions with GPS_AUTOTARGET_SELECTION as UINT
+(
+	// GPS_AUTOTARGET_SELECTION
+	GPS_WP_AUTOTARGET_ON := 0,
+	GPS_HEADING_AUTOTARGET_ON := 1,
+	GPS_X_AUTOTARGET_ON := 2,
+	GPS_Y_AUTOTARGET_ON := 3,
+	GPS_Z_AUTOTARGET_ON := 4,
+	GPS_3RD_LEG_EASTING_ADJUST := 5, // used to adjust Easting coordinate for locating 3rd leg installs
+	GPS_TRACK_ASSIST_ON := 6, // used to reverse 3rd leg adjust when driving W to E vs E to W
+	RESERVED_7 := 7,
+	RESERVED_8 := 8 // bypasses Y and Z on target req's to go to crimp - must be using laser!
+	// 9 - 15 available
+	
+);
+
+END_TYPE
+

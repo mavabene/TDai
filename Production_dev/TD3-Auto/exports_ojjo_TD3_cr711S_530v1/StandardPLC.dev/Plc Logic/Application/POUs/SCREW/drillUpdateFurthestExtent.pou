@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION drillUpdateFurthestExtent : REAL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF drillCurrentExtent() < UR_STALL_FURTHEST_EXTENT THEN
+	UR_STALL_FURTHEST_EXTENT := drillCurrentExtent();
+END_IF

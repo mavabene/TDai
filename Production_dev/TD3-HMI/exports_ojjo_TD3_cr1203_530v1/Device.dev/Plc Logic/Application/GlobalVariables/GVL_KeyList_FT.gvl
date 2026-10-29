@@ -1,0 +1,105 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+
+(* 
+
+!!! This GVL list is from project template !!!
+
+The following variables returns a pulse for one scan cycle when a respective key is released (i.e. at falling trigger)
+These key release event is detected by the state of variables in GVL GVL_KeyList.
+
+For example, F1 function key of standard external keyboard (MFII) is released, xF1 bit in this list will become TRUE for one scan cycle.
+
+NOTE: 
+Although 3:1 display device has no integrated keypad, this key list variables can be used to capture standard external USB keyboard events.
+
+*)
+
+VAR_GLOBAL
+
+(* MFII keboard key release event pulse. *)
+	xF1 		: BOOL;		(* Event status of F1 function key *)
+	xF2 		: BOOL;		(* Event status of F2 function key *)
+	xF3 		: BOOL;		(* Event status of F3 function key *)
+	xF4 		: BOOL;		(* Event status of F4 function key *)
+	xF5 		: BOOL;		(* Event status of F5 function key *)
+	xF6 		: BOOL;		(* Event status of F6 function key *)
+	xF7 		: BOOL;		(* Event status of F7 function key *)
+	xF8 		: BOOL;		(* Event status of F8 function key *)
+	xF9 		: BOOL;		(* Event status of F9 function key *)
+	xF10 		: BOOL;		(* Event status of F10 function key *)
+	xF11 		: BOOL;		(* Event status of F11 function key *)
+	xF12 		: BOOL;		(* Event status of F12 function key *)
+	xUp 		: BOOL;		(* Event status of Up arrow key *)
+	xDown		: BOOL;		(* Event status of Down arrow key *)
+	xLeft 		: BOOL;		(* Event status of Left arrow key *)
+	xRight 		: BOOL;		(* Event status of Right arrow key *)
+	xKey_Return : BOOL;		(* Event status of Return (or Enter) key *)
+
+	xEscape 	: BOOL;		(* Event status of Escape key *)
+	xMinus 		: BOOL;		(* Event status of number pad '-' (substract) symbol *)
+	xPlus 		: BOOL;		(* Event status of number pad '+' symbol *)
+	xAsterisk 	: BOOL;		(* Event status of number pad '*' (multiply/asterisk) symbol *)
+	xSpace 		: BOOL;		(* Event status of Space bar  key *)
+	xComma 		: BOOL;		(* Event status of number pad ',' (comma/decimal/dot) symbol *)
+	xSlash 		: BOOL;		(* Event status of number pad '/' (divide) symbol *)
+
+	xBackSpace 	: BOOL;		(* Event status of Backspace key *)
+	xTab 		: BOOL;		(* Event status of Tab key *)
+	xPrint		: BOOL;		(* Event status of Print key *)
+	xHome 		: BOOL;		(* Event status of Home key *)
+	xEnd 		: BOOL;		(* Event status of End key *)
+	xInsert 	: BOOL;		(* Event status of Insert key *)
+	xDelete 	: BOOL;		(* Event status of Delete key *)
+	xPause 		: BOOL;		(* Event status of Pause key *)
+
+	xKey_0 		: BOOL;		(* Event status of 0 *)
+	xKey_1 		: BOOL;		(* Event status of 1 *)
+	xKey_2 		: BOOL;		(* Event status of 2 *)
+	xKey_3 		: BOOL;		(* Event status of 3 *)
+	xKey_4 		: BOOL;		(* Event status of 4 *)
+	xKey_5 		: BOOL;		(* Event status of 5 *)
+	xKey_6 		: BOOL;		(* Event status of 6 *)
+	xKey_7 		: BOOL;		(* Event status of 7 *)
+	xKey_8 		: BOOL;		(* Event status of 8 *)
+	xKey_9 		: BOOL;		(* Event status of 9 *)
+
+	xKey_A 		: BOOL;		(* Event status of A *)
+	xKey_B 		: BOOL;		(* Event status of B *)
+	xKey_C 		: BOOL;		(* Event status of C *)
+	xKey_D 		: BOOL;		(* Event status of D *)
+	xKey_E 		: BOOL;		(* Event status of E *)
+	xKey_F 		: BOOL;		(* Event status of F *)
+	xKey_G 		: BOOL;		(* Event status of G *)
+	xKey_H 		: BOOL;		(* Event status of H *)
+	xKey_I 		: BOOL;		(* Event status of I *)
+	xKey_J 		: BOOL;		(* Event status of J *)
+	xKey_K 		: BOOL;		(* Event status of K *)
+	xKey_L 		: BOOL;		(* Event status of L *)
+	xKey_M 		: BOOL;		(* Event status of M *)
+	xKey_N 		: BOOL;		(* Event status of N *)
+	xKey_O 		: BOOL;		(* Event status of O *)
+	xKey_P 		: BOOL;		(* Event status of P *)
+	xKey_Q 		: BOOL;		(* Event status of Q *)
+	xKey_R 		: BOOL;		(* Event status of R *)
+	xKey_S 		: BOOL;		(* Event status of S *)
+	xKey_T 		: BOOL;		(* Event status of T *)
+	xKey_U 		: BOOL;		(* Event status of U *)
+	xKey_V 		: BOOL;		(* Event status of V *)
+	xKey_W 		: BOOL;		(* Event status of W *)
+	xKey_X 		: BOOL;		(* Event status of X *)
+	xKey_Y 		: BOOL;		(* Event status of Y *)
+	xKey_Z 		: BOOL;		(* Event status of Z *)
+
+	xNum0 		: BOOL;		(* Event status of number pad 0 key *)
+	xNum1 		: BOOL;		(* Event status of number pad 1 key *)
+	xNum2 		: BOOL;		(* Event status of number pad 2 key *)
+	xNum3 		: BOOL;		(* Event status of number pad 3 key *)
+	xNum4 		: BOOL;		(* Event status of number pad 4 key *)
+	xNum5 		: BOOL;		(* Event status of number pad 5 key *)
+	xNum6 		: BOOL;		(* Event status of number pad 6 key *)
+	xNum7 		: BOOL;		(* Event status of number pad 7 key *)
+	xNum8 		: BOOL;		(* Event status of number pad 8 key *)
+	xNum9 		: BOOL;		(* Event status of number pad 9 key *)
+END_VAR

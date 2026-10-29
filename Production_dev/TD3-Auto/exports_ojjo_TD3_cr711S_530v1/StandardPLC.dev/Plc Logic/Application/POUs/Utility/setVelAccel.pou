@@ -1,0 +1,60 @@
+
+(********************** Declaration ****************************)
+FUNCTION setVelAccel : BOOL
+	(* Use this to have an axis try to continuously settle to a setpoint when the actual
+		position is disturbed by external forces, for instance on these axes:
+		
+			1) Pitch (by tracks moving across uneven ground)
+			2) Rotator (by tracks moving across uneven ground)
+			3) Yaw pointed to off-machine target (by boom swing moving underneath the yaw)
+			
+		This function puts a poor-mans motion profile on this action, mainly by controlling the Vff term
+			of the loop.  You pass this function the maximum closing velocity for the axis, and the maximum
+			acceleration, to control this element, and a position error range for which to feather from 0 velocity
+			to some maximum velocity.
+			
+		The output of this function should be used as input to a PID loop with Vff.
+		
+		eMax MUST be > eMin or get divide by zero error!
+	*)
+VAR_INPUT
+	(* Desired final position, engr. *)
+	TARGET: REAL;
+	(* Current position, engr. *)
+	ACTUAL: REAL;
+	(* Error at which maximum velocity is used, engr. *)
+	EMAX: REAL;
+	(* Error below which 0 velocity is used, so integrator will mostly close this error, engr. *)
+	EMIN: REAL;
+	(* Maximum desired velocity, engr. *)
+	VMAX: REAL;
+	(* Maximum desired acceleration, engr. *)
+	AMAX: REAL;
+	(* Desired velocity at the current position error, engr. *)
+	pVEL: POINTER TO REAL;
+	(* Desired acceleration at the current position error, engr. *)
+	pACCEL: POINTER TO REAL;
+END_VAR
+VAR
+	ERROR: REAL;
+	ERROR_ABS: REAL;
+END_VAR
+(********************** Implementation ****************************)
+
+	ERROR := TARGET - ACTUAL;
+	ERROR_ABS := ABS(ERROR);
+	IF ERROR_ABS > EMAX THEN
+		pACCEL^ := AMAX;
+		pVEL^ := VMAX;
+	ELSIF ERROR_ABS > EMIN THEN
+		pACCEL^ := AMAX;
+		pVEL^ := VMAX * (ERROR_ABS - EMIN) / (EMAX - EMIN);
+	ELSE
+		pACCEL^ := 0;
+		pVEL^ := 0;
+	END_IF
+
+	IF ERROR < 0 THEN
+		pACCEL^ := -pACCEL^;
+		pVEL^ := -pVEL^;
+	END_IF

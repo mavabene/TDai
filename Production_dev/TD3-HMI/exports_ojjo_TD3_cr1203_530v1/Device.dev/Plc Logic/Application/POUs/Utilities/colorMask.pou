@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+FUNCTION colorMask : DWORD
+VAR_INPUT
+	RED: UINT;
+	GREEN: UINT;
+	BLUE: UINT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+colorMask := 16#FF000000 OR SHL(TO_DWORD(RED), 16) OR SHL(TO_DWORD(GREEN), 8) OR TO_DWORD(BLUE);

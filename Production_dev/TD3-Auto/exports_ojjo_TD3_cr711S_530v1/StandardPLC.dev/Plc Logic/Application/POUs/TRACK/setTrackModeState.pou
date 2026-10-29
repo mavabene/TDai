@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION setTrackModeState : BOOL
+VAR_INPUT
+	NEW_STATE: eTrackStates;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+setState(TO_WORD(NEW_STATE), ADR(TRACK_STATE), ADR(TRACK_MODE_STATE_CHANGE));
+DEBUG_SUBSTATE := TRACK_STATE_NAMES[NEW_STATE];
+setWaitingStrings('Nothing', 'Nothing');
+
+(* Monitors across states not supported! *)
+confirmMonitorStop();
+f2MonitorStop();

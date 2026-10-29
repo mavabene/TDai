@@ -1,0 +1,283 @@
+
+(********************** Declaration ****************************)
+VAR_GLOBAL
+	(*
+		2.0.3 - First production release.
+		2.1.0 - Release after many updates based on Titan prep and first two-ish weeks experience.
+		2.1.8 - Sent out to Texas on TD2-002007
+		2.1.9 - Sent out to Texas on TD2-002008
+		2.2.0 - Releasing (hopefully) to go to Titan 30 MW.  Installed on 009, ready to be propagated.
+		2.2.1 - Very small updates after Texas installation just closing out minor issues.
+		2.2.2 - Change in Bakersfield to retract mast slide further before mast to vertical runs.
+		3.0.0 - First release of TD3
+		3.0.1 - First changes after mid-November ESM trip
+		3.0.2 - Followup changes for Charles.
+		3.0.3 - Shipping to ESM on 12/05/2020
+		3.1.0 - At end of second ESM trip, 12/11/2020
+		3.1.1 - Post trip changes to 3.1.0
+		3.1.2 - Added embedment confirmation by operator visual means
+		3.1.3 - Intermediate during third ESM trip, 01/11/2021
+		3.1.4 - At end of third ESM trip, 01/11/2021
+		3.1.5 - Installed just before ESM project start, 01/18/2021
+		3.1.6 - Minor changes after ESM project start, shipping with TD3-103 (4th machine)
+		3.1.7 - Bug fixes related to ESM
+		3.1.8 - Small tweaks with mfg related fixes, factory installed starting at TD3-104
+		3.1.9 - First working version of the cycle time tracking!
+		3.2.0 - Release of working cycle time tracking, plus standardized with TD-2!
+		3.2.1 - Added button on Row Parameters screen to force air compressor off
+		3.2.2 - Debugging added for some file-to-USB problem
+		3.2.3 - Fixed some of the target plate issues
+		3.2.4 - Minor change for target plate protection
+		3.2.5 - Standardized TD-2/TD-3 on everything except axis setup, force/position valves, and boom lift/joint lift
+		3.3.0 - Hammer-based embedment reduction, hotter hydraulic oil settings.
+		3.3.1 - Added minimum embedment to the hammer-based embedment reduction.
+		3.3.2 - Changed default data acquisition frequency to 10 Hz.
+		3.3.3 - Additional screw data being logged to help with Sam's bit efforts at ESM.
+		3.4.0 - Getting ready for new, clean production release.
+		3.4.1 - Beginning to implement drill stall recovery.
+		3.4.2 - Big refactor after initial version of stall recovery worked.
+		3.4.3 - Limits speed of the drill when re-engaging with a previously discovered stall.
+		3.4.4 - Attempted to add the two-step drill extension.
+		3.4.5 - Adding facility for a fixed truss cap holder
+		3.5.0 - Starting to add TD-3.1 code.
+		3.5.1 - 2021-11-11 code at Hutte.
+		3.5.2 - 2021-11-12 code at Hutte.
+		3.5.3 - 2021-11-16 code at Hutte.
+		3.5.4 - First shot at air compressor logic.
+		3.6.0 - Left at CasaGrande 2021-11-17
+		3.6.1 - Using CSO on relay for fan PWM
+		3.6.2 - Small changes, Novato 2021-12-02
+		3.6.3 - Bug fix, air compressor request invisible on TD-3.0
+		3.7.3 - Full functional set: handles NXT 3LM NS screw, plus EW screws in high WP mode.  Small Y error in location EW remains...
+		3.7.4 - Forward port of TD-2.0 V2.5.3 after airport testing.
+		3.7.5 - Changes from JGC's trip to YP immediately before training, 2022_02_21
+		3.7.6 - Updates for the new air compressor for TD-3.1
+		3.7.7 - Starting to add water injection control
+		3.7.8 - Essentially complete controls for water system
+		3.7.9 - Tweaks based on field reports from airport and Kiewit crane yard
+		3.8.0 - Patched the powerup electrical problem with the sensors
+		3.8.2 - Change to the drill pull-out logic, small changes to water handling.
+		3.9.0 - Merged TD-2 YP production with TD-3.1 Gemini pre-production.
+		3.9.1 - Added many items to data logging for soft soil work.
+		3.9.2 - Quick maintenance update, immediately before starting soft soil code.
+		3.9.3 - Added water setting for situations where hammer is on.
+		3.9.4 - Removed LC_CLEAR state transition from screw drive.
+		3.9.5 - Fixed premature air off when drill retract completes after screw drive finishes.
+		3.9.6 - Faster drill extend, faster rampdown, and using UC track pos for drill retract in screw drive.
+		3.9.7 - Added diagnostic screen for wired outputs
+		3.9.8 - Allow UC to go further up in manual, allow operator some water system config.
+		3.9.9 - Added stall detect water flow.
+		4.0.0 - Allow technicial to configure motor trusses as end trusses.
+		4.0.1 - Fixed data acquisition so that it doesn't split one screw in multiple data files.
+		4.0.2 - Added plant deadband compensation to allow rotator to settle more directly.
+		4.0.3 - Added Ojjo passwords for Technician/Engineer.
+		4.0.4 - Saving of set passwords included.
+		4.0.5 - Implementing load/unload setting for handling machine transport better.
+		4.1.0 - Adding support for Tele Radio remote
+		4.1.1 - Very first pass at adding soft soil automation.
+		4.1.2 - Pushing along soft soil after first Gemini trip.
+		4.1.3 - Small updates installed 2022_10_11 on TD-3.0 machines.
+		4.1.4 - Removed boom/joint actuation in transport mode, small data acquisition fixes.
+		4.1.5 - Changes post the Casagrande visit 2022_11_04.
+		4.1.6 - Initial updates to Sam in Vegas 2022_11_15.
+		4.1.7 - Small state logic changes to Sam 2022_11_22.
+		4.1.8 - Continuing soft soil with Sam in Vegas.
+		4.1.9 - Starting second day of Skysol.
+		4.2.0 - Adding stopwatch feature.
+		4.2.1 - First shot at automating the lower rotary pop feature.
+		4.2.2 - Improvements to the cycle time data, including adding manual ops to the cycle data.
+		4.2.3 - After bit Gemini meeting 03/01/2023; UI for LR advance in LC stall, starting on Canbus cycle time tracking.
+		4.2.4 - Adding the ability to set the LR encoder resolution from the HMI.
+		4.2.5 - Small HMI changes.
+		4.2.6 - Upper crowd speed on reveal is now 50 cm/sec.
+		4.2.7 - Gemini field updates to soft soil, particularly for the lower LC pressure..
+		4.2.8 - Another Gemini field update, changes to data exchange behavior to prevent setting loss after field update.
+		4.3.0 - Added button to disable remote functions (other than Estop).
+		4.3.1 - Allow drill to come down in hard soil drilling after drill retract has happened after UC has retracted.
+		4.3.2 - Have air on during retract for wingless bits, air compressor warmup shorter on powerup, changed Igain on LR to 3.
+		4.3.3 - Modified slightly the retry logic in SS when screw stalls post "retract before end of drive" starts.
+		4.3.4 - Starting to integrate wing bit operation with wingless bit operation.  One algorithm to rule them all...
+		4.3.5 - Adding D gain for better LR control, fixed a couple soft soil recovery bugs
+		4.3.6 - Wingless bits can hammer inside of screw, reduced SS stall retries, increase ASSIST UC range, LC/UR compensator warnings
+		4.3.7 - Better stall/spoils clear handling, faster air compressor start on powerup
+		4.3.8 - Crimper diagnostics screen, machine version setting, new watchdog monitoring
+		4.3.9 - Full integration of Teleradio remote
+		4.4.0 - Field release candidate for YP2
+		4.4.1 - More SS settings on HMI, additional LHP comm code, brings some firmware version information to the screen.
+		4.4.2 - Updates to the LHP interface.
+		4.4.3 - Adds access to set passwords from Admin.
+		4.4.4 - Boom swing now can prevent screw drive, filtered readings on pitch/roll use to prevent screw drive
+		4.4.5 - Initial support for CO Bar configuration for NXT SI product
+		4.4.6 - Added transport prep screen
+		4.4.7 - Apps requested changes for NXT SI
+		4.4.8 - GPS display and automation; plotting screen; fix to ByteArrayToReal function
+		4.4.9 - add CAN 3 bus max load monitoring; add drive leg length to msg12 and 13; add CAN3 gps diag; 
+				fix gps vendor selection logic error
+		4.5.0 - overhaul of gps process - selecting yes/no for gps at start of truss for consistency and organization
+			    v1 - GPS_STABLE_5S added as switch for using GPS targeting; enabled Gps X offset adjustment to be set in rwp and used in track mode;
+			    v2 - added timer for RWP autotarget;
+				v3 - Convert dynamic status of gps autotarget from NVM to network variable
+				v4 - separate gps range indication from gps range targeting (can make indication more restrictive)
+				v5 - add pnezd and feedback messages, display, input
+				v6-v8 - testing and cal screens and functions
+				v9 - working production; display Long, Lat, Alt on gps screen 
+				v10 - split gps move types; cleaned up
+		4.5.1 - first GPS production version
+			    v1 - changed range margin to +/- from midpoint; fixed bugs
+				v2 - trackingPreTarget working
+		4.5.2 - second production version
+				v1 - changed display of GPS locked targets to GPS current targets; add gps 3rd leg reverse EW button, add button on setup screen; 
+					 adjust GPS_TRACKING_X_ADJUST to err on 'uphill' side of x slide (55 to 70)
+		4.5.3 - production
+				v1 - change rwp cycle time from s to ms
+				v2 - added ability to change motor install direction from W going E to E going W (HMI button)
+				v3 - add place to store gps antenna machine specific offsets in HMI (stored on PLC)
+				v4 - made more gps settings persistent; simplified process for adding more persistent vars (just have to change 2 numbers);
+				v5 - change mode for 3rd leg after setting reference and after installing so can't install side legs in wrong location;
+					 made 3rd leg adjust and install E to W buttons persistent
+				v6 - add GPS feedback cycle control (cycle 85); add prediction for 3rd leg position
+					 add FWP autotarget ability; fixed GPS_diag_eng actuator pos and activation display;
+				v7 - give cycle numbers and enum name for readability; 
+				v8 - changed GPS settings button to return to GPS_Diag; added filtered offsets to HMI Eng
+				v9 - add mast pitch and roll limit settings for GPS on target;
+				v10 - cleaned up GPS screens;
+				v12 - modified comments Transmit_6;
+				v13 - add cycle usage
+				v14 - cleaned up internal diag screen; changed axis diag outputs to 2 dec places
+		4.5.4 - working
+				v1 - modified LowerRotaryEncoder screen for clarity; 
+					 add button to turn off gps on target check for laser use;
+				v2 - separate eGPS enum into selection, status, general; change min number of hard soil; added sync process to PLC_TRANSMIT_6;
+					 add button to enable air SCREW_STATE_POSITION_MAST_SLIDE and soft soil;
+				v3 - refactor GPS states
+				v7 - add TEST button;
+				v8 - split Receive_6;
+				v9 - test working; add GPS used this truss indication;
+				v10 - incorporate pnezD decoder; removed "custom recipe" functionality; changed Truss type names
+				v11 - implement HMI review changes
+				v12 - add heading from GPS;
+				v13 - remove Laser FWP button (automated by Truss Type);
+				v14 - working
+				v15 - make screwParamsSource persistent;
+				v16 - record GPS data; 
+				v17 - add End or Motor only option to preload compliance button; add data types to HMI persistent data arrays;
+				v18 - adjust FWP behavior for less presses
+				v19 - added TD3.3 to admin setup; gave access to GPS Diag and Screw Params diag to all; 
+				v20 - add Knuckle Pitch to Mast Pitch delta offset to use for plumbing mast;
+				v21 - change units for gps antenna offsets to survey ft;
+				
+		4.5.5 - production version for Bellefield and Pinnington
+				v1 - move archived settings to an admin screen for access;
+				v2 - nxt third leg screen for debug; added third leg indicator to GPS Diag Eng;
+		4.5.6 - production update so actuator autotarget buttons can be activated; add HMI reboot button and 
+				code versions to P_Operation when PLC_LOST; cleanup, added LAST_PLC_VERSION to NVM; 
+		4.5.7 - v1 - fixed bug in PLC watchdog that allowed PLC and HMI to reconnect if PLC comes back long enough;
+				v2 - remove SET_NXT_TLM_3L_ANGLE_VALUE from TRANSMIT_1 for Standard and Heavy and hardcoded in PLC
+				v3 - Pinnington update for bug fix, and mast stability in track mode when GPS drops;
+		4.5.8 - production update for Pinnington
+				v1 - cleaned up Soft Soil Speed screen;
+				v2 - make mast preload compliance pressure settable; 
+		4.5.9 - no change;
+		4.6.0 - production release for Pinnington;
+		4.6.2 - production release for Pinnington (no change);
+				v1 - update for row pitch bug; change screw param NS from % to deg on HMI
+				v2 - new aircompressor for 3.0;
+				v3 - screw cap and ss buttons;
+		4.6.4 - production update Pinnington
+				v1 - screw cap and ss buttons; add CORRECTED_MAST_PITCH and display; 
+				added LC_REWIND lag test; made test button invisible if not in manual and not in test;
+				v2 - add TD 3.4 to admin screen; fix error in Test button invisible logic; 
+				   - fix AC diag screen for td3.0 with new compressor
+		4.6.5 - Production update Pinnington
+		4.7.0 - Tower Road and onward - refine NXT install, update slope scheme
+		4.7.1 - Tower Road and NX 3LM Production release
+				v1 - add button for xslide pitch correction in preload compliance;
+				v2 - PRELOAD_PLUMB_MAST added; rdo carlsen added; added button for PRELOAD_MAST_LEAN_COMPENSATION (temporary until proven);
+		4.7.4 - production update - tower road, cartwright, catclaw; 
+		      - v1 clean up some text that is not showing properly;
+			  - remove some debug variables from HMI; add debug vars to debug screen;
+			  - added GPS Navigation screen;
+		4.7.5 - production release
+			v1 - add button for FWP_Z_AUTOTARGET; edit text boxes; 
+			v2 - give operators access to force tch and centralizer;
+			v4 - remove centralizer forcing, move ability to force tch to operator screen;
+		4.7.7 - production release
+		4.8.1 - add Hawe Valve status screen;
+		4.8.7 - Feature rollbacks - fix engineer button;
+				- remove z autotarget in FWP; hammer force limits; no UC control during screw drive auto; screw drive assist only up works; embedment reduction doesn't work if air off; delay for screw drive man/auto; z slide doesn't pretarget on approach; actuator speeds req Ojjo Engineer and above; restrict Customer Engineer access to settings; track assist settings; bug fixes; 
+				v1 - distinguish "Customer Engineer", "Owner Engineer", "Ojjo Engineer"
+				v1 test1 - add eHMI_Sints
+				v1 test2 - updated TD_HMI (remove duplicate login passwords)
+		4.9.3 - rerelease of feature roll backs from last working version.  490 and 491 failed to install properly in the field.  Still under investigation.
+		4.9.4 - match plc
+		4.9.5 - Earth Truss 2.0
+			  	v1 integrate with previous work on ET2; add ET2testing screen
+			  	v2 added PNEZD data to screw drive data collection
+			  	v3 added button for ET2 diag to gps standard
+			  	v4 add CALIBRATION button (turn off offsets)
+			  	v5 renamed TRANSMIT and TRANSMIT_1;
+			  	v6 reordered Transmit_2 to match old for; updated transmit/receive logic
+			  	v7
+			  	v8 add GPS_TEST_VEL_FACTOR, GPS_TEST_ACCEL_FACTOR
+			  	v10 make calibration button cancel on change of point; 
+			  	v11 fix UR and LR warnings and add to display
+		 4.9.6 	production release ET INT (not tested for original NXT product)
+		 4.9.7 	minor updates
+		  		leg count shows leg length
+		 4.9.8 	Track Assist auto advance to RWP, Screw mode;
+		  		change permissions for calibration and insitu test button to allow customer engineer access;
+		 5.0.0 	upnaming to 500 because auto advance is a significant change
+		  		v1 - change calibration point to pin hole
+		 5.0.1	match PLC, add screen for ET2 diag
+		 5.0.2	v1 - removed reset of GPS calibration button due to changing Pnezd field
+		 5.0.3	settable variables for inf var truss geometry
+		  		v1 	add Vector3d type and eHMI_SettingsVectors; add variable NXT truss type; made gps antenna offsets available to technician;
+				v2 	modify product types to standardize and add variable geometry;
+				v3 	add siko encoders for yaw, boom swing, boom lift, joint lift, and upper crowd; fixed UDINT/UINT bug, added checkUdintValueAndUpdate; 
+					removed low pressure eWarning for UR_MOTOR and LC_MOTOR
+				v4 	fix truss geometry variables; added LC stall Hammer option; remove MOTOR_HAS_LASER_VALUE; 
+		5.0.5 	v2 	update motor library to prevent exception in TrapezoidStart if FB.RAW_PER_ENGR is 		negative (as is for Siko encoders)
+				v2 	remove P_GpsCycleDiagnostics (never used, and done with data collection to USB now)
+				v3 	remove Pinnington/Bellefield row pitch convention;
+		5.1.0 	production made from v505v3: new product (HP75); add data streaming on HMI; 
+				start using sp21 for HMI;
+		5.1.1	v1 	get SI working; added proximity alarm;
+				v2 	fix time stamp bug in data streaming;
+		5.1.2 	v1	add third leg angle adjust; remove LASER OFFSET ABOVE WORKPOINT;
+				Hammer LC Stall Recovery working;
+		5.1.3	v1 	remove EurodrillInstalled button (redundant);
+		
+		5.2.0	v1	remove vestigial si stuff
+				v2 	writing config to usb working
+				v3	read file from USB - working
+				v4	writing JSON to USB working, confirmation light working;
+				v5	add JSON parsing, writing settings values; JSON read write settings basic process working;
+				v6 	working - status messages added, refactored to use function, added HMI val comparison for machine settings;
+				v7	add all of the parameters and limits to 4 config file types; 
+					added dev option for lab bench to auto turn on admin; machineSpecific config complete and working;
+				v8	config cleanup; add other configs; drill settings and machine settings working;
+				v9	add general settings, add Job Settings; add bad usb handling to config process; Config files working
+				v10	cleanup config debugs etc.
+				v11	add HP75 to product type selector;
+				v12	add units to config vars, standardize config parses; 
+					correct SET_HMI_REALS to SET_HMI_SINTS[SCREW_DRIVE_MAN_AUTO_DELAY] in parseGeneralSettings;
+					move remaining drill bit settings from job to drill settings;
+					config cleaned up and working;
+				v13	initiate HMI NVM version number and machine serial for config control;
+					fix handleUsbInsert ScrewDri folder creation bug;
+					added limits to parseJobSettings;
+					config process working;
+				v14	add data streaming messaging; data streaming messages seem to work;
+				v15 bug fixes in dataStorage queuing process;
+				v16	update messaging process to record data in 10ms process inorder to avoid timing gaps;
+				v17	removed unused variables
+				v18	fix SET_BOOM_LIFT_ENCODER_AT_ZERO_BTN and SET_JOINT_LIFT_ENCODER_AT_ZERO_BTN not reset bugs
+				v19	520 ready for testing; 
+		5.3.0	v1	begin plumb; make ss/hs button hideable? TEST HMI 1
+					
+						 
+	*)
+	VERSION : STRING[20] := 'dev'; // dev sp21
+// 	VERSION : STRING[20] := '5.3.0v1'; // dev sp21
+// 	VERSION : STRING[20] := '5.3.0'; // testing
+END_VAR

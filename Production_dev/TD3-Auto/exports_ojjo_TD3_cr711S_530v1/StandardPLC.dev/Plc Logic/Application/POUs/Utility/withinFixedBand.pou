@@ -1,0 +1,75 @@
+
+(********************** Declaration ****************************)
+FUNCTION withinFixedBand : BOOL
+VAR_IN_OUT
+	DATA: ARRAY [*] OF REAL;
+	// The next spot for data.
+	HEAD: INT;
+END_VAR
+
+VAR_INPUT
+	// Current value of the variable being monitored.
+	CURRENT: REAL;
+	// Number of readings on which the UR stall detection is based.
+	SAMPLES: INT;
+	// What is the center of the band?
+	BAND_CENTER: REAL;
+	// How far does the band extend from the center?
+	BAND_SIZE: REAL;
+	// Whether or not we have wrapped one time.
+	pFILLED: POINTER TO BOOL;
+END_VAR
+
+VAR_OUTPUT
+	// Minimum reading within the current window.
+	MN: REAL;
+	// Maximum reading within the current window.
+	MX: REAL;
+	// Minimum reading within the current window.
+	AVG: REAL;
+	// Fraction of values in the window that are within the given band.
+	FRACTION_IN_BAND: REAL;
+END_VAR
+
+VAR
+	I: INT;
+	SUM: REAL;
+	BAND_PLUS: REAL;
+	BAND_MINUS: REAL;
+	SAMPLES_IN_BAND: INT;
+END_VAR
+(********************** Implementation ****************************)
+// Store the current value.
+DATA[HEAD] := CURRENT;
+
+// Increment and wrap pHEAD for the *next* cycle.
+HEAD := HEAD + 1;
+IF HEAD = (SAMPLES + 1) THEN
+	// Mark the array as fully filled if we are wrapping, as we always start filling at the
+	//	beginning of the array when a new analysis cycle start.
+	pFILLED^ := TRUE;
+	
+	HEAD := 1;
+END_IF
+
+// Now go through the entire sample array once:
+//	- Find min, max, avg
+//	- Determine fraction of points inside the given band.
+
+MX := SMALLEST_REAL;
+MN := LARGEST_REAL;
+SUM := 0;
+SAMPLES_IN_BAND := 0;
+BAND_PLUS := BAND_CENTER + BAND_SIZE;
+BAND_MINUS := BAND_CENTER - BAND_SIZE;
+FOR I := 1 TO SAMPLES DO
+	MX := MAX(MX, DATA[I]);
+	MN := MIN(MN, DATA[I]);
+	SUM := SUM + DATA[I];
+	IF DATA[I] <= BAND_PLUS AND DATA[I] >= BAND_MINUS THEN
+		SAMPLES_IN_BAND := SAMPLES_IN_BAND + 1;
+	END_IF
+END_FOR
+
+AVG := SUM / SAMPLES;
+FRACTION_IN_BAND := TO_REAL(SAMPLES_IN_BAND) / TO_REAL(SAMPLES);

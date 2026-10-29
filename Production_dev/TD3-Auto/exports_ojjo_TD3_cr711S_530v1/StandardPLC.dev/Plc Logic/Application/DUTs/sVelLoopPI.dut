@@ -1,0 +1,45 @@
+
+(********************** Declaration ****************************)
+TYPE sVelLoopPI :
+STRUCT
+	(* Proportional gain: millepercent per velocity unit of error *)
+	KP: REAL := 0.0;
+	(* Integral gain: millepercent per (velocity unit of error) * (1 second) *)
+	KI: REAL := 0.0;
+	(* Velocity feedforward for moves in the positive and negative engineering directions. *)
+	KVFF_PLUS: REAL := 0.0;
+	KVFF_MINUS: REAL := 0.0;
+	(* Valve deadband, assumed symmetric.  This is the highest output in millepercent that does not generate
+		actuator motion. *)
+	DEADBAND: REAL := 0.0;
+	
+	(* Maximum output allowed as a result of integrator: this is in millepercent. *)
+	ISUM_MAX: REAL := 0.0;
+	INTEGRATOR_MAX: WORD := 0;
+
+	(* Whether or not we are enabled. *)
+	ENABLED: BOOL := 0;
+	(* If we have an error, the loop gets turned off until reset. *)
+	ERROR: BOOL := 0;
+	(* One shot last state; reset is only allowed on transition, not on level! *)
+	RESET_LAST: BOOL := 0;
+	(* The output of the servo loop *)
+	OUTPUT: REAL;
+	(* Use to limit slew rate to new output *)
+	OUTPUT_LAST: REAL;
+	(* Velocity error, engr *)
+	VERR_ENGR: REAL;
+	(* Velocity error, raw *)
+	VERR: DINT;
+	(* Last velocity error, raw *)
+	VERR_LAST: DINT := 0;
+	(* Accummulated integrator *)
+	ISUM: REAL := 0.0;
+
+	(* Feedforward contribution *)
+	VFF: REAL;
+	(* Feedback contribution *)
+	FB: REAL;
+	I_CONTRIB: REAL;
+END_STRUCT
+END_TYPE

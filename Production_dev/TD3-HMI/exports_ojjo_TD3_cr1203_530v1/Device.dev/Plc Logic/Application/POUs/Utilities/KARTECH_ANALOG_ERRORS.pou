@@ -1,0 +1,55 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK KARTECH_ANALOG_ERRORS
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+	IF aiInput1err THEN
+		AI1_ERROR_HIDE := FALSE;
+	ELSE
+		AI1_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput2err THEN
+		AI2_ERROR_HIDE := FALSE;
+	ELSE
+		AI2_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput3err THEN
+		AI3_ERROR_HIDE := FALSE;
+	ELSE
+		AI3_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput4err THEN
+		AI4_ERROR_HIDE := FALSE;
+	ELSE
+		AI4_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput5err THEN
+		AI5_ERROR_HIDE := FALSE;
+	ELSE
+		AI5_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput6err THEN
+		AI6_ERROR_HIDE := FALSE;
+	ELSE
+		AI6_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput7err THEN
+		AI7_ERROR_HIDE := FALSE;
+	ELSE
+		AI7_ERROR_HIDE := TRUE;
+	END_IF;
+
+	IF aiInput8err THEN
+		AI8_ERROR_HIDE := FALSE;
+	ELSE
+		AI8_ERROR_HIDE := TRUE;
+	END_IF;
+

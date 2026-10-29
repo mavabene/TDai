@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+
+TYPE eGPS : // 0 - 15 bit mask positions with GPS_AUTOTARGET_STATUS as UINT
+(
+	// GPS_AUTOTARGET_AXES
+	
+	GPS_HEADING := 1,
+	GPS_X := 2,
+	GPS_Y := 3,
+	GPS_Z := 4,
+	
+	// Truss type info
+	END_TRUSS := 69, // E End
+	FILL_TRUSS := 70, // F Fill
+	MOTOR_TRUSS := 77, // M Motor
+	REMOTE_CONTROL := 82, // R Remote - determine from remote switch
+	NA := 222 // Means "Not Applicable to this truss"
+	
+);
+
+END_TYPE
+

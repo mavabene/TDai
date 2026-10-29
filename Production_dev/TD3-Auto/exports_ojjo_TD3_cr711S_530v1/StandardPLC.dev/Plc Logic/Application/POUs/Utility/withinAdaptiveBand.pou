@@ -1,0 +1,136 @@
+
+(********************** Declaration ****************************)
+FUNCTION withinAdaptiveBand : BOOL
+(*
+	This method is used to see if an incoming signal is stuck at or near a rail.  It can be used
+		for a high-side or low side rail, or for a band around an average.  The intended use is to determine
+		if a subsystem is stuck or saturated, when the subsystem has two characteristics:
+			- The feedback is noisy, non-existent, or otherwise can't be used directly
+			- If there is a control loop, the control signal may not be saturated.
+*)
+VAR_IN_OUT
+	// This is the array that keeps the rolling history of data to be analyzed.
+	DATA: ARRAY [*] OF REAL;
+END_VAR
+
+VAR_INPUT
+	// Current value of the variable being monitored.
+	CURRENT: REAL;
+	// The next spot for data.
+	pHEAD: POINTER TO INT;
+	// Whether or not we have wrapped one time.
+	pFILLED: POINTER TO BOOL;
+	// Number of readings on which the UR stall detection is based.
+	SAMPLES: INT;
+	// Maximum, minimum, or average reading within the current window, depending on the function.
+	pMIN_OR_MAX_OR_AVG: POINTER TO REAL;
+	// Fraction of values in the window that are within a short distance of the max pressure value.
+	pFRACTION_IN_BAND: POINTER TO REAL;
+	// How far away from the rail can we be and still be near the rail?
+	BAND_SIZE: REAL;
+	// In case you want to limit the level of the MIN or MAX, for example if you want a minimum rail at 0 and occasionally
+	//	you know you will get negative numbers due to noise.
+	LIM_USED: BOOL;
+	LIM: REAL;
+	// 0 to use a maximum, 1 to use a minimum, 2 to use average.
+	FUNC: eAdaptiveBandFunc;
+	
+END_VAR
+
+VAR
+	I: INT;
+	SIZE: INT;
+	MX: REAL;
+	MN: REAL;
+	AVG: REAL;
+	SUM: REAL;
+	RAIL: REAL;
+	RAIL_PLUS: REAL;
+	RAIL_MINUS: REAL;
+	SAMPLES_IN_BAND: INT;
+END_VAR
+(********************** Implementation ****************************)
+// Store the current value.
+DATA[pHEAD^] := CURRENT;
+
+// Increment and wrap pHEAD for the *next* cycle.
+pHEAD^ := pHEAD^ + 1;
+IF pHEAD^ = (SAMPLES + 1) THEN
+	// Mark the array as fully filled if we are wrapping, as we always start filling at the
+	//	beginning of the array when a new analysis cycle start.
+	pFILLED^ := TRUE;
+	
+	pHEAD^ := 1;
+END_IF
+
+// Now go through the entire sample array, find the max, imagine that might be a rail, then look through
+//	the other data and see many points are behaving like this might be a rail.
+IF FUNC = eAdaptiveBandFunc.FUNCTION_MAX THEN
+	// Find the max.
+	MX := SMALLEST_REAL;
+	FOR I := 1 TO SAMPLES DO
+		MX := MAX(MX, DATA[I]);
+	END_FOR
+	
+	// Limit the max to eliminate impossible noisy values beyond some known max.
+	IF LIM_USED THEN
+		MX := MIN(MX, LIM);
+	END_IF
+	
+	// Count how many values are above the "rail minus near rail" band.  This will include noisy points
+	//	above the rail limit if that is being used.
+	SAMPLES_IN_BAND := 0;
+	RAIL := MX - BAND_SIZE;
+	FOR I := 1 TO SAMPLES DO
+		IF DATA[I] >= RAIL THEN
+			SAMPLES_IN_BAND := SAMPLES_IN_BAND + 1;
+		END_IF
+	END_FOR
+	
+	pMIN_OR_MAX_OR_AVG^ := MX;
+ELSIF (FUNC = eAdaptiveBandFunc.FUNCTION_MIN) THEN
+	// Find the min.
+	MN := LARGEST_REAL;
+	FOR I := 1 TO SAMPLES DO
+		MN := MIN(MN, DATA[I]);
+	END_FOR
+	
+	// Limit the min to eliminate impossible noisy values beyond some known min.
+	IF LIM_USED THEN
+		MN := MAX(MN, LIM);
+	END_IF
+	
+	// Count how many values are below the "rail plus near rail" band.  This will include noisy points
+	//	above the rail limit if that is being used.
+	SAMPLES_IN_BAND := 0;
+	RAIL := MN + BAND_SIZE;
+	FOR I := 1 TO SAMPLES DO
+		IF DATA[I] <= RAIL THEN
+			SAMPLES_IN_BAND := SAMPLES_IN_BAND + 1;
+		END_IF
+	END_FOR
+
+	pMIN_OR_MAX_OR_AVG^ := MN;
+ELSE
+	// Find the average.
+	SUM := 0;
+	FOR I := 1 TO SAMPLES DO
+		SUM := SUM + DATA[I];
+	END_FOR
+	AVG := SUM / SAMPLES;
+	
+	// Count how many values are above the "rail minus near rail" band.  This will include noisy points
+	//	above the rail limit if that is being used.
+	SAMPLES_IN_BAND := 0;
+	RAIL_PLUS := AVG + BAND_SIZE;
+	RAIL_MINUS := AVG - BAND_SIZE;
+	FOR I := 1 TO SAMPLES DO
+		IF DATA[I] <= RAIL_PLUS AND DATA[I] >= RAIL_MINUS THEN
+			SAMPLES_IN_BAND := SAMPLES_IN_BAND + 1;
+		END_IF
+	END_FOR
+
+	pMIN_OR_MAX_OR_AVG^ := AVG;
+END_IF
+
+pFRACTION_IN_BAND^ := TO_REAL(SAMPLES_IN_BAND) / SAMPLES;

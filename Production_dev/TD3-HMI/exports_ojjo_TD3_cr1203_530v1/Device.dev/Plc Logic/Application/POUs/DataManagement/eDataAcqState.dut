@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+TYPE eDataAcqState :
+	(
+		DATA_ACQ_IDLE := 0,
+		DATA_ACQ_OPEN,
+		DATA_ACQ_WRITE,
+		DATA_ACQ_CLOSE,
+		DATA_ACQ_COPY,
+		DATA_ACQ_WAIT
+	);
+END_TYPE
+

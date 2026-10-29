@@ -1,0 +1,25 @@
+
+(********************** Declaration ****************************)
+// *** JC add - converts diag array INTs to string info
+FUNCTION ConvDiag : STRING
+VAR_INPUT
+	ifmDiag: INT;
+END_VAR
+VAR
+	i_diag: diag;
+	attention: STRING := '  !!!!!  ';
+	
+END_VAR
+
+(********************** Implementation ****************************)
+(* Take in ifmDiag, use as input to create diag enum, convert diag enum to STRING*)
+
+i_diag := ifmDiag;
+ConvDiag := TO_STRING(i_diag);
+
+IF ifmDiag >5 THEN
+	
+	ConvDiag := concat(attention, ConvDiag);
+	ConvDiag := concat(ConvDiag, attention);
+	
+END_IF

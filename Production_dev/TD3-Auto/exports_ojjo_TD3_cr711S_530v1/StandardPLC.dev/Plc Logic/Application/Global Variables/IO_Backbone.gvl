@@ -1,0 +1,130 @@
+
+(********************** Declaration ****************************)
+(*
+	Contains all of the execution and communication backbone for the greatest common multiple machine.
+		The is, this contains everything to support a machine with all of the various options, so some of these
+		are unused on every machine.  THIS FILE SHOULD WORK ACROSS ALL MACHINE VERSIONS!
+		
+	The IO_Hardware file is used to map particular features onto particular I/O points on a particular machine.
+		These files are different across different machine versions.
+*)
+VAR_GLOBAL
+	(* ----------------------- INPUT FUNCTION BLOCKS ------------------------------------ *)
+	IN_ROTARY_SPEED_A: ifmIOCommon.INPUT;
+	IN_ROTARY_SPEED_B: ifmIOCommon.INPUT;
+	IN_HYDRAULIC_TEMP: ifmIOCommon.INPUT;
+	IN_PUMP_PRESSURE: ifmIOCommon.INPUT;
+	IN_LOWER_ROTARY_PRESSURE: ifmIOCommon.INPUT;
+	IN_LOWER_CROWD_PRESSURE: ifmIOCommon.INPUT;
+	IN_UPPER_CROWD_PRESSURE: ifmIOCommon.INPUT;
+	IN_UPPER_ROTARY_PRESSURE: ifmIOCommon.INPUT;
+	IN_HAMMER_PRESSURE: ifmIOCommon.INPUT;
+	IN_FUEL_LEVEL: ifmIOCommon.INPUT;
+	IN_LEFT_CRIMPER_OPEN_BUTTON: ifmIOCommon.INPUT;
+	IN_LEFT_CRIMPER_CLOSE_BUTTON: ifmIOCommon.INPUT;
+	IN_LEFT_CRIMPER_CONFIRM_BUTTON: ifmIOCommon.INPUT;
+	IN_RIGHT_CRIMPER_OPEN_BUTTON: ifmIOCommon.INPUT;
+	IN_RIGHT_CRIMPER_CLOSE_BUTTON: ifmIOCommon.INPUT;
+	IN_RIGHT_CRIMPER_CONFIRM_BUTTON: ifmIOCommon.INPUT;
+	IN_HORN_BUTTON: ifmIOCommon.INPUT;
+	IN_LIGHT_1_BUTTON: ifmIOCommon.INPUT;
+	IN_LIGHT_2_BUTTON: ifmIOCommon.INPUT;
+	IN_AIR_COMPRESSOR_STATUS: ifmIOCommon.INPUT;
+	IN_AIR_COMPRESSOR_WET_PRESSURE: ifmIOCommon.INPUT;
+	IN_AIR_COMPRESSOR_TEMP: ifmIOCommon.INPUT;
+	IN_PROXIMITY_SENSOR_NO: ifmIOCommon.INPUT;
+	IN_PROXIMITY_SENSOR_NC: ifmIOCommon.INPUT;
+	 
+	
+	(* ----------------------- DIGITAL FUNCTION BLOCKS ------------------------------------ *)
+	OUT_AIR_COMPRESSOR_REQUEST: ifmIOCommon.OUTPUT;
+	OUT_AIR_COMPRESSOR_SUPPLY: ifmIOCommon.OUTPUT;
+	PWM_FAN: ifmOutPWM.PWM1000;
+	OUT_AIR_COMPRESSOR_UNLOAD: ifmIOCommon.OUTPUT;
+	OUT_HAMMER: ifmIOCommon.OUTPUT;
+	OUT_UPPER_ROTARY_FWD: ifmIOCommon.OUTPUT;
+	OUT_UPPER_ROTARY_REV: ifmIOCommon.OUTPUT;
+	OUT_BLADE_DOWN: ifmIOCommon.OUTPUT;
+	OUT_BLADE_UP: ifmIOCommon.OUTPUT;
+	OUT_CENTRALIZER_OPEN: ifmIOCommon.OUTPUT;
+	OUT_CENTRALIZER_CLOSE: ifmIOCommon.OUTPUT;
+	OUT_HYDRAULIC_FAN: ifmIOCommon.OUTPUT;
+	OUT_TRAVEL_ALARM: ifmIOCommon.OUTPUT;
+	OUT_COOLER_SOLENOID: ifmIOCommon.OUTPUT;
+	OUT_RED_LIGHT: ifmIOCommon.OUTPUT;
+	OUT_YELLOW_LIGHT: ifmIOCommon.OUTPUT;
+	OUT_GREEN_LIGHT: ifmIOCommon.OUTPUT;
+	OUT_BLUE_LIGHT: ifmIOCommon.OUTPUT;
+	OUT_TRACK_HIGH_SPEED: ifmIOCommon.OUTPUT;
+	OUT_E_STOP: ifmIOCommon.OUTPUT;
+	OUT_SPARE_2: ifmIOCommon.OUTPUT;
+	OUT_SPARE_3: ifmIOCommon.OUTPUT;
+	OUT_LEFT_CRIMPER_OPEN: ifmIOCommon.OUTPUT;
+	OUT_LEFT_CRIMPER_CLOSE: ifmIOCommon.OUTPUT;
+	OUT_RIGHT_CRIMPER_OPEN: ifmIOCommon.OUTPUT;
+	OUT_RIGHT_CRIMPER_CLOSE: ifmIOCommon.OUTPUT;
+	OUT_TARGET_PLATE_DOWN: ifmIOCommon.OUTPUT;
+	OUT_TARGET_PLATE_UP: ifmIOCommon.OUTPUT;
+	OUT_X_LASER: ifmIOCommon.OUTPUT;
+	// Horn 1 and 2 are needed because initial TD-3.0 revs had a 4Amp horn wired to a 2Amp output, which
+	//	caused some machines to work intermittently.  We did this so we didn't have to synchronously upgrade the
+	//	hardware and the software.
+	OUT_HORN1: ifmIOCommon.OUTPUT;
+	OUT_HORN2: ifmIOCommon.OUTPUT;
+	OUT_PENDULUM: ifmIOCommon.OUTPUT;
+	OUT_LIGHT_1: ifmIOCommon.OUTPUT;
+	OUT_LIGHT_2: ifmIOCommon.OUTPUT;
+	OUT_ENGINE_REV_UP: ifmIOCommon.OUTPUT;
+	OUT_ENGINE_REV_DOWN: ifmIOCommon.OUTPUT;
+	OUT_PROXIMITY_SENSOR_DISABLE: ifmIOCommon.OUTPUT; // turn off antenna
+	OUT_PROXIMITY_SENSOR_ALARM_MUTE: ifmIOCommon.OUTPUT; // turn off speaker
+
+	(* Use these to force output to a particular state. *)
+	AIR_COMPRESSOR_REQUEST_FORCE: sForceOutput;
+	AIR_COMPRESSOR_SUPPLY_FORCE: sForceOutput;
+	AIR_COMPRESSOR_FAN_FORCE: sForceOutput;
+	DRIFTER_AIR_OPEN_FORCE: sForceOutput;
+	HAMMER_FORCE: sForceOutput;
+	UPPER_ROTARY_FWD_FORCE: sForceOutput;
+	UPPER_ROTARY_REV_FORCE: sForceOutput;
+	BLADE_DOWN_FORCE: sForceOutput;
+	BLADE_UP_FORCE: sForceOutput;
+	CENTRALIZER_OPEN_FORCE: sForceOutput;
+	CENTRALIZER_CLOSE_FORCE: sForceOutput;
+	HYDRAULIC_FAN_FORCE: sForceOutput;
+	TRAVEL_ALARM_FORCE: sForceOutput;
+	RED_LIGHT_FORCE: sForceOutput;
+	YELLOW_LIGHT_FORCE: sForceOutput;
+	GREEN_LIGHT_FORCE: sForceOutput;
+	BLUE_LIGHT_FORCE: sForceOutput;
+	TRACK_HIGH_SPEED_FORCE: sForceOutput;
+	E_STOP_OUT_FORCE: sForceOutput;
+	SPARE_OUT_2_FORCE: sForceOutput;
+	SPARE_OUT_3_FORCE: sForceOutput;
+	LEFT_CRIMPER_CLOSE_FORCE: sForceOutput;
+	LEFT_CRIMPER_OPEN_FORCE: sForceOutput;
+	RIGHT_CRIMPER_CLOSE_FORCE: sForceOutput;
+	RIGHT_CRIMPER_OPEN_FORCE: sForceOutput;
+	TARGET_PLATE_DOWN_FORCE: sForceOutput;
+	TARGET_PLATE_UP_FORCE: sForceOutput;
+	RES_1_FORCE: sForceOutput;
+	HORN_FORCE: sForceOutput;
+	LIGHT_1_FORCE: sForceOutput;
+	LIGHT_2_FORCE: sForceOutput;
+	COOLER_SOLENOID_FORCE: sForceOutput;
+	WATER_FORCE: sForceOutput;
+	
+	PROXIMITY_SENSOR_ALARM_MUTE_FORCE: sForceOutput; // mute speaker
+	PROXIMITY_SENSOR_DISABLE_FORCE: sForceOutput; // disable antenna
+
+	LEFT_CRIMPER_OPEN_DIAG: ifmTYPES.DIAG_INFO;
+	LEFT_CRIMPER_CLOSE_DIAG: ifmTYPES.DIAG_INFO;
+	LEFT_CRIMPER_CONFIRM_DIAG: ifmTYPES.DIAG_INFO;
+	RIGHT_CRIMPER_OPEN_DIAG: ifmTYPES.DIAG_INFO;
+	RIGHT_CRIMPER_CLOSE_DIAG: ifmTYPES.DIAG_INFO;
+	RIGHT_CRIMPER_CONFIRM_DIAG: ifmTYPES.DIAG_INFO;
+	
+	PROXIMITY_SENSOR_ON_ALARM_OFF_DIAG: ifmTYPES.DIAG_INFO;
+	PROXIMITY_SENSOR_ALARM_ON_DIAG: ifmTYPES.DIAG_INFO;
+	
+END_VAR

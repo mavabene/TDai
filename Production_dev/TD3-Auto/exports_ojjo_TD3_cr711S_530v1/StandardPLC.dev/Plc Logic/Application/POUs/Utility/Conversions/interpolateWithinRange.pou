@@ -1,0 +1,30 @@
+
+(********************** Declaration ****************************)
+(*
+	Interpolates within a range.  Slope = 0 for X points outside the range.
+*)
+FUNCTION interpolateWithinRange : REAL
+VAR_INPUT
+	X_LOW: REAL;
+	X_HI: REAL;
+	Y_AT_X_LOW: REAL;
+	Y_AT_X_HI: REAL;
+	X: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF X_LOW >= X_HI THEN
+	// Bogus setup.  Too bad we don't have ASSERT!
+	interpolateWithinRange := Y_AT_X_LOW;
+ELSIF X < X_LOW THEN
+	// Linear where X is below X_LO
+	interpolateWithinRange := Y_AT_X_LOW;
+ELSIF X > X_HI THEN
+	// Linear where X is above X_HI
+	interpolateWithinRange := Y_AT_X_HI;
+ELSE
+	// Interpolate with point/slope.
+	interpolateWithinRange := (X - X_LOW) * (Y_AT_X_HI - Y_AT_X_LOW) / (X_HI - X_LOW) + Y_AT_X_LOW;
+END_IF

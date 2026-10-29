@@ -1,0 +1,60 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK executeLinuxAsync
+VAR_INPUT
+	// sCommand must be set
+	pASYNC: POINTER TO ifmDevice.LinuxSysCallAsync;
+	// Monitored in case Axync call doesn't come back on time with 
+	pTON: POINTER TO TON;
+END_VAR
+VAR_OUTPUT
+	DONE: BOOL;
+	ERROR: BOOL;
+	wCmdOut: WORD;
+END_VAR
+VAR
+	STARTING: R_TRIG;
+	E_COUNT: DINT;
+	NE_COUNT: DINT;
+	DONE_COUNT: UINT := 0;
+	ERROR_COUNT: UINT := 0;
+	TIMEOUT_COUNT: UINT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+STARTING(CLK := pASYNC^.xEXECUTE);
+
+IF STARTING.Q THEN
+	// First time only.
+END_IF
+
+IF pASYNC^.xEXECUTE THEN
+	E_COUNT := E_COUNT + 1;
+	
+	(* Run the timeout.  This must have the falling edge on IN done externally. *)
+	pTON^(IN := NOT pTON^.Q, PT := pTON^.PT);
+
+	(* Make the linux call to copy the file here.  This is async, so will be called over and over while xExecute
+		is true. *)
+	pASYNC^(xDone => DONE, xERROR => ERROR, wCmdResult => wCmdOut);
+			
+	(* Reset the linuxCall FB to idle.  This must be called with xExecute low to put a rising edge into the FB
+		to get it ready for *next* time! *)
+	IF DONE OR ERROR OR pTON^.Q THEN
+		pASYNC^(xExecute := FALSE);
+		IF DONE THEN
+			DONE_COUNT := DONE_COUNT + 1;
+		END_IF
+		IF ERROR THEN
+			ERROR_COUNT := ERROR_COUNT + 1;
+		END_IF
+		IF pTON^.Q THEN
+			TIMEOUT_COUNT := TIMEOUT_COUNT + 1;
+		END_IF
+	END_IF
+ELSE
+	NE_COUNT := NE_COUNT + 1;
+	(* When we're not executing, clear the return flags. *)
+	DONE := FALSE;
+	ERROR := FALSE;
+END_IF

@@ -1,0 +1,25 @@
+
+(********************** Declaration ****************************)
+(* 
+GPS confirms wp is on target per target limit settings (regardless which axes (or if any) are selected for autotarget)
+*)
+FUNCTION GpsConfirmsWpOnTarget : BOOL 
+VAR_INPUT
+	ACTUATOR_SETTLING_REQUIRED: BOOL;
+	USE_FILTERED_OFFSETS: BOOL;
+	NEARNESS_FACTOR: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+GpsConfirmsWpOnTarget := FALSE;
+
+GpsConfirmsWpOnTarget := 
+		GPS_READY AND
+		GpsAxisNearTarget(GPS_HEADING, FALSE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR) AND
+		GpsAxisNearTarget(GPS_X, FALSE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR) AND
+		GpsAxisNearTarget(GPS_Y, TRUE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR) AND
+		GpsAxisNearTarget(GPS_Z, TRUE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR)
+		;
+

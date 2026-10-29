@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION errorStateMachine : BOOL
+VAR_INPUT
+	RMT: POINTER TO sKartech3B256KA;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+(* Do anything that needs to be maintained when in an error state.  All valves get turned
+	off by the actuator code or the 'operate' code. *)
+;

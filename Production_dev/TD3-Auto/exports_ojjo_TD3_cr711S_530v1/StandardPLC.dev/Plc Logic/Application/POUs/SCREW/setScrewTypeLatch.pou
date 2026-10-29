@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+// set in RWP so alignment has to be correct for third leg vs side leg
+
+FUNCTION setScrewTypeLatch : BOOL
+
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+IS_NXT_MOTOR_THIRD_LEG_LATCHED := FALSE;
+IS_NXT_MOTOR_SIDE_LEG_LATCHED := FALSE;
+
+IF isNXTmotorTruss_perScrewParams() THEN
+	IF (getScrewSide() = eScrewSide.SCREW_CENTER) THEN
+		IS_NXT_MOTOR_THIRD_LEG_LATCHED := TRUE;
+	ELSE
+		IS_NXT_MOTOR_SIDE_LEG_LATCHED := TRUE;
+	END_IF
+END_IF
+	 

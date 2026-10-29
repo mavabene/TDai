@@ -1,0 +1,63 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK GpsSettledWithinBand1s
+VAR_INPUT;
+	INIT: BOOL;
+	GPS_AXIS: INT;
+END_VAR
+VAR_OUTPUT
+
+END_VAR
+VAR
+	HEAD: INT;
+	DATA: ARRAY [1..50] OF REAL;
+	// Current value of the variable being monitored
+	CURRENT: REAL;
+	// How far does the band extend from the center?
+	BAND_SIZE: REAL;
+	// Whether or not we have wrapped one time.
+	FILLED: BOOL := FALSE;
+	pFILLED: POINTER TO BOOL;
+		// Minimum reading within the current window.
+	MIN_VAL: REAL;
+	// Maximum reading within the current window.
+	MAX_VAL: REAL;
+	// Minimum reading within the current window.
+	AVG_VAL: REAL;
+	// Fraction of values in the window that are within the given band.
+	FRACTION_IN_BAND: REAL;
+	// itereation index
+	INDEX: USINT := 1;
+
+END_VAR
+
+(********************** Implementation ****************************)
+IF INIT THEN
+	HEAD := 1;
+	FILLED := FALSE;
+	FRACTION_IN_BAND := 0;
+	FOR INDEX := 1 TO 50 DO
+		DATA[INDEX] := 0;
+	END_FOR
+END_IF
+
+withinFixedBand(
+			DATA := DATA,
+			HEAD := HEAD,
+			CURRENT := GPS_AXES[GPS_AXIS].OFFSET,
+			SAMPLES := 50,
+			// User specifies band width, we know they want the min to be zero.
+			BAND_CENTER := 0,
+			BAND_SIZE := GPS_AXES[GPS_AXIS].TARGET_LIMIT,
+			pFILLED := ADR(FILLED),
+			MN => MIN_VAL,
+			MX => MAX_VAL,
+			AVG => AVG_VAL,
+			FRACTION_IN_BAND => FRACTION_IN_BAND
+			);
+			
+IF FILLED AND FRACTION_IN_BAND > 0.90 THEN
+	GPS_AXES[GPS_AXIS].SETTLED_WITHIN_BAND := TRUE;
+ELSE
+	GPS_AXES[GPS_AXIS].SETTLED_WITHIN_BAND := FALSE;
+END_IF

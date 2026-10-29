@@ -1,0 +1,31 @@
+
+(********************** Declaration ****************************)
+
+TYPE eGPS_Settings : // pNVM4^GPS_GENERAL_SETTINGS[eGPS_Settings]
+(
+	// GPS_AUTOTARGET_AXES
+	
+	GPS_VELOCITY_FACTOR := 1, // factor to reduce velocity of GPS actuators
+	GPS_ACCEL_FACTOR := 2, // factor to reduce acceleration of GPS actuators
+	GPS_RADIO_SIGNAL_DELAY_WARNING := 3, // delay time from last radio signal in seconds beyond which a warning is indicated
+	GPS_RADIO_SIGNAL_DELAY_CRITICAL := 4, // delay time from last radio signal in seconds beyond which GPS is not considered ready
+	GPS_TRANSITION_TO_CRIMP_FACTOR := 5, // factor determining how close GPS dimensions have to be to target to go to crimp, 
+										 // as a factor of target settings. Typically just under 1.
+	GPS_TRANSITION_TO_FEEDBACK_AUTOTARGET := 6, // factor determining how close GPS dimensions have to be to go to feedback targeting, 
+											  // as a factor of target settings. Typically several times target settings.
+	// machine specific gps antenna offsets (for reference only - entered in dual head setup page in CubeSP):
+	GPS_TD_SPECIFIC_YAW_OFFSET := 7, // in deg
+	GPS_TD_SPECIFIC_X_OFFSET := 8, // in meters
+	GPS_TD_SPECIFIC_Y_OFFSET := 9, // in meters
+	GPS_TD_SPECIFIC_Z_OFFSET := 10, // in meters
+	
+	GPS_AVAILABLE_11 := 11, // how much mast pitch can be away from setpoint to qualify gps on target
+	GPS_AVAILABLE_12 := 12, // " .. roll .. "
+	GPS_TRACKING_X_ADJUST := 13, // compensate for difference seen between tracking and after outrigger shifts x in RWP
+	GPS_TRACKING_Z_ADJUST := 14
+	// 15 - GPS_DATA_LENGTH available	
+	
+);
+
+END_TYPE
+

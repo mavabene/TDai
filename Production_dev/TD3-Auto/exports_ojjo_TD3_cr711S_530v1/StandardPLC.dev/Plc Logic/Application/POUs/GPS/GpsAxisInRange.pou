@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+(*
+
+*)
+
+FUNCTION GpsAxisInRange : BOOL
+VAR_INPUT
+	GPS_ACTUATOR: INT;
+END_VAR
+VAR
+
+END_VAR
+
+(********************** Implementation ****************************)
+
+
+GpsAxisInRange := 	GPS_READY AND
+					GPS_AXES[GPS_ACTUATOR].RANGE_STATUS >= TO_UINT(GPS_AXIS_IN_RANGE);

@@ -1,0 +1,40 @@
+
+(********************** Declaration ****************************)
+TYPE sAsBuiltScrewEvent :
+STRUCT
+    sPnezdP : STRING(21);
+	udiMessageSequence : UDINT;
+    udiScrewNumber : UDINT;
+    iScrewSideCode : INT;
+
+    rTargetEmbedment : REAL;
+    rActualEmbedment : REAL;
+    rHammerDistance : REAL;
+    xIntelligentEmbedmentTriggered : BOOL;
+    rFinalLegLength : REAL;
+    rEmbedmentReduction : REAL;
+    rEmbedmentReductionStructural : REAL;
+	iScrewDriveCompleteCode: USINT;
+
+    xMastPreloadOn : BOOL;
+    xAutoMastLeanCompensation : BOOL;
+
+    rClearSpoilsBitProtrusion : REAL;
+    rScrewStallPressure : REAL;
+    rScrewStallTime : REAL;
+    rHardSoilDetectPressure : REAL;
+    rHardSoilDetectTime : REAL;
+    iMaxStallsNormal : INT;
+    iMaxStallsRetracted : INT;
+
+    rHighestScrewDriveSpeed : REAL;
+    rLowControlPressure : REAL;
+    rLowestScrewSpeed : REAL;
+    rHighControlPressure : REAL;
+    xSoftSoilEnabled : BOOL;
+
+    iHammerControlSource : INT;
+    rHammerOnPressure : REAL;
+    rHammerOffPressure : REAL;
+END_STRUCT
+END_TYPE

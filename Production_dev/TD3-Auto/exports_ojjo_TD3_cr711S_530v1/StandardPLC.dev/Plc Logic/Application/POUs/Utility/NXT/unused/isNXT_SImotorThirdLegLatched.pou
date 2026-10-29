@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_SImotorThirdLegLatched : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_SImotorThirdLegLatched :=
+		isNXTmotorTruss_perScrewParams() 
+	AND 
+		(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_SI) 
+	AND
+		(SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER);
+		

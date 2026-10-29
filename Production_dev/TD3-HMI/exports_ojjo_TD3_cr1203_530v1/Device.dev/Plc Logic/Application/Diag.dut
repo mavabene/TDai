@@ -1,0 +1,319 @@
+
+(********************** Declaration ****************************)
+// *** JC add - provides string data for displaying diag info
+{attribute 'qualified_only'}
+// {attribute 'strict'} // why strict?
+{attribute 'to_string'}
+
+TYPE Diag :
+(
+	STAT_INACTIVE := 0, // POU is inactive. POU called with Enable / Execute = FALSE. 
+	
+	STAT_DONE := 1, // POU has finished processing successfully. Final results available and valid. 
+	
+	STAT_BUSY := 2, // POU is still processing. Final result not yet available.
+	
+	// However, some outputs may be updated each cycle.
+	 
+	
+	STAT_PREPARING := 3, // POU is still proccessing. Final result not yet available.
+	
+	(*However, some outputs may be updated each cycle.
+	
+	This value is used in ‘Enable’ behaviors instead of the STAT_BUSY status,
+	
+	to be distinct from ‘Execute’ behaviors.*)
+	 
+	
+	STAT_READY := 4, // POU is initialised and ready to execute other commands.
+	
+	STAT_RESET := 5, // POU is processing reset operations.
+	
+	STAT_ABORTED := 6, // Reserved for later usage 
+	
+	RESERVED_07 := 7, // Reserved for later usage 
+	
+	RESERVED_08 := 8, // Reserved for later usage 
+	
+	RESERVED_09 := 9, // Reserved for later usage 
+	
+	ERR_OPEN_CIRCUIT := 10, // Open circuit detected. Possible wire break. 
+	
+	ERR_SHORT_CIRCUIT := 11, // Short circuit TO GND OR VBBx detected. 
+	
+	ERR_OVERLOAD_CURRENT := 12, // Current above allowed maximum detected. 
+	
+	ERR_LOW_CURRENT := 13, // Current below allowed minimum detected. 
+	
+	ERR_UNDERVOLTAGE_VBBX := 14, // For inputs: Critical under voltage at reference.
+	
+	// For outputs: Critical under voltage at responsible OutputGroup supply or at VBB30 / VBB15.
+	 
+	ERR_OVERVOLTAGE_VBBX := 15, // For inputs: Critical over voltage at reference.
+	
+	// For outputs: Critical over voltage at responsible OutputGroup supply or at VBB30 / VBB15.
+	 
+	ERR_STUCK_AT_HIGH := 16, // Stuck-at-high detected. 
+	
+	ERR_STUCK_AT_LOW := 17, // Stuck-at-low detected. 
+	
+	ERR_HIGH_TEMPERATURE := 18, // Board temperature exceeded maximum threshold. 
+	
+	ERR_LOW_TEMPERATURE := 19, // Board temperature undercut minimum threshold. 
+	
+	ERR_INVALID_VALUE := 20, // One or more input parameters are invalid or exceeding their allowed range. 
+	
+	ERR_INVALID_CHANNEL := 21, // Channel not available. 
+	
+	ERR_INVALID_MODE := 22, // Mode not available or not supported by this channel. 
+	
+	ERR_INVALID_FREQUENCY := 23, // Frequency not supported for active mode. 
+	
+	ERR_INVALID_DITHER := 24, // One or more dither parameters are invalid. 
+	
+	ERR_INVALID_FILTER := 25, // One or more filter parameters are invalid. 
+	
+	ERR_UNREACHABLE_CURRENT := 26, // Current control can not reach desired current. 
+	
+	ERR_SLOW_SIGNAL := 27, // Input signal is too slow for measurement. 
+	
+	ERR_CHANGEOVER_TIME := 28, // Changeover time for driver protection not yet expired. 
+	
+	ERR_INSTANCE := 29, // The passed instance was NULL or invalid. (e.g. FB object was NULL.) 
+	
+	ERR_INSTANCE_LIMIT := 30, // Instance limit reached. 
+	
+	ERR_INVALID_COLOUR := 31, // Value for colour of LED is not valid. 
+	
+	ERR_NO_IDENTITY := 32, // Application/User identity is currently not set. 
+	
+	ERR_ACCESS := 33, // The requested resource could not be registered for write access for the calling PLC,
+	
+	// because it is already registered for write access by another PLC.
+	
+	ERR_UNDEFINED := 34, // The called function returned a result value that is not mapped to any end-user result.  Please inform your supplier.
+	 
+	
+	ERR_FUNC_KEY_MISSED := 35, // TODO 
+	
+	ERR_BUFFER_OVERFLOW := 36, // Tx or Rx buffer overflow. Message could not be written to Tx buffer
+	
+	// or one or more messages could not be written to Rx buffer and were lost.
+	 
+	
+	ERR_BAUDRATE_ALREADY_SET := 37, // The desired baud rate could not be set, because there is already another baud rate defined. 
+	
+	ERR_INACTIVE_INTERFACE := 38, // Chosen interface is not enabled or not intialized. 
+	
+	ERR_TIMEOUT := 39, // The allowed maximum execution time has been exceeded. Action could not complete. 
+	
+	ERR_OUT_OF_MEMORY := 40, // TODO 
+	
+	ERR_BUS_OFF := 41, // CAN interface is in the state ‘bus off’. 
+	
+	ERR_BAD_CRC := 42, // CRC of an accessed memory area is invalid. Read data is invalid. 
+	
+	ERR_EXCEEDED_RANGE := 43, // An output value exceeds the displayable range of its data type.
+	
+	// Displayed value will be limited to the data types respective MIN or MAX value.
+	 
+	
+	ERR_INTERNAL_COMMUNICATION := 44, // An internal called low level function reports an error (e.g. low level library version mismatch) 
+	
+	ERR_NOT_SUPPORTED := 45, // Invalid call. Function is not supported by the runtime. 
+	
+	ERR_TIMING := 46, // Signal endges in an unexpected order detected. 
+	
+	ERR_INTERNAL := 47, // Internal system error. 
+	
+	ERR_FILE_SYSTEM := 48, // File operation has failed. 
+	
+	ERR_INVALID_IP_CFG := 49, // Invalid IP address or Netmask or gateway configured 
+	
+	ERR_FAILED_ERR_RESET := 50, // OBSOLETE. Kept for backwards compatibility. 
+	
+	ERR_DEVICE_NOT_AVAILABLE := 51, // Selected Device e.b. USB device is not available 
+	
+	ERR_NO_OBJECT := 52, // No object with this specified name available. Ex: file name specified not available to open or get size 
+	
+	ERR_UNREACHABLE_VOLTAGE := 53, // Voltage control cannot reach desired voltage 
+	
+	ERR_AT_GROUP_OUTPUT := 54, // One or more outputs of the output group are in error state 
+	
+	ERR_CONTROL_DITHER := 55, // The requested dither value could not adjusted 
+	
+	ERR_UNDERVOLTAGE_VBBX_WARNING := 56, // OBSOLETE. Kept for backwards compatibility. Use DIAG_UNDERVOLTGE_VBBX instead. 
+	
+	ERR_OVERVOLTAGE_VBBX_WARNING := 57, // OBSOLETE. Kept for backwards compatibility. Use DIAG_OVERRVOLTGE_VBBX instead. 
+	
+	ERR_LOW_TEMPERATURE_WARNING := 58, // OBSOLETE. Kept for backwards compatibility. Use DIAG_LOW_TEMPERATURE instead. 
+	
+	ERR_HIGH_TEMPERATURE_WARNING := 59, // OBSOLETE. Kept for backwards compatibility. Use DIAG_HIGH_TEMPERATURE instead. 
+	
+	ERR_RANGE_OVERRUN := 60, // Measured Value (input / output, current / voltage) exceeds set higher limit given by application. 
+	
+	ERR_RANGE_UNDERRUN := 61, // Measured Value (input / output, current / voltage) undercuts set lower limit given by application. 
+	
+	DIAG_INVALID_VALUE := 62, // One or more input parameters are invalid or exceeding their allowed range. 
+	
+	DIAG_INTERNAL := 63, // OBSOLETE. Kept for backwards compatibility. Use ERR_INTERNAL instead. 
+	
+	DIAG_OPEN_CIRCUIT := 64, // Open circuit detected. Possible wire break. (if protection disabled) 
+	
+	DIAG_SHORT_CIRCUIT := 65, // Short circuit to GND or VBBx detected. (if protection disabled) 
+	
+	DIAG_UNDERVOLTAGE_VBBX := 66, (*For inputs: Critical under voltage at reference (if protection disabled).
+	
+	For outputs: Critical under voltage at responsible OutputGroup supply or at VBB30 / VBB15.
+	
+	(if protection disabled) *)
+	 
+	
+	DIAG_OVERVOLTAGE_VBBX := 67, (* For inputs: Critical over voltage at reference (if protection disabled).
+	
+	For outputs: Critical over voltage at responsible OutputGroup supply or at VBB30 / VBB15.
+	
+	(IF protection disabled)*)
+	 
+	
+	DIAG_OVERLOAD_CURRENT := 68, // Current above allowed maximum detected. (if protection disabled) 
+	
+	DIAG_STUCK_AT := 69, // Stuck-at deteceted with no distinctive direction. (if protection disabled) 
+	
+	DIAG_STUCK_AT_HIGH := 70, // Stuck-at-high detected. (if protection disabled) 
+	
+	DIAG_STUCK_AT_LOW := 71, // Stuck-at-low detected. (if protection disabled) 
+	
+	DIAG_INVALID_COLOUR := 72, // Value for colour of LED is not valid. 
+	
+	DIAG_OVERVOLTAGE := 73, // Measured input- or output voltage exceeded maximum limit. (if protection disabled) 
+	
+	DIAG_UNDERVOLTAGE := 74, // Measured input- or output voltage undercut minimum limit. (if protection disabled) 
+	
+	DIAG_NO_CALIB := 75, // IO has no valid calibration. Default values used. 
+	
+	DIAG_ACCESS := 76, // Addressed resource is not owned by calling PLC. 
+	
+	DIAG_CHANGEOVER_TIME := 77, // Minimum changeover time for highside <–> lowside switching of drivers not yet expired. 
+	
+	ERR_OVERVOLTAGE := 78, // Measured input- or output voltage exceeded maximum limit. 
+	
+	ERR_UNDERVOLTAGE := 79, // Measured input- or output voltage undercut minimum limit. 
+	
+	ERR_STUCK_AT := 80, // Stuck-at deteceted with no distinctive direction. 
+	
+	DIAG_CONTROL_DITHER := 81, (* The requested dither value could not be adjusted because the result of dither
+	
+	and the given PWM value is higher than 1000 per mill.*)
+	 
+	
+	DIAG_SLOW_SIGNAL := 82, // Input signal is too slow for measurement. 
+	
+	DIAG_DIAG_PRO_MODE := 83, // Invalid or unsupported diagnosis-protection mode. 
+	
+	DIAG_WINDOW := 84, // Invalid values for user diagnosis window. 
+	
+	ERR_SDO_IDX_NOT_EXIST := 85, // SDO index does not exist. 
+	
+	ERR_SDO_SUBIDX_NOT_EXIST := 86, // SDO sub-index ndoes not exist. 
+	
+	ERR_SDO_UNSUPPORTED_ACCESS := 87, // SDO access is not supported. 
+	
+	ERR_SDO_DATA_TYPE := 88, // Wrong SDO data type. 
+	
+	DIAG_LOW_TEMPERATURE := 89, // Board temperature undercut minimum warning threshold. 
+	
+	DIAG_HIGH_TEMPERATURE := 90, // Board temperature exceeded maximum warning threshold. 
+	
+	DIAG_INVALID_DITHER := 91, // One or more dither parameters are invalid. 
+	
+	DIAG_INVALID_FREQUENCY := 92, // Frequency not supported for active mode. 
+	
+	DIAG_RANGE_OVERRUN := 93, // Measured Value (input / output, current / voltage) exceeds set higher limit given by application 
+	
+	DIAG_RANGE_UNDERRUN := 94, // Measured Value (input / output, current / voltage) undercuts set lower limit given by application. 
+	
+	DIAG_INVALID_FILTER := 95, // One or more filter parameters are invalid. 
+	
+	ERR_COMPARE_MISMATCH := 96, (* Mismatch detected between the mission- and monitor values of the selected resource.
+	
+	Example: A 2-channel function like safe input or OSSD input has read an actual value that is outside
+	
+	of the specified tolerance band of the expected value.*)
+	 
+	
+	DIAG_INVALID_IP_CFG := 97, // Invalid IP address or netmask or gateway configured. 
+	
+	DIAG_LOW_CURRENT := 98, // Current below allowed minimum warning level detected. 
+	
+	DIAG_AT_GROUP_OUTPUT := 99, // One or more outputs of the output group are in error state. (when protection disabled) 
+	
+	ERR_SDO_UNKNOWN := 100, // SDO access NOT successful. Reason unknown 
+	
+	ERR_BAUDRATE_INVALID_OR_ALREADY_SET := 101, // The desired baud rate could not be set because it’s invalid or there is already another baud rate defined at the selected channel. 
+	
+	DIAG_COMPARE_MISMATCH := 102, // Mismatch detected between the mission- and monitor values of the selected resource. 
+	
+	DIAG_COMPARE_MISMATCH_VSYS := 103, // Mismatch detected between the mission- and monitor values of the selected system voltage resource. 
+	
+	DIAG_GROUP_OVERLOAD_CURRENT := 104, // Current at output group above allowed maximum detected. 
+	
+	ERR_GROUP_OVERLOAD_CURRENT := 105, // Current at output group above allowed maximum detected. 
+	
+	STAT_PAUSED := 106, //: One or more operations is paused. Example: media playing or media recording 
+	
+	STAT_ABORT := 107, //: FB is executing ABORT sequence before completing the defined task, the end results are unpredictable 
+	
+	STAT_EVNT_OPEN_PLUG_STORAGE := 108, //: FB is opening call back event for mounting event of storage devices 
+	
+	STAT_EVNT_OPEN_UNPLUG_STORAGE := 109, //: FB is opening call back event for removal event of mounted storage devices 
+	
+	STAT_EVNT_OPEN_DONE := 110, //: Call back event opening is done 
+	
+	STAT_EVNT_REGI_PLUG_STORAGE := 111, //: FB is registering a call back function for mounting event of storage devices 
+	
+	STAT_EVNT_REGI_UNPLUG_STORAGE := 112, //: FB is registering a call back function for removal event of mounted storage devices 
+	
+	STAT_EVNT_REGI_DONE := 113, //: Call back function registration is done 
+	
+	STAT_EVNT_UNREGI := 114, //: FB is unregistering the call back function 
+	
+	STAT_EVNT_UNREGI_DONE := 115, //: Call back function unregistering is done 
+	
+	STAT_EVNT_CLOSE := 116, //: FB is closing the call back event 
+	
+	STAT_EVNT_CLOSE_DONE := 117, //: Call back event closing is done 
+	
+	ERR_INSTANCE_RESTRICTION := 118, //: This FB is restricted to use along with some other FB, Read the FB description for more details 
+	
+	ERR_NO_FILE := 119, //: No file with this specified name available 
+	
+	ERR_EVNT_OPEN := 120, //: Error while opening an event for call back function registration 
+	
+	ERR_EVNT_REGI := 121, //: Error while registering a call back function for a call back event 
+	
+	ERR_EVNT_UNREGI := 122, //: Error while unregistering a call back function for a call back event 
+	
+	ERR_EVNT_CLOSE := 123, //: Error while closing an event that was was opened for call back function registration 
+	
+	ERR_GET_STORAGE_LIST := 124, //: Error while reading list of mounted storage devices 
+	
+	ERR_UNPLUG_STORAGE := 125, //: Error while removing a mounted storage devices 
+	
+	DIAG_INVALID_CHANNEL := 126, //: Channel not available. 
+	
+	DIAG_INVALID_MODE := 127, //: Mode not available or not supported by this channel. 
+	
+	ERR_H_BRIDGE_TEST := 128, //: H-Bridge test failed. 
+	
+	ERR_GROUP_SW_TEST := 129, //: Group swirch test failed. 
+	
+	ERR_TX_ERROR := 130, //: Sending message faild. 
+	
+	ERR_RX_ERROR := 131 //: Receiving message failed. Data was lost. 
+	
+);
+
+END_TYPE
+
+// ***

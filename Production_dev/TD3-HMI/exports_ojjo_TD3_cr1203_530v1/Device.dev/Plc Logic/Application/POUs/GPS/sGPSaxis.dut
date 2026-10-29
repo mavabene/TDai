@@ -1,0 +1,32 @@
+
+(********************** Declaration ****************************)
+TYPE sGPSaxis : // changes made here must also be made in PLC code
+STRUCT
+	
+	OFFSET: REAL := 0;                      // distance to move to target as indicated by GPS
+	SMOOTHED_OFFSET: REAL := 0;		        // averaged over a short time (eg 0.1s, or 5 cycles)
+	OFFSET_WORLD_FRAME: REAL := 0;          // off set in reference to wp as origin in world frame vs TD frame
+	
+	REACH: REAL := 0;                       // furthest distance at which actuator will use gps to autotarget
+	TARGET_LIMIT: REAL := 0;                // furthest distance at which axis is considered to be satisfactorily on target
+	AUTOTARGET_ON: BOOL := FALSE;           // whether autotarget is activated for this axis
+	 
+	 (* Range status:
+		0: not in range to auto-target; 
+		1: in range to move to target but not on target, OR autotarget not selected;
+		2: in range to move to target, not on target; 
+		3: within target specification; 
+		4: settled withinFixedBand of target specification (settled over designated time);
+		*)
+	RANGE_STATUS: UINT := 0;   
+    SETTLED_WITHIN_BAND: BOOL := FALSE;  
+	VEL: REAL :=0;
+	ACCEL: REAL := 0;
+	TARGET_POSITION: REAL := 0;
+	FILTERED_TARGET_POSITION: REAL := 0; // off set in reference to wp as origin in world frame vs TD frame
+	LOCKED_TARGET_POSITION: REAL := 0;
+	AXIS_RANGE_MAX: REAL := 0;
+	AXIS_RANGE_MIN: REAL := 0;
+	ACTUATOR_AXIS: eAXES := 0; // enable calling the actuator axes via GPS_axis
+END_STRUCT
+END_TYPE

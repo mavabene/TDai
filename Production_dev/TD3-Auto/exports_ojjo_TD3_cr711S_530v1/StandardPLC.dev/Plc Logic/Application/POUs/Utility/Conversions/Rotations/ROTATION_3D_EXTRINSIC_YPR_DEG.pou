@@ -1,0 +1,69 @@
+
+(********************** Declaration ****************************)
+(* Take in a point's coordinates, return the coordinates after a 3d rotation *)
+(* positive pitch is point on positive x moving up, positive roll is point on positive y moving up, positive yaw is clockwise from above 
+*)
+FUNCTION ROTATION_3D_EXTRINSIC_YPR_DEG : Vector3D
+VAR_INPUT
+	Xcoord: REAL;   // original X
+    Ycoord: REAL;   // original Y
+    Zcoord: REAL;   // original Z
+    DegYaw: REAL;  // yaw   about Z (degrees)
+    DegPitch: REAL;  // pitch about Y (degrees)
+    DegRoll: REAL;  // roll  about X (degrees)
+	LHR: BOOL;
+END_VAR
+VAR
+	cYAW, sYAW   : REAL;
+    cPITCH, sPITCH   : REAL;
+    cROLL, sROLL   : REAL;
+    ROTATED_POINT : ARRAY [1 .. 3] OF REAL;
+	i : USINT;
+END_VAR
+
+(********************** Implementation ****************************)
+// IF LHR THEN // invert rotations to match right hand rule
+// 	//DegYaw := DegYaw;
+// 	DegPitch := - DegPitch;
+// 	DegRoll := - DegRoll;
+// END_IF
+IF LHR THEN // invert coordinate system to match right hand rule
+	Zcoord := - Zcoord;
+END_IF
+
+cYAW := COS_DEG(DegYaw);    sYAW := SIN_DEG(DegYaw);
+cPITCH := COS_DEG(DegPitch);  sPITCH := SIN_DEG(DegPitch);
+cROLL := COS_DEG(DegRoll);   sROLL := SIN_DEG(DegRoll);
+
+(*
+R = Rz(yaw) * Ry(pitch) * Rx(roll)
+[ x' ]   [  cYAW*cPITCH             cYAW*sPITCH*sROLL - sYAW*cROLL     cYAW*sPITCH*cROLL + sYAW*sROLL ] [ x ]
+[ y' ] = [  sYAW*cPITCH             sYAW*sPITCH*sROLL + cYAW*cROLL     sYAW*sPITCH*cROLL - cYAW*sROLL ] [ y ]
+[ z' ]   [  -sPITCH                 cPITCH*sROLL                      cPITCH*cROLL 
+// *)
+
+ROTATED_POINT[rot.pX] :=  
+		( cPITCH * cYAW )  		* Xcoord
+     +  ( -cPITCH * sYAW )		* Ycoord
+     +  ( sPITCH ) 				* Zcoord;
+
+ROTATED_POINT[rot.pY] :=  
+		( cROLL * sYAW + sROLL * sPITCH * cYAW )  	* Xcoord
+     +  ( cROLL * cYAW - sROLL * sPITCH * sYAW ) 	* Ycoord
+     +  ( -sROLL * cPITCH ) 						* Zcoord;
+
+ROTATED_POINT[rot.pZ] :=  
+		( sROLL * sYAW - cROLL * sPITCH * cYAW ) 	* Xcoord
+     +  ( sROLL * cYAW + cROLL * sPITCH * sYAW )    * Ycoord
+     +  (  cPITCH * cROLL )            				* Zcoord;
+
+IF LHR THEN // invert coordinate system to match left hand rule
+	ROTATED_POINT[rot.pZ] := - ROTATED_POINT[rot.pZ];
+END_IF
+
+// temp for testing
+FOR i := 1 TO 3 DO
+ 	ROTATED_POINT[i] := TO_REAL(TO_INT(ROTATED_POINT[i]));
+END_FOR
+
+ROTATION_3D_EXTRINSIC_YPR_DEG := ROTATED_POINT;

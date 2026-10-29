@@ -1,0 +1,217 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateOutrigger
+VAR_INPUT
+END_VAR
+VAR
+	DESIRE_UP: BOOL;
+	OPERATE: BOOL;
+	// When set to -1, this means we don't know what the control logic wanted last, so this will force the
+	//	control to perform a full cycle when allowed (e.g. when forcing is removed).
+	LAST_DESIRE_UP: INT := -1;
+	NEEDS_INIT: BOOL := TRUE;
+	
+	LAST_BLADE_DOWN_CMD: BOOL := FALSE;
+	TRACK_BLADE_ENTRY: BOOL := FALSE;
+
+	TOF_UP: TOF;
+	TOF_DOWN: TOF;
+	UP_RUNNING: BOOL;
+	DOWN_RUNNING: BOOL;
+	
+	BASE_PITCH_START: REAL;
+	
+	BLADE_UP_CMD: BOOL;
+	BLADE_DOWN_CMD: BOOL;
+
+	PWM_OUTPUT: HawePSVPwmOutput;
+	MAGNITUDE: WORD;
+	MAGNITUDE_TIME: UDINT;
+	MAGNITUDE_PITCH: UDINT;
+	POSITIVE: BOOL;
+	
+	GRADING: BOOL;
+	GRADING_CMD: INT;
+	PUMP_PRESSURE_LOW: INT := 0;
+	ET_DOWN: TIME;
+	STOP_OUTRIGGER_PITCH: REAL := 0.6;
+	SLOW_OUTRIGGER_DESCENT: BOOL := FALSE;
+	CONFIRM_OUTRIGGER_LANDED_START: DWORD := 0;
+	MINIMUM_UNLANDED_DESCENT_SPEED: UDINT := 100;
+	PITCH_SPEED_REDUCTION_FACTOR: REAL := 1.0;
+	MAXIMUM_OUTRIGGER_COMMAND: UDINT := 1000;
+	//UNLANDED_MINIMUM_DESCENT_SPEED: UDINT := 200;
+	RESET_BASE_PITCH: BOOL := FALSE;
+	PITCH_REDUCTION_FACTOR: REAL := 1;
+	MIN_PITCH_REDUCTION_FACTOR: REAL := 0.5; // allow outrigger to keep moving to ensure it reaches STOP_OUTRIGGER_PITCH
+END_VAR
+(********************** Implementation ****************************)
+
+(* Do not touch anything if the outrigger is disabled. *)
+IF NOT pNVM1^.OUTRIGGER_ENABLED THEN
+	RETURN;
+END_IF
+
+IF PUMP_PRESSURE < 300 THEN
+	PUMP_PRESSURE_LOW := PUMP_PRESSURE_LOW + 1;
+END_IF
+
+IF (isNewModeEnabled() AND MACHINE_MODE = TRACK_MODE) OR
+	(isTrackModeStateChange() AND TRACK_STATE = TRACK_STATE_WAIT_DRIVE) THEN
+	// We are either coming in from another mode or going from track mode maual to automatic.
+	TRACK_BLADE_ENTRY := TRUE;
+	LAST_DESIRE_UP := -1;
+ELSIF isNewModeEnabled() THEN
+	// Changing to other modes comes here.
+	TRACK_BLADE_ENTRY := FALSE;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR MACHINE_MODE = IDLE_MODE OR (PUMP_PRESSURE < 300) THEN
+	OPERATE := FALSE;
+ELSE
+	(* This handles the outrigger in normal situations.  The outrigger takes a long time to extend, so
+		note that in RWP we do not respect no-touch. *)
+	IF AUTOMATIC AND (MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CLEAR_GROUND) THEN
+		// When we're trying the get the stuff out of the ground, we don't want to move the outrigger either up
+		//	or down.  If the outrigger is down, lifting it up will raise the front of the machine, causing it to
+		//	interact badly with the installed truss.
+		OPERATE := FALSE;
+	ELSIF TRACK_BLADE_ENTRY THEN
+		// Always do this when entering track mode, no matter what.
+		OPERATE := TRUE;
+		DESIRE_UP := TRUE;
+	ELSIF AUTOMATIC AND
+		(
+		MACHINE_MODE = SCREW_MODE OR
+		MACHINE_MODE = RWP_MODE
+		) THEN
+		DESIRE_UP := FALSE;
+		OPERATE := TRUE;
+	ELSIF MACHINE_NO_TOUCH OR (NOT AUTOMATIC AND (MACHINE_MODE = SCREW_MODE OR MACHINE_MODE = RWP_MODE)) THEN
+		OPERATE := FALSE;
+	ELSIF NOT AUTOMATIC AND (MACHINE_MODE = TRACK_MODE) AND TRACK_STATE = TRACK_STATE_NORMAL THEN
+		// When we are in track mode manual, with everything ready to track normally, the outrigger should start in
+		//	the up position.  Then, when we get to normal tracking, we want the operator to be able to override the
+		//	outrigger and put the blade up or down manually.
+		OPERATE := FALSE;
+	ELSE
+		// We handle the outrigger going up in track mode even when in manual, so the operator doesn't have
+		//	to remember this when trying to do error recovery.
+		DESIRE_UP := TRUE;
+		OPERATE := TRUE;
+	END_IF
+END_IF
+
+// This handles the basic state logic for the machine modes.  We give the TOF a rising edge when DESIRE_UP has
+//	changed since the last time through.
+TOF_UP(IN := (OPERATE AND DESIRE_UP AND (TO_INT(DESIRE_UP) <> LAST_DESIRE_UP)), PT := T#5S, Q => UP_RUNNING);
+TOF_DOWN(IN := (OPERATE AND NOT DESIRE_UP AND (TO_INT(DESIRE_UP) <> LAST_DESIRE_UP)), PT := T#10S, ET => ET_DOWN, Q => DOWN_RUNNING);
+LAST_DESIRE_UP := TO_INT(DESIRE_UP);
+
+IF TRACK_BLADE_ENTRY AND NOT UP_RUNNING THEN
+	// We just finished the lifting of the outrigger when we enter track mode.
+	TRACK_BLADE_ENTRY := FALSE;
+END_IF
+
+IF OPERATE AND DESIRE_UP AND UP_RUNNING THEN
+	BLADE_UP_CMD := TRUE;
+	BLADE_DOWN_CMD := FALSE;
+ELSIF OPERATE AND NOT DESIRE_UP AND DOWN_RUNNING THEN
+	BLADE_UP_CMD := FALSE;
+	BLADE_DOWN_CMD := TRUE;
+ELSE
+	BLADE_UP_CMD := FALSE;
+	BLADE_DOWN_CMD := FALSE;
+END_IF
+// To here, BLADE_[UP/DOWN]_CMD holds what we would do in the absence of "other factors".
+
+// If we are just starting blade down, latch the base pitch so we can stop the outrigger when going down.
+IF BLADE_DOWN_CMD AND NOT LAST_BLADE_DOWN_CMD THEN
+	//BASE_PITCH_START := BASE_PITCH_FILTERED_SLOW;
+	BASE_PITCH_START := BASE_PITCH_FILTERED_MEDIUM;
+	RESET_BASE_PITCH := TRUE;
+	PITCH_REDUCTION_FACTOR := 1;
+	SLOW_OUTRIGGER_DESCENT := FALSE;
+END_IF
+LAST_BLADE_DOWN_CMD := BLADE_DOWN_CMD;
+
+//IF (BASE_PITCH_FILTERED_FAST - BASE_PITCH_START) > 0.6 OR BASE_PITCH_FILTERED_FAST > 9.0 THEN
+// start monitoring if steady while outrigger output continues to feather off
+IF (BASE_PITCH_FILTERED_MEDIUM - BASE_PITCH_START) > STOP_OUTRIGGER_PITCH OR BASE_PITCH_FILTERED_FAST > 9.0 OR
+	PITCH_REDUCTION_FACTOR = 0 THEN
+		// We detect the outrigger is engaged with the ground, or we are pitched too much to use the outrigger.
+		BLADE_DOWN_CMD := FALSE;
+END_IF
+// Now enable manual outrigger control if there is no control enabled to here.
+GRADING := FALSE;
+
+IF BLADE_UP_FORCE.FORCED AND BLADE_UP_FORCE.DOUT_STATE THEN
+	BLADE_UP_CMD := 1;
+	BLADE_DOWN_CMD := 0;
+	LAST_DESIRE_UP := -1;
+ELSIF BLADE_DOWN_FORCE.FORCED AND BLADE_DOWN_FORCE.DOUT_STATE THEN
+	BLADE_UP_CMD := 0;
+	BLADE_DOWN_CMD := 1;
+	LAST_DESIRE_UP := -1;
+END_IF
+
+IF BLADE_UP_CMD <> 0 THEN
+	POSITIVE := TRUE;
+	IF GRADING THEN
+		MAGNITUDE := TO_WORD(ABS(GRADING_CMD) * 10);
+	ELSE
+		MAGNITUDE := pNVM2^.BLADE_UP_SPEED * 10;
+	END_IF
+ELSIF BLADE_DOWN_CMD <> 0 THEN
+	POSITIVE := FALSE;
+	IF GRADING THEN
+		MAGNITUDE := TO_WORD(ABS(GRADING_CMD) * 10);
+	ELSE
+		// Special case.  If we are just starting to extend the outrigger down, run it really fast for
+		//	a short time; then feather back to the requested speed.
+		//(*
+		IF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = RWP_MODE // AND ET_DOWN >= T#900MS // THEN
+					 AND (GPS_OUTRIGGER_PITCH_ADJUST OR GPS_OUTRIGGER_TIME_ADJUST) THEN	
+
+			MAGNITUDE_TIME := TO_UDINT(EXPT(MAXIMUM_OUTRIGGER_COMMAND, 
+												   (GPS_OUTRIGGER_TIME_OFFSET - GPS_OUTRIGGER_TIME_FACTOR * TO_REAL(ET_DOWN) / 1000.0)) + UNLANDED_MINIMUM_DESCENT_SPEED); // / 1000: convert ms to s *)
+			IF ET_DOWN >= T#1500MS THEN
+				// activate once then keep steady so outrigger doesn't stutter with changes in pitch
+				IF RESET_BASE_PITCH THEN
+					BASE_PITCH_START := BASE_PITCH_FILTERED_MEDIUM;
+					RESET_BASE_PITCH := FALSE;
+				END_IF
+				IF (BASE_PITCH_FILTERED_MEDIUM - BASE_PITCH_START) > 0.2 THEN
+					SLOW_OUTRIGGER_DESCENT := TRUE;
+				END_IF
+				IF SLOW_OUTRIGGER_DESCENT THEN
+					// we have touchdown, now take taper off outrigger descent over 0.5s
+					PITCH_REDUCTION_FACTOR := PITCH_REDUCTION_FACTOR - 0.02 * TO_REAL(UNLANDED_MINIMUM_DESCENT_SPEED) / CONTROL_FREQ_HZ; 
+				(*
+					PITCH_REDUCTION_FACTOR := MIN(PITCH_REDUCTION_FACTOR, MAX(MIN_PITCH_REDUCTION_FACTOR, 
+															1 - (BASE_PITCH_FILTERED_MEDIUM - BASE_PITCH_START) / STOP_OUTRIGGER_PITCH)); *)
+				END_IF
+			END_IF
+			IF GPS_OUTRIGGER_PITCH_ADJUST AND GPS_OUTRIGGER_TIME_ADJUST THEN
+				//MAGNITUDE := TO_WORD(MIN(MAXIMUM_OUTRIGGER_COMMAND, (MAGNITUDE_TIME + MAGNITUDE_PITCH))); // smooth average of time and pitch effect
+				MAGNITUDE := TO_WORD(MAX(50, (MIN(1000, PITCH_REDUCTION_FACTOR * TO_REAL(MAGNITUDE_TIME)))));
+			ELSIF GPS_OUTRIGGER_PITCH_ADJUST THEN
+				//MAGNITUDE := TO_WORD(MAGNITUDE_PITCH);
+				MAGNITUDE := TO_WORD(MIN(500, 500 * PITCH_REDUCTION_FACTOR));
+			ELSE
+				MAGNITUDE := TO_WORD(MIN(1000, MAGNITUDE_TIME));
+			END_IF
+			
+		ELSIF ET_DOWN < T#1S THEN
+			MAGNITUDE := 1000;
+		ELSE
+			MAGNITUDE := pNVM2^.BLADE_DOWN_SPEED * 10;
+		END_IF
+	END_IF
+ELSE
+	POSITIVE := FALSE;
+	MAGNITUDE := 0;
+END_IF
+
+setOutput(ADR(AXES[AXIS_OUTRIGGER].OUTPUT), MAGNITUDE, POSITIVE);
+HaweOutput(ADR(AXES[AXIS_OUTRIGGER]));	

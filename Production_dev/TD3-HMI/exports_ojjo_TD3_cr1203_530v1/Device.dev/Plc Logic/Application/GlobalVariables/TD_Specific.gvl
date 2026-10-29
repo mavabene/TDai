@@ -1,0 +1,28 @@
+
+(********************** Declaration ****************************)
+VAR_GLOBAL
+	// array for setting up diag codes for td3
+	DIAG_COMPONENTS: ARRAY [1 .. 19] OF STRING :=
+		[
+			'Component', // first spot used for header
+			'Air Compressor - FAN',
+			'Air Compressor - REQUEST',
+			'Air Compressor - SUPPLY',
+			'Air Compressor - UNLOAD',
+			// 'Cooler Solenoid'; may be used in future
+			'Engine Rev Down',
+			'Engine Rev Up',
+			'E Stop',
+			'Horn 1',
+			'Horn 2',
+			'Light 1',
+			'Light 2',
+			'Light, Blue',
+			'Light, Green',
+			'Light, Red',
+			'Light, Yellow',
+			'Pendulum',
+			'Travel Alarm',
+			'X Laser'
+		];
+END_VAR

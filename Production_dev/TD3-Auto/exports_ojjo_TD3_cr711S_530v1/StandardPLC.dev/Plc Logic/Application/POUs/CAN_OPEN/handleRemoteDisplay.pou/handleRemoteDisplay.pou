@@ -1,0 +1,231 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK handleRemoteDisplay
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	EXECUTE: INT := 0;
+	XMIT: INT := 0;
+	
+	FIRST_TIME: BOOL := TRUE;
+	DEAD: DWORD := 350;
+	
+	LINE_CURRENT: USINT;
+	LINES: ARRAY [1..7] OF STRING := ['','','','','','',''];
+	COLORS: ARRAY [1..7] OF USINT := [0, 16#04, 16#04, 0, 0, 16#01, 16#02];
+	// Marked when we change the contents of the line.
+	NEED_XMIT: ARRAY [1..7] OF BOOL := [FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE];
+	// Marked when we are transmitting to the remote; it takes so fucking long to update that sometimes
+	//	a new request for line change will come in before the last one is done.  This allows us to finish our
+	//	transaction with the display properly before we begin to transmit the newest value.
+	XMITTING: ARRAY [1..7] OF BOOL := [FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE];
+	//NEED_INIT: ARRAY [1..7] OF BOOL := [FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE];
+	TOTAL_TRANSACTIONS: INT := 0;
+
+	Can_TX3: ifmRCAN.CAN_Tx;
+	Can_RX3: ifmRCAN.CAN_Rx;
+	Can_Enable3: ifmRCAN.CAN_Enable;
+	
+	INIT_DIAG, RX_DIAG, TX_DIAG: ifmTYPES.DIAG_INFO;
+	CHANNEL: ifmDEVICE.CAN_CHANNEL := ifmDEVICE.CHAN_3;
+
+	REMOTE_ERROR: BOOL := FALSE;
+
+	// "Semaphore" to control access to the transmit data.	
+	LINE_IN_PROCESS: BOOL := FALSE;
+	XMIT_CONTROL: ARRAY [1..8] OF USINT;
+	XMIT_COLUMN_1: ARRAY [1..8] OF USINT;
+	XMIT_COLUMN_2: ARRAY [1..8] OF USINT;
+	XMIT_COLUMN_3: ARRAY [1..8] OF USINT;
+
+	LINE_STATE: ARRAY [1..7] OF USINT;
+
+	LAST_XMIT: DWORD;	
+	LAST_MODE: INT := -1;
+	LAST_STATE: INT := -1;
+
+	MACHINE_STATE_STRING_LAST: STRING;
+	METHOD_STRING_LAST: STRING;
+	WAITING_ON_STRING_LAST: STRING;
+	ERROR_STRING_LAST: STRING;
+	WARNING_STRING_LAST: STRING;
+	
+	LAST_RF_STATE: BOOL := FALSE;
+	
+	COUNT: INT := 0;
+	BUSY: BOOL := FALSE;
+	L: USINT;
+	L_STR: STRING;
+	
+	DEBUG: BOOL := FALSE;
+	
+	LINE1_CHANGE: INT := 0;
+	LINE2_CHANGE: INT := 0;
+	LINE3_CHANGE: INT := 0;
+	LINE4_CHANGE: INT := 0;
+	LINE5_CHANGE: INT := 0;
+	LINE6_CHANGE: INT := 0;
+	LINE7_CHANGE: INT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+// Added this at 4.1.3 to make sure this doesn't blow up anything at Gemini.
+IF VendorID <> eRemote.TELERADIO AND VendorID <> eRemote.AUTEC THEN
+	LAST_RF_STATE := FALSE;
+	RETURN;
+END_IF
+
+// The remote from Tele Radio has a 7 line display, each of which can take 19 characters.  This updates the information
+//	on that display.
+
+// Each line has a fixed purpose:
+//
+//	1) Displays the machine type, serial number, and control sofware version.
+//	2) Displays in blue the machine mode (IDLE, TRACK, RWP, SCREW, ERROR, or TRANSPORT).
+//	3) Displays in blue the machine state (whatever SCREW, RWP, or TRACK state is active).
+//	4) Displays in black whatever the machine is waiting on.
+//	5) Displays in green if the machine is in manual or automatic operation method, and whether it is waiting on
+//		the operator.  IN screw drive it displays leg length.
+//	6) Displays in yellow if there are warnings
+//	7) Displays in red if there are errors
+
+IF TIME_SECONDS < 5 THEN
+	RETURN;
+END_IF
+
+IF FIRST_TIME THEN
+	LINE1_CHANGE := LINE1_CHANGE + 1;
+	L_STR := '***** ';
+	L_STR := CONCAT(L_STR, 'TD-');
+	L_STR := CONCAT(L_STR, TO_STRING(3));
+	L_STR := CONCAT(L_STR, '.');
+	L_STR := CONCAT(L_STR, TO_STRING(pNVM3^.MACHINE_VERSION));
+	L_STR := CONCAT(L_STR, ' *****');
+	
+	prepareForUpdate(1, L_STR);
+	WARNING_STRING_LAST := 'start';
+	ERROR_STRING_LAST := 'start';
+	
+	IF LOAD_UNLOAD_ONLY THEN
+		prepareForUpdate(2, 'Mode: Transport');	
+	END_IF
+	
+	// Force update first time we get the remote connected.
+	LAST_RF_STATE := FALSE;
+END_IF
+
+IF REMOTE.RF_CAN AND NOT LAST_RF_STATE THEN
+	// Remote has just come online; refresh display.
+	fullRefresh();
+END_IF
+LAST_RF_STATE := REMOTE.RF_CAN;
+
+IF FIRST_TIME OR LAST_MODE <> MACHINE_MODE THEN
+	LINE2_CHANGE := LINE2_CHANGE + 1;
+	LAST_MODE := MACHINE_MODE;
+	CASE MACHINE_MODE OF
+		IDLE_MODE:
+			L_STR := 'Mode: Idle';
+		ERROR_MODE:
+			L_STR := 'Mode: Error';
+		TRACK_MODE:
+			L_STR := 'Mode: Track';
+		RWP_MODE:
+			L_STR := 'Mode: Workpoint';
+		SCREW_MODE:
+			L_STR := 'Mode: Screw drive';
+	END_CASE
+	prepareForUpdate(2, L_STR);
+END_IF
+
+IF FIRST_TIME OR MACHINE_STATE_STRING_LAST <> MACHINE_STATE_STRING THEN
+	LINE3_CHANGE := LINE3_CHANGE + 1;
+	MACHINE_STATE_STRING_LAST := MACHINE_STATE_STRING;
+	prepareForUpdate(3, CONCAT('State: ', MACHINE_STATE_STRING));
+END_IF
+
+IF FIRST_TIME OR WAITING_ON_STRING_LAST <> WAITING_ON_STRING_SHORT THEN
+	LINE4_CHANGE := LINE4_CHANGE + 1;
+	WAITING_ON_STRING_LAST := WAITING_ON_STRING_SHORT;
+	prepareForUpdate(4, CONCAT('Wait: ', WAITING_ON_STRING_SHORT));
+END_IF
+
+IF FIRST_TIME OR METHOD_STRING_LAST <> METHOD_STRING THEN
+	LINE5_CHANGE := LINE5_CHANGE + 1;
+	METHOD_STRING_LAST := METHOD_STRING;
+	prepareForUpdate(5, CONCAT('Method: ', METHOD_STRING));
+END_IF
+
+IF FIRST_TIME OR ERROR_STRING_LAST <> ERROR_STRING_SHORT THEN
+	LINE6_CHANGE := LINE6_CHANGE + 1;
+	ERROR_STRING_LAST := ERROR_STRING_SHORT;
+	//IF ESTOP_CURRENT = 0  THEN
+	IF ERROR_STRING_SHORT = ''  THEN
+		prepareForUpdate(6, ERROR_STRING_SHORT);
+	ELSE
+		prepareForUpdate(6, CONCAT('Error: ', ERROR_STRING_SHORT));
+	END_IF
+
+END_IF
+
+IF FIRST_TIME OR WARNING_STRING_LAST <> WARNING_STRING_SHORT THEN
+	LINE7_CHANGE := LINE7_CHANGE + 1;
+	WARNING_STRING_LAST := WARNING_STRING_SHORT;
+	//IF WARNING_CURRENT = 0 THEN
+	IF WARNING_STRING_SHORT = '' THEN
+		prepareForUpdate(7, WARNING_STRING_SHORT);
+	ELSE
+		prepareForUpdate(7, CONCAT('Warn: ', WARNING_STRING_SHORT));
+	END_IF
+END_IF
+
+// secondary messages
+IF NOT FIRST_TIME THEN
+	// conditions to display leg bins - when screw drive start called and calcs done, and not needing to show something else
+	IF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND NOT (isScrewModeStateChange() OR isContinueRequested()) THEN
+		LINE5_CHANGE := LINE5_CHANGE + 1;
+		COLORS[5] := 16#03;
+		prepareForUpdate(5, CONCAT('Leg Length ', TO_STRING(LEG_LENGTH_ACTUAL)));
+		
+	ELSIF isNewModeEnabled() OR 
+			(isScrewModeStateChange() AND
+			(SCREW_STATE = SCREW_STATE_CRIMP OR
+			SCREW_STATE = SCREW_STATE_SELECT_OPERATION)) 
+		THEN
+		LINE5_CHANGE := LINE5_CHANGE + 1;
+		prepareForUpdate(5, CONCAT('Method: ', METHOD_STRING));
+		COLORS[5] := 0;
+	// replace Line 6 - change color and message
+	//ELSIF ESTOP_CURRENT = 0 THEN
+	// replace Line 7 - change color and message
+	//ELSIF WARNING_CURRENT = 0 THEN
+
+	END_IF
+END_IF
+
+BUSY := FALSE;
+FOR L := 1 TO 7 DO
+	IF NEED_XMIT[L] THEN
+		BUSY := TRUE;
+	END_IF
+END_FOR
+
+IF DEBUG THEN
+	IF NOT BUSY THEN
+		COUNT := COUNT + 1;
+		FOR L := 1 TO 7 DO
+			L_STR := '';
+			WHILE LEN(L_STR) < 20 DO
+				L_STR := CONCAT(L_STR, TO_STRING(COUNT + L));
+				L_STR := CONCAT(L_STR, ' ');
+			END_WHILE
+			prepareForUpdate(L, L_STR);
+		END_FOR
+	END_IF
+END_IF
+
+xmitLines();
+
+FIRST_TIME := FALSE;

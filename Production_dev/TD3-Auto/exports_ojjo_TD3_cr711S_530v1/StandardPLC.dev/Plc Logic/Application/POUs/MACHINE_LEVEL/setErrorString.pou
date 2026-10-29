@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION setErrorString : bool
+VAR_INPUT
+	REASON: STRING;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+LAST_ERROR_STRING := REASON;

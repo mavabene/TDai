@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+FUNCTION GET_PITCH_PIVOT_TO_DRILL_ROD_VECTOR_MAST_FRAME : Vector3D
+VAR_INPUT
+	TARGET_ZSLIDE_POS: REAL ; // cm, must convert to mm
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+// set 
+GET_PITCH_PIVOT_TO_DRILL_ROD_VECTOR_MAST_FRAME[rot.pX] := 	
+											OPT_PITCH_PIVOT_TO_DRILL_ROD_AT_COR_AT_MAX_ZSLIDE[rot.pX];
+GET_PITCH_PIVOT_TO_DRILL_ROD_VECTOR_MAST_FRAME[rot.pY] := 	
+											0.0;
+GET_PITCH_PIVOT_TO_DRILL_ROD_VECTOR_MAST_FRAME[rot.pZ] := 	
+											OPT_PITCH_PIVOT_TO_DRILL_ROD_AT_COR_AT_MAX_ZSLIDE[rot.pZ] -
+											(10 * (AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - TARGET_ZSLIDE_POS)); // cm to mm

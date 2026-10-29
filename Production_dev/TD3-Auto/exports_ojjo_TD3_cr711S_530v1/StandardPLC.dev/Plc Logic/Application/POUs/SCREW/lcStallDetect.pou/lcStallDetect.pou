@@ -1,0 +1,86 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK lcStallDetect
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR CONSTANT
+	// We need a buffer for upper rotary pressure readings that handles the longest amount of time that
+	//	for which the user configures the pressure monitoring for stall.
+	LC_STALL_WINDOW: INT := TO_INT(CONTROL_FREQ_HZ * UR_STALL_WINDOW_MAX);
+END_VAR
+VAR
+	LC_STALL_P_HEAD: INT := 1;
+	LC_STALL_P_FILLED: BOOL := FALSE;
+	LC_STALL_P_FRACTION: REAL := 0;
+	LC_STALL_P: ARRAY[1..LC_STALL_WINDOW] OF REAL;
+	LC_STALL_P_MAX: REAL;
+		
+	LC_STALL_P_SAMPLES: INT := TO_INT(LC_STALL_WINDOW);
+END_VAR
+
+(********************** Implementation ****************************)
+(******* LOWER CROWD STALL CODE HERE *********************)
+// 
+// withinAdaptiveBand(
+// 	DATA := LC_STALL_P, 
+// 	CURRENT := LOWER_CROWD_PRESSURE,
+// 	pHEAD := ADR(LC_STALL_P_HEAD), 
+// 	pFILLED := ADR(LC_STALL_P_FILLED), 
+// 	SAMPLES := LC_STALL_P_SAMPLES, 
+// 	pMIN_OR_MAX_OR_AVG := ADR(LC_STALL_P_MAX), 
+// 	pFRACTION_IN_BAND := ADR(LC_STALL_P_FRACTION), 
+// 	BAND_SIZE := STALL_DETECT_BAND,
+// 	LIM_USED := FALSE, 
+// 	LIM := 0.0, 
+// 	FUNC := eAdaptiveBandFunc.FUNCTION_MAX);
+// 
+// IF LC_STALL_P_FILLED AND
+// 	(LC_STALL_P_FRACTION >= 0.95) AND // TO_INT(0.95 * LC_STALL_P_SAMPLES)) AND
+// 	// We're at a rail, but it is not when off or at idle, and also we are too low to be a proper stall condition.
+// 	(LC_STALL_P_MAX >= STALL_MINIMUM_PRESSURE AND LC_STALL_P_MAX < LC_PRESSURE_SETUP - PRESSURE_UNCERTAINTY_BAND)
+// 	THEN
+// // 	LC_MOTOR_WARNING := TRUE;
+// ELSE
+// // 	LC_MOTOR_WARNING := FALSE;
+// END_IF
+
+// @TODO: not sure why this was only enabled in soft soil?
+IF TRUE THEN // pNVM4^.SOFT_SOIL_ENABLED THEN
+	IF isScrewModeStateChange() THEN
+		// Every time we change state, reset these state variables.  Presumably the new state is going to do
+		//	something about a stall when one has happened, so we want to fresh start the monitoring.
+		LC_STALL_DETECTED := -1;
+		LC_STALL_START := TIME_SECONDS_FLOAT;
+		LC_STALL_SUSPECTED := FALSE;
+	ELSIF isScrewDriveStates(SCREW_STATE) THEN
+		// This code can be used from any state where we're driving a screw.
+		IF DEBUG_LC_STALL_DETECTED THEN
+			DEBUG_LC_STALL_DETECTED := FALSE;
+			initiateLcStallRecovery();
+		ELSIF LC_STALL_SUSPECTED THEN
+			IF ABS(LOWER_CROWD_VEL_SMOOTHED) > (pNVM1^.LC_DRIVE_VEL_LOW * 0.6) THEN
+				// LC is going fast enough we no longer suspect a stall.
+				LC_STALL_SUSPECTED := FALSE;
+			ELSIF (TIME_SECONDS_FLOAT - LC_STALL_START) > pNVM4^.SS_LC_STALL_TIME AND
+				// Make sure that rampup at low speeds doesn't false trigger. We require high pressure
+				//	on the lower crowd to detect a stall.
+				LOWER_CROWD_PRESSURE_FILTERED > pNVM4^.SS_LC_STALL_PRESSURE
+				THEN
+				initiateLcStallRecovery();
+			END_IF
+		ELSE
+			IF ABS(LOWER_CROWD_VEL_SMOOTHED) < (pNVM1^.LC_DRIVE_VEL_LOW * 0.3) THEN
+				// We've dropped below the LC stall limit.  Now monitor for an amount of time there.
+				LC_STALL_SUSPECTED := TRUE;
+				LC_STALL_START := TIME_SECONDS_FLOAT;
+			ELSE
+				LC_STALL_DETECTED := 0;
+			END_IF
+		END_IF
+	END_IF
+ELSE
+	LC_STALL_DETECTED := -1;
+END_IF
+

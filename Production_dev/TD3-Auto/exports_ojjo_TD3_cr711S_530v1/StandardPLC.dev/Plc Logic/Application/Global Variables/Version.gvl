@@ -1,0 +1,461 @@
+
+(********************** Declaration ****************************)
+
+VAR_GLOBAL CONSTANT
+	(*
+		2.0.3 - First production release.
+		2.1.0 - Release after many updates based on Titan prep and first two-ish weeks experience.
+		2.1.5 - Installed 06/15 at DT, essentially working.  CanBus now all at 250 kBit, sped up feedback monitor.
+		2.2.0 - Releasing (hopefully) to go to Titan 30 MW.
+				Installed on 005, 006, 007, 008, 009, 010 around 09/01/2020	
+		2.2.1 - Very small updates after Texas installation just closing out minor issues.
+		2.2.2 - Change in Bakersfield to retract mast slide further before mast to vertical runs.
+		2.2.3 - Added code to rotate after screw drive even if mast will hit the ground, if mast and Z slides are settled.
+		3.0.0 - First release of TD3
+		3.0.1 - First changes after mid-November ESM trip
+		3.0.2 - Followup changes for Charles.
+		3.0.3 - Shipping to ESM on 12/05/2020
+		3.1.0 - At end of second ESM trip, 12/11/2020
+		3.1.1 - Post trip changes to 3.1.0
+		3.1.2 - Added embedment confirmation by operator visual means
+		3.1.3 - Intermediate during third ESM trip, 01/11/2021
+		3.1.4 - At end of third ESM trip, 01/11/2021
+		3.1.5 - Installed just before ESM project start, 01/18/2021
+		3.1.6 - Minor changes after ESM project start, shipping with TD3-103 (4th machine)
+		3.1.7 - Bug fixes related to ESM
+		3.1.8 - Small tweaks with mfg related fixes, factory installed starting at TD3-104
+		3.1.9 - First working version of the cycle time tracking!
+		3.2.0 - Release of working cycle time tracking, plus standardized with TD-2!
+		3.2.1 - Added button on Row Parameters screen to force air compressor off
+		3.2.3 - Fixed some of the target plate issues
+		3.2.5 - Standardized TD-2/TD-3 on everything except axis setup, force/position valves, and boom lift/joint lift
+		3.3.0 - Hammer-based embedment reduction, hotter hydraulic oil settings.
+		3.3.1 - Added minimum embedment to the hammer-based embedment reduction.
+		3.3.3 - Additional screw data being logged to help with Sam's bit efforts at ESM.
+		3.3.4 - Starting on the upper rotary stall detection code.
+		3.3.5 - First prototype shipped to Sam for testing at ESM.
+		3.3.6 - Appears to be a working version of stall detect.
+		3.4.0 - Getting ready for new, clean production release.
+		3.4.1 - Beginning to implement drill stall recovery.
+		3.4.2 - Big refactor after initial version of stall recovery worked.
+		3.4.3 - Limits speed of the drill when re-engaging with a previously discovered stall.
+		3.4.4 - Attempted to add the two-step drill extension.
+		3.4.5 - Adding facility for a fixed truss cap holder
+		3.5.0 - Starting to add TD-3.1 code.
+		3.5.1 - 2021-11-11 code at Hutte.
+		3.5.2 - 2021-11-12 code at Hutte.
+		3.5.3 - 2021-11-16 code at Hutte.
+		3.5.4 - First shot at air compressor logic.
+		3.6.0 - Left at CasaGrande 2021-11-17
+		3.6.1 - Using CSO on relay for fan PWM
+		3.6.2 - Small changes, Novato 2021-12-02
+		3.7.0 - Added exterior embedment per screw, tracking of # of screws and legs used.  Also small NXT 3rd leg motor changes.
+		3.7.1 - NXT 3LM truss: moving EW screw WP adjust from Z ot Y.
+		3.7.3 - Full functional set: handles NXT 3LM NS screw, plus EW screws in high WP mode.  Small Y error in location EW remains...
+		3.7.4 - Forward port of TD-2.0 V2.5.3 after airport testing.
+		3.7.5 - Changes from JGC's trip to YP immediately before training, 2022_02_21
+		3.7.6 - Updates for the new air compressor for TD-3.1, small YP fixes
+		3.7.7 - Starting to add water injection control
+		3.7.8 - Essentially complete controls for water system
+		3.7.9 - Tweaks based on field reports from airport and Kiewit crane yard
+		3.8.0 - Patched the powerup electrical problem with the sensors
+		3.8.1 - Small fixes based on craneyard functional testing.
+		3.8.2 - Change to the drill pull-out logic, small changes to water handling.
+		3.9.0 - Merged TD-2 YP production with TD-3.1 Gemini pre-production.
+		3.9.1 - Added many items to data logging for soft soil work.
+		3.9.2 - Quick maintenance update, immediately before starting soft soil code.
+		3.9.3 - Added water setting for situations where hammer is on.
+		3.9.4 - Removed LC_CLEAR state transition from screw drive.
+		3.9.5 - Fixed premature air off when drill retract completes after screw drive finishes.
+		3.9.6 - Faster drill extend, faster rampdown, and using UC track pos for drill retract in screw drive.
+		3.9.7 - Added diagnostic screen for wired outputs
+		3.9.8 - Allow UC to go further up in manual, allow operator some water system config.
+		3.9.9 - Added stall detect water flow.
+		4.0.0 - Allow technicial to configure motor trusses as end trusses.
+		4.0.1 - Fixed data acquisition so that it doesn't split one screw in multiple data files.
+		4.0.2 - Added plant deadband compensation to allow rotator to settle more directly.
+		4.0.3 - Added Ojjo passwords for Technician/Engineer.
+		4.0.4 - Saving of set passwords included.
+		4.0.5 - Implementing load/unload setting for handling machine transport better.
+		4.1.0 - Adding support for Tele Radio remote
+		4.1.1 - Very first pass at adding soft soil automation.
+		4.1.2 - Pushing along soft soil after first Gemini trip.
+		4.1.3 - Small updates installed 2022_10_11 on TD-3.0 machines.
+		4.1.4 - Removed boom/joint actuation in transport mode, small data acquisition fixes.
+		4.1.5 - Changes post the Casagrande visit 2022_11_04.
+		4.1.6 - Initial updates to Sam in Vegas 2022_11_15.
+		4.1.7 - Small state logic changes to Sam 2022_11_22.
+		4.1.8 - Continuing soft soil with Sam in Vegas.
+		4.1.9 - Starting second day of Skysol.
+		4.2.0 - Adding stopwatch feature.
+		4.2.1 - First shot at automating the lower rotary pop feature.
+		4.2.2 - Added and tested cycle time upgrades, including adding manual ops to the cycle time tracking.
+		4.2.3 - After bit Gemini meeting 03/01/2023; UI for LR advance in LC stall, starting on Canbus cycle time tracking.
+		4.2.4 - Adding the ability to set the LR encoder resolution from the HMI.
+		4.2.5 - Small HMI changes.
+		4.2.6 - Upper crowd speed on reveal is now 50 cm/sec.
+		4.2.7 - Gemini field updates to soft soil, particularly for the lower LC pressure.
+		4.2.8 - Another Gemini field update, changes to data exchange behavior to prevent setting loss after field update.
+		4.2.9 - Added PLC based watchdog to monitor the HMI, to prevent data loss when HMI reboots and PLC doesn't.
+		4.3.0 - Added button to disable remote functions (other than Estop).
+		4.3.1 - Allow drill to come down in hard soil drilling after drill retract has happened after UC has retracted.
+		4.3.2 - Have air on during retract for wingless bits, air compressor warmup shorter on powerup, changed Igain on LR to 3.
+		4.3.3 - Modified slightly the retry logic in SS when screw stalls post "retract before end of drive" starts.
+		4.3.4 - Starting to integrate wing bit operation with wingless bit operation.  One algorithm to rule them all...
+		4.3.5 - Adding D gain for better LR control, fixed a couple soft soil recovery bugs
+		4.3.6 - Wingless bits can hammer inside of screw, reduced SS stall retries, increase ASSIST UC range, LC/UR compensator warnings
+		4.3.7 - Better stall/spoils clear handling, faster air compressor start on powerup
+		4.3.8 - Crimper diagnostics screen, machine version setting, new watchdog monitoring
+		4.3.9 - Full integration of Teleradio remote
+		4.4.0 - Field release candidate for YP2
+		4.4.1 - More SS settings on HMI, additional LHP comm code, brings some firmware version information to the screen.
+		4.4.2 - Updates to the LHP interface.
+		4.4.3 - Adds access to set passwords from Admin.
+		4.4.4 - Boom swing now can prevent screw drive, filtered readings on pitch/roll use to prevent screw drive
+		4.4.5 - Initial support for CO Bar configuration for NXT SI product
+		4.4.6 - Added transport prep screen
+		4.4.7 - Apps requested changes for NXT SI
+		4.4.8 - GPS display and automation; plotting screen; fix to ByteArrayToReal function
+		4.4.9 - fixed RWP and BS flaws
+			  - moved gps updateTransmit info to Init; added set LEVEL_START_TIME to RWP_STATE_SELECT_OPERATION for timeout
+			  V 16 - improved transform math - 2d; add pi variable; add guard on asin_deg (and acos_deg) to prevent bad values (>abs(1)) from 
+			  creating NaN and possibly killing PLC; simplified Z move during rwp Wait_Level;
+			  V 17 - fixed 3rd leg functionality bugs; added gps x offset adjustment for NxtSi 3rd leg motor truss;
+			  V 18 - corrected math for gps x offset adjustment; fix gps vendor selection logic error
+		4.5.0 - overhaul of gps process - selecting yes/no for gps at start of truss for consistency and organization
+				v1 - GPS_STABLE_5S added as switch for using GPS targeting; enabled Gps X offset adjustment to be set in rwp and used in track mode;
+			    v2 - added timer for RWP autotarget;
+				v3 - Convert dynamic gps autotarget status from NVM to network variable
+				v4 - GPS transform math fixed and confirmed via solidworks; added function to set all targets via GPS transform; 
+					 added to gps structure to include target
+				v5 - set offsets while tracking so it more closely matches what rwp will be with plumb mast; 
+				v6 - removed yaw feedback adjust in rwp locate_wp, added x yaw feedback; 
+				v7 - fixed error in rwp useGpsThisTruss conditions; got Autotarget in Range green light flashing working
+				v8 - TrackAssist - hold paddles out to track to gps target; fixed GpsToWorld function (add x-slide to translation); 
+					 GPS: separated in range indications from in range condition for targeting; 
+					 add immediate response GPS_RTK_FIXED requirement to GPS_READY (in addition to 5s filter)
+				v9 - add pnezd and feedback messages, display, input; adjust rwp transition to locate_wp x_slide requirement
+				v10 - improve precision; add constraints to limit gps move targets to limits of actuators; 
+					- removed possibility of /0 error when TrapStop called with acc = 0;
+					- add GPS_YAW_AND_Y_SET condition to reduce yaw/y instability; remove reduction to x-slide accel on gps auto move;
+					- record gps cycle data; add pause between activations for antenna to settle; added manual gps autotarget cycle control for diag;
+				v11 - fixed GPS_ON_TARGET function (not all offsets and velocities match in sign); add GPS offset filtering during tracking;
+				    - fixed Inclinometer_vis base pitch and roll switched; turn off locate_wp x adjust; added GPS response time test
+				v12 - changed gps feedback control to filtered targets; slow outrigger as it extends
+				v13 - 3rd leg adjust workflow; smoothed outrigger descent; smoothed TrackAssist
+				v14 - first production working version; cleanup code
+				v15 - split Trapezoid gps move from setVelAccel move; cleaned up
+			4.5.1 - first gps production version
+					v1 - changed range margin to +/- from midpoint; fixed tracking plumb mast offsets to  ~ account for outrigger coming down; fixed bugs
+					v2 - start moving GPS actuators as tracking approaches target; made track assist target desired x slide setpoint; made track assist smoother; 
+					v3 - removed GPS tracking preposition for boom swing and yaw; added return to normal tracking position if moved away from target; 
+					 lowered xslide tracking position for gps; 
+			4.5.2 - second production version 
+					v1 - add heading and y req for gps z slide pre position (so only activates if driving pile to pile)
+			 		v2 - changed gps on target speed requirement to 0.05 to ensure it's actually stopping on target; changed x-slide locate_wp behavior to target x offset;
+			 		v3 - increased outrigger descent speed profile;
+			 		v4 - fixing minor bugs, organizing;
+			   		v5 - fix DDT implementation (so ddt delta can't be less than SetVelAccel minimimum, resulting in 0 output)
+			   		v6 - add Autec remote; fix track assist to reference offset x (x slide target + desired X_TARGET_OFFSET); 
+		   		    	fix trackAssist to only work in Automatic
+			  		v7 - fixed Autec remote code, added eRemote to library; tuned gps Boom Swing and Yaw speed
+			   		v8 - optimize for transition - 4 * set vel accel max; add 3rd leg reverse direction button (EW to WE); 
+				 		adjust GPS_TRACKING_X_ADJUST to err on 'uphill' side of x slide (55 to 70)
+			   		v9 - add HMI settings to adjust/cal rwp delay times; shortened gps target filter time; removed autotarget x slide locate_wp
+			   		 	slowed mast and pitch during gps autotarget in RWP; lock gps targets in track while corrections applied
+			4.5.3 - production
+					v1 - change rwp cycle time from s to ms; lower yaw settle band in RWP Wait_settle
+					v2 - restore pitch and rotator speed after rwp gps autotarget
+					v3 - modified scaleAnalogInput to -1 if reading > 127 
+					v4 - added ability to change motor install direction from W going E to E going W (HMI button);
+					 	 add place to store gps antenna machine specific offsets in HMI (stored on PLC); made more gps settings persistent;
+						 simplified process for adding more persistent vars (just have to change 2 numbers); 
+						 add fast green blink to indicate ready to go to screw mode when gps autotargeting
+					v5 - made screw mode disallow install if not on target (eg if finished 3rd leg and try to install sides without repositioning wp, or if rwp skipped);
+						 add requirement for GPS_TRUSS_CYCLE > 1 to finish rwp_square_yaw (ensure final tweak to gps pos has been done);
+						 add requirement in Screw Drive if IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN require gps in range 
+						 (esp to require repositioning after 3rd leg before installing side legs);
+						 add functions to confirm wp on target per GPS; made 3rd leg adjust and install E to W buttons persistent
+					v6 - add GPS feedback cycle control (cycle 85); add prediction for 3rd leg position;
+						 add FWP autotarget ability
+					v7 - give cycle numbers and enum name for readability; 
+						 changed from sequential gps targeting cycles to qualifying (within certain range of target)
+						 fixed error in GPSisNearTarget and GPSisOnTarget, added reference to actuator axis in sGPSaxis;
+						 fixed pretarget actuate to include case where mode changed while in range;
+					v8 - added boxcar filter and option to GpsAxisNearTarget to indicate sustained gps offsets on target;
+						 added safety feature for fwp - autotarget won't work with aux button unless within x cm of target; 
+					v9 - add requirement in rwp and fwp for actuators to stop and confirm on target before transitioning; 
+						 add requirement for GpsAxesNearTarget to include Pitch and roll limits;
+						 modify fwp so that lower crowd returns to wp position so z matches leg length reference more closely, 
+						 and first attempt to be on target is from WP set positions;
+					v10 - changed preload comp to using main pump pressure to stop mast descent; 
+						 increased gps offset filter num samples 10 to 15;
+						 fixed real to int conversion of gps z delta due to LC movement;
+					v11 - add waiting strings RWP GPS Square_yaw mast tilt to inform operator if that's holding up Wait_Settle;
+						  move GPS vars to new global list for GPS;
+					v12 - GPS data collection; use filtered offsets to transition to locate_wp; 
+						  filter offsets during all of rwp vs just slow_trapezoid_move; 
+						  changed gps cycle data to use filtered offsets; add on target fast blink indication to crimp mode;
+						  changed bs setVelAccel band to start at 1.0 (from 2.0);
+					v13 - req passing onTarget test to go to crimp, integrate automation into continue button;
+						  fixed bug preventing LC from going to WP position in FWP; tightened setVelAccel ramp to target;
+						  changed detecting change of gps points to only work in track mode;
+						  changed GPS blink in Crimp Mode to require gps_used_this_truss
+					v14 - clean-up; make FWP gps autotarget time-out if doesn't find target;
+						  added pitch and roll correction to FWP for gps moves;
+						  added mast plumb option for checking GPS on target;
+			4.5.4 - working version
+					v1 - prevent /0 error from gps vel/accel by limiting to 0.05 min;
+					   - changed TrapezoidStart and Stop to preclude /0 error if vel or accel is 0;
+					v2 - move FWP autotarget to f2, leave check and advance on Continue button;
+					v3 - change gps pitch indicator to mast inclinometer; add SCREW_STATE_LC_REWIND to hammer;
+						 req only x and yaw to be on target when using gps and laser per button on HMI;
+					v4 - swap rotation sign as sent to StonEx
+					v5 - separate GPS_AUTOTARGET_SELECTION and GPS_AUTOTARGET_STATUS enums; removed GPS_DATA_LENGTH constants;
+						 added sync process to PLC_TRANSMIT_6; add button to enable air SCREW_STATE_POSITION_MAST_SLIDE and soft soil;
+					v6 - refactor GPS states; change GPS autotarget manual cycle button to aux button; change sign of mast pitch and roll to match StonEx math;
+						 turn off GPS_USED_THIS_TRUSS if not GPS_WP_AUTOTARGET_ON;
+					v7 - working; add 3rd leg in Screw Mode functionality; add NS slope adjust to x and z for z slide movement;
+					v8 - add Test button;
+					v9 - move SCREW_STATE_PREPARE_TO_LOAD and SCREW_STATE_INITIAL_ROTATE to methods so CASE doesn't overload;
+				   v10 - split TRANSMIT_6 and add TRANSMIT_7; 3rd leg adjust modifications;
+				   v11 - split working; center working; plumb mast req for gps autotarget removed;
+				   v12 - working; made GPS on target indicator lights more restrictive than actuator on target req
+				   v13 - fixed water set up screens; added wet soft soil air in SCREW_STATE_POSITION_MAST_SLIDE; lowered lower crowd speed in GPS SCREW_STATE_ASSEMBLE;
+				   		 added decoder code up to changing variables; removed "custom recipe" functionality; changed Truss type names
+				   v14 - implement HMI review changes; fixed laser FWP disregard YZ;
+				   v15 - added SCREW_STATE_CLEAR_TRUSS_CAP to conditions that keep truss holder down; finished decoder code
+				   v16 - remove Laser FWP button (automated by Truss Type); automate preload compliance by truss type; add GPS_NO_MOVE instructions to gps actuators;
+						 update SCREW_PARAMETERS_CURRENT.NS_PITCH in PITCH in RWP; 
+				   v18 - fixed IE decoding; make ScrewParamsSource persistent;
+				   v19 - add rtk delay <5 to GPS_READY req's; add mast delta to GPS Z offset calc
+				   v20 - record GPS data; 
+				   v21 - add End or Motor only option to preload compliance button; add data types to HMI persistent data arrays;
+				   v22 - experiment with FWP GPS auto target - adjusted targeting in RWP and FWP;  added failsafe for yaw WP setting to 
+				   		 Screw Mode entry;
+				   v23 - cleanup for production code;
+				   v24 - adjust FWP behavior for less presses - req settling to go to Crimp, go straight to GPS point after return to wp if not on target, 
+						 tighter precision for trussHasLaserMount; add z adjust in all screw mode states; added requirement for Lower Crowd to be setttled
+						 to exit SCREW_STATE_GPS_FWP_RETURN_TO_WP;
+				   v25 - tighten yaw in fwp;
+				   v26 - add Knuckle Pitch to Mast Pitch delta offset to use for plumbing mast; fixed bug in gps Pitch FWP
+				   v27 - fix Z slide High WP track back issue and issue where going Man/auto in track back results in Z slide constantly going higher; limit z slide max in track back and screw mode CLEAR_TRUSS_CAP to a slide command_limit_max; fix light stack for FWP not trussHasLaserMount;
+			4.5.5 - production
+					v1 - add differentiation in RWP for laser mounts vs non; correct mast delta and lower crowd delta affect on gps z if pitched;
+					v2 - fixed bug in CLEAR_TRUSS_CAP where TD could be waiting for Z to settle but Z didn't move;
+					v3 - added GpsLockTargets() to rwp fast and fine target completions (in case man/auto cycled);
+					v4 - NXT third leg dev, temp vars and screens, calc button;
+					v6 - RWP bug fixes - yaw settle band too tight, first_in_level not getting set after man/auto cycle, on target light not working in RWP_STATE_SQUARE_YAW;
+						 removed mast pitch and roll limit vars for gps; removed 3rd leg W to E button and vars - using GPS compass; 
+						 moved heading adjustment for third leg to CalcThirdLegAdjustEasting; fixed isContinueAllowed bug where both forward and back 
+						were limited by smaller limit;
+					v7 - change sign Nxt3lg 3rd leg calc (non gps part);
+			4.5.7 - production update so autotarget boxes can be confirmed on; cleanup nxt third leg;
+					v1 - tighten X GPS in-range limits for NX tlm to allow room for adjustment;
+					v2 - adjust SCREW_STATE_NXT_TL_ADJUST target requirements; adjust mast behavior when leaving third leg screw drive to ensure ground is cleared;
+						 adjust X GPS in-range logic, add req for autotargeting GPS_USED_THIS_TRUSS with NX TLM to require tighter x tolerance also;
+					v3 - NXT_TLM_3L_ANGLE_VALUE for Standard and Heavy hardcoded in PLC
+					v4 - Pinnington for bug fix, and mast stability in track mode when GPS drops;
+					v5 - fix GPS P and D messaging address error; fix tracking and rwp z pre-adjust error;
+			4.5.8 - production update for Pinnington
+					v1 - add timer to debug for drill stall sim to allow time to check reaction;
+					v2 - fix drill stall bug; 
+					v3 - make MAST_LOADED_TRANSITION_PRESSURE settable; lower GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_X] from 3.5m to 2.5m to prevent oscillating between 25 ft spaced piles; 
+			4.5.9 - production update for Pinnington;
+			4.6.2 - production update for Pinnington; 
+					fixed YAW_SQUARE_TO_LASER bug (if operator bypassed locate_wp it didn't get set); 
+					fixed rwp restart bug in WAIT-LEVEL;
+			4.6.3 - Testing improvements
+					v2 - require valid pnezD field or remote selected to continue in Screw mode;
+					v3 - changed signs in CalcThirdLegAdjustEasting such that it works properly;
+					v4 - only align x gps axis in fwp;
+					v5 - return to aligning all gps axes in SCREW_STATE_NXT_TL_ADJUST; 
+						 rotate to ensure mast vertical in SCREW_STATE_GPS_FWP_AUTOTARGET_GPS and SCREW_STATE_NXT_TL_ADJUST;
+					v6 - redo how third leg or side leg positioning is controlled (so operators can't mess it up);
+					v8 - add x on target req for 3rd leg v side leg screw drive position check;
+					v9 - fix slope calc so deg from pnezD are interpreted correctly - magnitude and sign;		
+			4.6.4 - update for row pitch bug -
+					*** trusses with top leaning north are positive - for Pinnington and Bellfield only! ***;
+					new aircompressor for 3.0;
+					v1 - remove settling req for yaw in FWP; 
+					v2 - added screw cap and ss buttons; add CORRECTED_MAST_PITCH and transmit this to Stonex; 
+						 removed doubling of mast to knuckle delta bug in third leg install; fixed sign in Nxt tlm math;
+						 fix NXT tlm side leg angle bug; added LC_REWIND lag test
+					v3 - restore mast pitch for Stonex to Mast inclinometer; restore settling req fwp for heading (for now);
+						 rename isNext3lscrew functions from Ns and EW to side and 3l;
+			4.6.5 -	production update for Pinnington Bellefield
+			4.7.0 - update for Tower Road, XTR
+					- change pitch scheme to top of truss leaning south is positive;
+					v1 - simplify logic for ensuring proper order of 3l install;
+					   - implement simpleHeading and CalcThirdLegAdjustX vs Easting (so we can install 3rd leg in any direction)
+					   - fix nxt3l screw side bug
+					   - fix mast dragging for nxt 3lm
+					   - adjusted logic for setScrewParameters Truss Type;
+					v2 - adjust in range light indication for targeting NX3l in tracking;
+					   - removed THIRD_LEG_INSTALLED_THIS_TRUSS;
+					   - added restriction on moving truss cap up if in crimp or assemble truss cap;
+					   - removed UPPER CROWD POS < (UPPER_CROWD_TRACK_POS - UPPER_CROWD_ACCURACY from moving target plate up
+			4.7.1 - Production release for Tower Road, NX TLM
+					v1 - fix truss cap interference bug (SCREW_STATE_CLEAR_TRUSS_CAP added to Upper Crowd move to track pos);
+					   - rotator turned off in ASSEMBLE;
+					v2 - add leg bin to remote screen; fix remote HMI update bug;
+			4.7.2 - Rerelease after bug fix;
+					v1 - add fixed band filter for compliance compensation;
+					   - modify RTK_DELAY, HRMS, VRMS to indicate 86 when radio signal fails;
+					   - fix getSimpleHeading bug;
+					v2 - add 3lm screw tip to ground adjustment based on pitch;
+					v3 - add mast lean correction (x-slide)
+					v4 - add rdo carlson messaging; add screw drive complete upon crimping;
+						 add total_cycle_time tracking; fix z slide bug if gps used and track mode skipped;
+						 button to turn on off auto mast lean in preload_compliance;
+						 fix truss type latch vs truss side leg to vertical angle order bug;
+			4.7.3 - (todo) release for testing - interim release - deprecated
+			4.7.4 - production update - tower road, cartwright, catclaw
+				  - v1 disallow TCH to flip up during FWP/crimp; fix underembedment issue;
+				  - remove some debug variables from HMI; add debug vars to debug screen;
+				  - v2 add ability to operate centralizer in screw manual;
+				    change if manual in screw and TRUSS_BEING_ASSEMBLED then auto returns to SCREW_STATE_ASSEMBLE;
+			4.7.5 - production release
+				  - v1 for laser referenced truss install, disregard y and z in FWP;
+				  	disregard z in all for fwp find gps target (to reduce likelihood of truss cap holder damage)
+					b modified z slide lc logic
+			4.7.6 - production release; fixed FWP_LC_TO_ZSLIDE_TRANSITION bug; fixed auto mast lean comp bug; return pitch and x slide to rwp pos after driving left screw (if using auto mast lean);  fix 474 debugs for temporary reference; add ability in Screw Mode Manual to cycle centralizer with aux button; added TIGHTEN_TARGET ability
+			4.7.7 - remove centralizer aux button functionality and give operators access to force tch and centralizer; add button to turn back on z autotarget;
+				    v1 - fix track bug; fix warning lock bug (warning doesn't clear on HMI or remote); fix base pitch and roll warning and alarm bug;
+			4.7.7 can ) test
+				 - change can 0 commander and receivers to produce heartbeat at 200ms and check at 440ms
+				 - changes in HaweVpocMaintain
+				 - right and left tracks changes to produce heartbeat
+			4.7.8 - temp release for testing temp Hawe fix
+				  - v1 Paul's (Hawe eng) edits to HaweVpocMaintain;
+				  - v2 delay warnings for 1.5s for valve failures
+			4.7.9 - 
+				  - v1 mast pitch replaces mast slide speed in preload comp req
+				  - change consumer heartbeat settings via can manager for Hawe valves - 
+				  - add Hawe valve diag screen
+			4.8.0 - release to Tower
+			4.8.1 - modified hawe setpoint display
+			4.8.2 - fixed HaweVpocMaintain bug
+					v1 - change dsw init to 16#AA;
+			4.8.3 - changed all CAN0 SDO timeouts to 3000ms per Hawe's request
+			4.8.4 - added a 4th bit flip every ~400ms to DCW in HaweVpocMaintain
+			4.8.5 - (hopefully) fixed TCH random-up bug (Hawe valve failure caused AUTOMATIC_ALLOWED := FALSE, which (wrongly) caused TCH to raise
+			4.8.6 - Jakob - cycle data changes
+			4.8.7 - feature rollbacks for machine preservation; consolidate TD3 code with row pitch button for Pinnington/Bellefield
+					- remove z autotarget in FWP; hammer force limits; no UC control during screw drive auto; screw drive assist only up works; embedment reduction doesn't work if air off; delay for screw drive man/auto; z slide doesn't pretarget on approach; actuator speeds req Ojjo Engineer and above; restrict Customer Engineer access to settings; track assist settings; bug fixes; 
+					v1 - distinguish "Customer Engineer", "Owner Engineer", "Ojjo Engineer"
+					v2 - modify Track Assist rampdown; set lc to z slide transition back to 20cm to allow for truss cap install; modify LC to Z slide behavior in FWP so assembly happens in SCREW_STATE_ASSEMBLE, and Continue transitions ASSEMBLE to FWP replacing first aux press; fixed Mast Lean Compensation 3rd leg bug and added timer;
+			4.9.0 - TD3 consolidation - one code version for all machines 
+			4.9.1 - clean up persistent memory - set values for all reserved variables
+			4.9.2 - clear WAS_SCREW_DRIVE on entering screw mode; 
+					v1 - change HMI Ints
+					v3 - RECEIVE and RECEIVE_1 refreshed from HMI
+					v4 - create package with added variables in TRANSMIT and TRANSMIT_1 (from HMI - RECEIVE and RECEIVE_1 here)
+					v5 - put comment in RECEIVE_1 back in
+			4.9.3 - rerelease of feature roll backs from last working version.  490 and 491 failed to install properly in the field.  Still under investigation.
+			4.9.4 - added waiting on statements to fwp states; fixed transition bug in PreserveSettingsForDeprecatedVars; set screw man/auto transition delay to 10s; 
+					require mast to settle in screw mode assemble; modify lower crowd settling in screw mode return to wp
+			4.9.5 - Integrate code for NXT motor EarthTruss 2
+				  - v1 merge with previous work on Ojjo2; add rotations - structures, functions, etc (compiles if rotations folder removed)
+				  - v2 add code structure for EarthTruss2; move all references to changing pNEZd to setGPSpNEZdTargetAdjust and call it every cycle
+				  - v3 adjust order of calling third leg stuff to control zslide feedback
+				  - v4 adding gps z call back in for third leg - it's necessary
+				  - v5 geometry in v4 seems to be working.  
+				  	- convert third leg pitching offsets from world to truss frame before applying in third leg calc
+					- recheck z offset and rerun calc on entering SCREW_STATE_NXT_TL_ADJUST (z slide can move in SCREW_STATE_MAST_TO_TARGET - worked for first truss!
+					- adjusting SCREW_STATE_NXT_TL_ADJUST so it doesn't need a z change (z slide already near bottom!); 
+					v6 - working for third leg.  removed filtered offsets from some calls, as that doesn't seem to get set anymore!
+					v7 - added isTrussBeingAssembled() states to processing filtered offsets, returned fwp states to include this; try adding rotator trueing to NXT_TL_ADJUST - wasn't included in CASE statement so wasn't activated; first attempt revising NXT1 third leg functionality; modified GPS offsets to indicate 8686 if receiving 0's (eg on startup)
+					v8 - change pneZd elevation adjustment from along mast (StonEx method) to elevation in world (/cos(pitch)cos(roll)); fix VERT_TO_PITCHED_MAST_ADJ calc; implement full 3D WP TO COR adjust; change GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET to 2000 from 2500; revamped isHighWP process; released for field test
+					v9 - continue third leg dev; HIgh wp motor worked!
+					v10 - refining code; added ET2 motor truss to MAST_TO_VERTICAL; 
+					v11 - add GPS CALIBRATION button; fix FWP_RETURN_TO_WP LC settling; working
+					v12 - increase speed high WP, resolve why initial rotate isn't settling, disallow skipping initial rotate when screw loaded (for High WP);
+					v13 - fix HMI Transmit_1 memory issue, rename Transmits, add validity logic;
+					v14 - adjust pretarget ET2; add transmit versions to prevent updating persistent memory from HMI if TRANSMIT's don't match;
+					v15 - fixed ET2 TL adjust math error;
+					v16 - bug fixes (preload comp, embedment); 
+					v17 - fwp to return to wp;
+					v18 - lots of changes to third leg adjust;
+					v19 - ET2motor side leg - z slide doesn't go up to side leg wp after driving left screw;
+					v20 - add test setting to adjust gps autotarget speeds
+					v21 - added TRANSMIT/RECEIVE matching requirements to PLC side; add NXT INT settings to screw params and HMI; fix onScrewDriveStart for ET2
+					v22 - make z slide move if ismotor3L on screw drive retract;
+					v23 - fix driving south bug in pitch or yaw?
+						  w - working with HMI 495 v10
+					v25 - remove nxt3lmCalcs logic in actuators;
+			4.9.6 - production release ET INT (not tested for original NXT product)
+			4.9.7 - minor updates
+			4.9.8 - Track Assist auto advance to RWP, Screw mode
+			5.0.0 - upnaming to 500 because auto advance is a significant change
+					v1 - change calibration point to pin hole; adding proximity sensor code; fix z slide scraping ground after third leg left leg install (move mast slide to wp)
+					
+			5.0.2 - v1 - get data recording working - rectangle, as built; 
+						 v2b flipped proximity sensor alarm relay, added proximity detection req
+						 
+			5.0.3 - v1 - infinitely variable truss geometry (esp HP 75); increase HMI_REALS to 40, add 3dVector array in persistent4;
+					v2 - convert 3dVectors to Real (from LREAL);
+					v3 - fix ddt to use set_vel vs gps_vel (this was not wrong!  reverted later); fix TA to ignore BOTH_MAG if GPS_TRACK_ASSIST_ACTIVE;
+						 converted GPS LREALS to REALS, especially vectors;
+					v4 - change product names to standardize;
+					v5 - add inf variable vector logic to setGPSpNEZdTargetAdjust; fix pitch vs roll bug in checkWarnings
+					v6 - add siko encoders - BS, Yaw, Joint Lift, Boom Lift, UC; changed Lower crowd command max and drifter to top estop limit to enable long screw and drill rod combo (td estops when lifting off truss after crimping and going to track); added remote third leg and side leg angle adjusts; change TCH behavior to be up when not assembling truss; removed low pressure eWarning for UR_MOTOR and LC_MOTOR
+					v7 - fix truss geometry references - simulated and compared to known working code; moved screwStateLoadScrew, ScrewStatePrepareToLoad, ScrewStateMastToTarget and ScrewStateNxtTlAdjust to methods (screwStateMachine too long - causes weird bug); added LC stall Hammer option; remove MOTOR_HAS_LASER_VALUE;
+					v8 - send mast pitch sent to Ojjo protocol (gps vendor = 3 ) to CORRECTED_MAST_PITCH; fix ddt calls in gps actuators;
+					V9 - fix GPS_THIRD_LEG_ADJUST_ON setting in gpsUpdate; fix third leg not active in 3lAdjust; remove debugs from v8 in setGPSpNEZdTargetAdjust that prevented it from working!; removed upper crowd req from TRACK_STATE_CLEAR_GROUND (not moving since we don't move tch); fixed mast pitch send for StonEx
+					v10 - add yaw adjust to FWP during GPS calibration (calibrate button on) ; fix yaw and boom swing during InitialRotate to not check unless WP_HEIGHT_LATCH = WP_HIGH; changed warning from isNXT_SImotorTruss to isNXTmotorTruss; add boom lift and joint lift setpoints to transmit update (prior omission);
+			5.0.4	fixed Eurodrill gear ratio for Raw Per Engineer;
+			5.0.5 	v1  up;te libraries to prevent exception in TrapezoidStart if FB.RAW_PER_ENGR is negative (as is for Siko encoders)
+					v2  HP75 fixes - Z slide motor side legs after left leg doesn't go so high; removed some deprecated ET2/ET_INT/ETSi functions; 
+					v3  RWP fine adjust transition efficiency improvements; add reset of machine states upon mode change;
+					v4  remove GpsRecordData, fix mast scraping after third leg; fix z slide going high for side leg motors;
+					v5  reference pnezD for truss type for setGPSpNEZdTargetAdjust; clear HP 75 truss caps LOWER_CROWD_TRACK_CLEARANCE raised from 30 to 35; 
+						remove Pinnington row pitch convention; fixed bug in isNXTmotorSideLeg that identified ALL nxt side legs as NXTmotorSideLegs; 
+						update LOWER_CROWD_TRACK_CLEARANCE on product change, increase clearance for NXT_VAR to accommodate HP75;
+			5.1.0 	production made from v505v5, new product (HP75), and data streaming on HMI;
+			5.1.1	v1 	get SI working; proximity - proximity tag required in load screw to continue; 
+						bug fixed in track state machine (UC being checked but not moving);
+					v2 	FWP returns Lower Crowd to COR so GPS reference can be used to install (if not autotargeting, or if calibrating);
+					attempt to smooth tracking - req both_mag > 50 vs <>0;
+					fix soft soil bug where hard soil may not be activated if not LC stall method selected;
+			5.1.2	v1	add third leg angle adjust; fix motor third leg offset; got LC Stall Hammer recovery working;
+			5.1.3 	v1	fix bug in control set up where VFF max was not properly applied (update Motor3 library);
+						remove EurodrillInstalled button (redundant);
+			5.2.0	v1 	refactor NxtMotor3l vs NxtMotorSide vs ArrayTruss; remove references and variables to SI and INT specific where possible, remove debugs;
+						fixed bug so VAR third leg embedment can be set via HMI when using remote (not PNEZD);
+					v2	config files - add non HMI settable PLC persistent values to transmit and interpret/receive vars for setting;
+						fix /0 error possibility in operateWater;
+						add pressurization to Target Plate in crimp to help steady it against pulling;
+						JSON read write settings basic process working;
+					v3	flesh out config read/write process; remove machine vendor and machine family from use in code, as it's always Hutte TD3; 
+						add HP75 button; add setting machine number to HMI nvm?;
+					v5	added HMI_SRINGS array of 20;  config process working;
+					v6	added SCREW_DRIVE_COMPLETE_REASON to data transmitting; added in progress cycle time; data streaming messages seem to work;
+					v7	fixed TRUSS_COMPLETED bug where LEFT_CRIMPER_CLOSE_ACTIVATED was checked twice instead of RIGHT"";
+					v8	fixed processRemote bugs; added IS_NEW_PILE_LOCATION and req 3 consecutive passes of the same new Pnezd value to register it;
+					v9	remove unused variables
+					v10	520 ready for testing; 
+					
+					
+					TODO
+					v6	gps target adjust fixes for manual/auto (retain last in manual); slow fine adjust when going to crimp to tighten tolerance?
+						high wp - allow Lower Crowd z adjust if high wp and can't reach target, fix right/left screw changes in screw mode; 
+					v7 	auto calibrate LC after third leg screw drive;
+					v8	remove remnants of old way of doing NXT SI, debugs; fixed UDINT/UINT bug, added checkUdintValueAndUpdate; 
+					v9 	use sp21 for PLC, add git in codesys
+			5.3.0	v1	fix Tracks.limitTurning bug; begin plumb; make ss/hs button hideable?
+						fixed checkEstop bug re base pitch with Mast < 80 deg; 
+						updated TA flag handling to require reset with joysticks near zero;
+						ADD HAMMER PRESSURE DISPLAY TO 520??!
+						fixed ASIN_DEG bug (clamping backwards);
+						add Hammer Pressure info; TEST PLC 1
+	*)
+	
+	// ************  check PreserveSettingsForDeprecatedVars before releasing this!! *************************
+	VERSION: STRING[20] := '5.3.0v1';  // dev
+// 	VERSION: STRING[20] := '5.3.0';  // testing
+	// ************  check PreserveSettingsForDeprecatedVars before releasing this!! *************************
+	
+	
+END_VAR
+

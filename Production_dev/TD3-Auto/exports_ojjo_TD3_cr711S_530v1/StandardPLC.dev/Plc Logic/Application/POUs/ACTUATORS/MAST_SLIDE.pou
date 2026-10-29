@@ -1,0 +1,267 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK MAST_SLIDE
+VAR_INPUT
+	INIT: BOOL;
+	pMAST_SLIDE: POINTER TO sAxis;
+	TIME_US: DWORD;
+	VALID: BOOL;
+	PRELOAD_START: BOOL := FALSE;
+	PRELOAD_RUN: BOOL := TRUE;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	TARGET_POS: REAL;
+
+	TON_RETRACT: TON;
+	TON_ENABLED: BOOL := FALSE;
+	TON_EXPIRED: BOOL := FALSE;
+	
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the mast slide axis based on the top-level state of the machine.  Mast slide is positive going up.
+	Range is 5 to 152.4 cm. *)
+
+CLOSED_LOOP := FALSE;
+VALID := TRUE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(POS_RAW_TO_ENGR(pMAST_SLIDE^.FEEDBACK, pMAST_SLIDE^.SETPOINT.POSITION_RAW));
+ELSE
+	IF MAST_SLIDE_ENCODER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		POSITION_RAW := MAST_SLIDE_ENCODER_RAW;
+	END_IF
+END_IF
+Sampled(ADR(pMAST_SLIDE^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pMAST_SLIDE);
+	RETURN;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pMAST_SLIDE^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF (MACHINE_MODE = SCREW_MODE AND
+		(
+			NOT AUTOMATIC OR
+			((SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE) OR
+			(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET))
+		)
+	)
+	OR
+	(MACHINE_MODE = SETUP_MODE AND NOT AUTOMATIC)
+	THEN
+	(* There are three cases in screw mode when the mast slide manual controls are enabled.  These are:
+		1) When in manual operation
+		2) When in automatic operation and we are in the state where the operator positions the mast slide.
+		3) When in mast to target, operator can jog mast slide while rotator moves for higher throughput.
+	 *)
+	(* The position of the "hard stop" in automatic is the ground; this helps to prevent breaking drill bits
+		and drill steels.
+	IF AUTOMATIC THEN
+		pMAST_SLIDE^.CONFIG.COMMAND_LIMIT_MIN := pMAST_SLIDE^.FEEDBACK.POSITION_ENGR - DRILL_TIP_TO_GROUND_ACTUAL;
+	ELSE
+		pMAST_SLIDE^.CONFIG.COMMAND_LIMIT_MIN := MAST_SLIDE_COMMAND_LIMIT_MIN;
+	END_IF
+	*)
+
+	IF nearHardStop(pMAST_SLIDE^, JS := REMOTE.V1_FB, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pMAST_SLIDE^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pMAST_SLIDE^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+
+	JOYSTICK_01(JS := REMOTE.V1_FB, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pMAST_SLIDE^.OUTPUT.MAGNITUDE, POSITIVE => pMAST_SLIDE^.OUTPUT.POSITIVE);
+
+	IF AUTOMATIC AND NOT pMAST_SLIDE^.OUTPUT.POSITIVE THEN
+		(* Protect the drill bit when going down in auto. *)
+		pMAST_SLIDE^.OUTPUT.MAGNITUDE := pMAST_SLIDE^.OUTPUT.MAGNITUDE / 3;
+	END_IF
+	
+ELSIF (AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+	SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE AND pNVM4^.HMI_BOOLS[AUTO_PRELOAD_ON]) THEN
+	// Here we are running the mast slide down to consistently preload the machine's front-end compliance.
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		IF isScrewModeStateChange() THEN
+			PRELOAD_START := FALSE; // don't start until PUMP_PRESSURE reduces
+			PRELOAD_RUN := FALSE;
+			//PRELOAD_COMPLETE := FALSE;
+			PRELOAD_ANGLE_START := AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR;
+			setOutput(ADR(pMAST_SLIDE^.OUTPUT), 0, FALSE);
+		END_IF
+	ELSIF PRELOAD_START AND NOT PRELOAD_RUN THEN	
+		// Send the mast slide waaaaay down... this will stop when the compliance is taken up, and the
+		//	machine changes states to start driving the screw.
+		TrapezoidStart(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.FEEDBACK,
+			(* pMAST_SLIDE^.FEEDBACK.POSITION_ENGR - PRELOAD_MOTION_MAX ,*)
+			PRELOAD_MOTION_LIMIT, pNVM3^.PRELOAD_SPEED, MAST_SLIDE_ACCEL);
+		PRELOAD_START := FALSE;
+		PRELOAD_RUN := TRUE;
+	ELSIF PUMP_PRESSURE < (pNVM4^.HMI_UINTS[MAST_LOADED_TRANSITION_PRESSURE] - 200) AND NOT PRELOAD_RUN THEN	
+		PRELOAD_START := TRUE;
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.CONFIG ,pMAST_SLIDE^.FEEDBACK);
+	END_IF
+	
+	(* Check to see if we have taken up the compliance as instructed. *)
+	// TODO: remove or re-enable.
+// 	IF FALSE THEN
+// 		PRELOAD_DELTA_CURRENT := AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR - PRELOAD_ANGLE_START;
+// 		IF ABS(PRELOAD_DELTA_CURRENT) >= pNVM3^.PRELOAD_ANGLE_DELTA THEN
+// 			// This will cause a state transition to screw drive.  Let's go!
+// 			PRELOAD_COMPLETE := TRUE;
+// 		END_IF
+// 	END_IF
+	
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+		(SCREW_STATE = SCREW_STATE_PREPARE_TO_LOAD OR
+		SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE OR
+		SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP OR
+		SCREW_STATE = SCREW_STATE_ASSEMBLE OR
+		SCREW_STATE = SCREW_STATE_FWP)
+	THEN
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		IF WP_HEIGHT_LATCH = WP_LOW THEN
+			TARGET_POS := MAST_SLIDE_AT_WP;
+		ELSIF SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP OR SCREW_STATE = SCREW_STATE_ASSEMBLE OR SCREW_STATE = SCREW_STATE_FWP OR 
+		((SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE) AND isNXTmotorTruss_perScrewParams() AND (SCREW_SIDE_LATCH <> SCREW_RIGHT)) THEN //AND WP_HEIGHT_LATCH <> WP_HIGH ) THEN
+			TARGET_POS := MAST_SLIDE_COR_POS;
+		ELSE
+			(* We want to load with the foot of the mast at a fixed height.  This will change based on
+				the height of the Zslide.  With the Z slide all the way down and the mast slide all the way up, the
+				centralizer will be CENTRALIZER_TO_GROUND_NOMINAL above the ground.  Negative means below...
+			*)
+			TARGET_POS := 	MAST_SLIDE_LENGTH + MAST_FOOT_LOADING_POS 
+							- CENTRALIZER_TO_GROUND_NOMINAL - Z_SLIDE_AT_WP; 
+							//AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR;
+			IF pNVM1^.DRILL_BIT_LOAD_PROTRUSION > 0 THEN
+				(* If the drill bit sticks out in screw drive, bump mast slide up to accommodate. *)
+				TARGET_POS := TARGET_POS + pNVM1^.DRILL_BIT_LOAD_PROTRUSION;
+			END_IF
+			
+			IF SCREW_PARAMETERS_CURRENT.SCREW_LENGTH > 202 THEN
+				TARGET_POS := TARGET_POS - 5;
+			END_IF
+				
+			IF TARGET_POS > MAST_SLIDE_LENGTH THEN
+				TARGET_POS := MAST_SLIDE_LENGTH;
+			END_IF
+		END_IF
+		
+		IF SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE THEN
+			// We want to wait a couple of seconds before start, to let the lower crowd come off the screw collar with
+			//	the chuck.  If we pull the mast slide immediately, it will sometimes angle the screw w.r.t. the chuck, and
+			//	cause the screw to get stuck in the chuck.
+			
+			// Every time we enter in the retract state, we want to initialize the TON by driving the input low.  This will make
+			//	the TON block see a rising edge below, starting the timer.  If this isn't done, we will get too-early expired
+			//	results below when the exit from this state is not the normal automatic exit path.
+			TON_RETRACT(IN := FALSE);
+			TON_ENABLED := TRUE;
+			TON_EXPIRED := FALSE;
+		ELSE
+			TrapezoidStart(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.FEEDBACK,
+				TARGET_POS, MAST_SLIDE_VEL, MAST_SLIDE_ACCEL);
+			CLOSED_LOOP := TRUE;
+		END_IF
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.CONFIG ,pMAST_SLIDE^.FEEDBACK);
+	END_IF
+	
+	TON_RETRACT(IN := TON_ENABLED, PT := REAL_TO_TIME(MAST_SLIDE_RETRACT_DELAY_SEC * 1000), Q => TON_EXPIRED);
+	IF SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE AND TON_ENABLED THEN
+		IF TON_EXPIRED THEN
+			(* Higher speed to get the centralizer off the ground before the rotator moves. *)
+			TrapezoidStart(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.FEEDBACK,
+				TARGET_POS, MAST_SLIDE_VEL * 1.5, MAST_SLIDE_ACCEL * 1.5);
+			CLOSED_LOOP := TRUE;
+			TON_ENABLED := FALSE;
+			TON_EXPIRED := FALSE;
+		END_IF;
+	ELSE
+		CLOSED_LOOP := TRUE;
+	END_IF
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	((SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) OR
+	(SCREW_STATE = SCREW_STATE_CONFIRM_MAST_CLEAR)) THEN
+	(* This requires that the state immediately before (RETRACT) has issued a motion command.
+		We just keep running that here. *)
+	CLOSED_LOOP := TRUE;
+ELSIF (AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	((MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CLEAR_GROUND) OR
+	(MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CROWDS_DOWN))) THEN
+	IF isTrackModeStateChange() THEN
+		IF TRACK_STATE = TRACK_STATE_CLEAR_GROUND THEN
+			IF pMAST_SLIDE^.FEEDBACK.POSITION_ENGR < MAST_SLIDE_TRACK_POS THEN
+				TARGET_POS := MAST_SLIDE_TRACK_POS;
+			ELSE
+				(* Don't have to move here. *)
+				TARGET_POS := pMAST_SLIDE^.FEEDBACK.POSITION_ENGR;
+			END_IF
+			// check if capacity is greater than the needed move
+			IF (DRIFTER_TO_TOP - DRIFTER_TO_TOP_ESTOP) < (Z_SLIDE_TRACK_CLEARANCE + LOWER_CROWD_TRACK_CLEARANCE) -(AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR) THEN
+				TARGET_POS := MAX(	TARGET_POS, 
+								pMAST_SLIDE^.FEEDBACK.POSITION_ENGR + 
+									(Z_SLIDE_TRACK_CLEARANCE + LOWER_CROWD_TRACK_CLEARANCE) - // needed move
+									(
+										(AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR) + // Z slide capacity
+										(AXES[AXIS_LOWER_CROWD].CONFIG.COMMAND_LIMIT_MAX - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR) // Lower croud capacity
+									)
+							);
+			END_IF
+		ELSE
+			(* Ready to bring lower crowd back do, clear of truss cap. *)
+			TARGET_POS := MAST_SLIDE_TRACK_POS;
+		END_IF
+		TrapezoidStart(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.FEEDBACK,
+			TARGET_POS, MAST_SLIDE_VEL, MAST_SLIDE_ACCEL);
+	END_IF
+	CLOSED_LOOP := TRUE;
+ELSIF (AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL) THEN
+	IF isRwpModeStateChange() THEN
+		(* We just want the mast slide to be clear of the ground.  Just give this command on entry to the state. *)
+		TrapezoidStart(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US, pMAST_SLIDE^.FEEDBACK,
+			MAST_SLIDE_COR_POS, MAST_SLIDE_VEL, MAST_SLIDE_ACCEL);
+	END_IF
+	CLOSED_LOOP := TRUE;
+ELSE
+	(* Any other combinations we don't operate the mast slide. *)
+	setOutput(ADR(pMAST_SLIDE^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		TrapezoidRun(ADR(pMAST_SLIDE^.PROFILER), ADR(pMAST_SLIDE^.SETPOINT), TIME_US);
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pMAST_SLIDE^.LOOP_PID),
+			pOUTPUT := ADR(pMAST_SLIDE^.OUTPUT),
+			SP := pMAST_SLIDE^.SETPOINT,
+			FB:= pMAST_SLIDE^.FEEDBACK,
+			CFG := pMAST_SLIDE^.CONFIG,
+			I_ENABLED := (pMAST_SLIDE^.PROFILER.STATE = HOLD));
+	ELSE
+		pMAST_SLIDE^.SETPOINT.POSITION_ENGR := pMAST_SLIDE^.FEEDBACK.POSITION_ENGR;
+		pMAST_SLIDE^.SETPOINT.POSITION_RAW := pMAST_SLIDE^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pMAST_SLIDE);
+
+END_IF

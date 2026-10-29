@@ -5,6 +5,8 @@
 !/AGENTS.md
 !/README.md
 !/TODO.md
+!/Daily Update.md
+!/tools/
 !/docs/
 !/AI info/
 !/Production_dev/
@@ -18,9 +20,11 @@
 /Production_dev/TD3-Auto/*
 !/Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v1.project
 !/Production_dev/TD3-Auto/exports_ojjo_TD3_cr711S_530v1.zip
+!/Production_dev/TD3-Auto/exports_ojjo_TD3_cr711S_530v1/
 /Production_dev/TD3-HMI/*
 !/Production_dev/TD3-HMI/ojjo_TD3_cr1203_530v1.project
 !/Production_dev/TD3-HMI/exports_ojjo_TD3_cr1203_530v1.zip
+!/Production_dev/TD3-HMI/exports_ojjo_TD3_cr1203_530v1/
 
 # Owner selected all existing library binaries for the initial baseline.
 /Production_dev/libraries/*
@@ -29,6 +33,13 @@
 !/Library/*.library
 
 # Generated files are not maintained source.
+/.export-work/
+/tools/*
+!/tools/codesys_export.py
+!/tools/run_codesys_exports.py
+!/tools/import_latest_projects.py
+!/tools/Copy-ToBox.ps1
+/.daily-update-state.json
 *.opt
 *.~u
 *.precompilecache

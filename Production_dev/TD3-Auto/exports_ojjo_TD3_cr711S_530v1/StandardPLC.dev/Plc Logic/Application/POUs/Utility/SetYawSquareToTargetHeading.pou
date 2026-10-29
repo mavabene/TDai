@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+FUNCTION SetYawSquareToTargetHeading : bool
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+YAW_SQUARE_TO_LASER := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR - AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR;

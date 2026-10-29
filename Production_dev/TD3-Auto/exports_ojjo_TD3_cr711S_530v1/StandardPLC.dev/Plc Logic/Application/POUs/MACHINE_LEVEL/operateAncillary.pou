@@ -1,0 +1,117 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateAncillary
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	operateOutrigger_01: operateOutrigger;
+	operateCentralizer_01: operateCentralizer;
+	operateHammer_01: operateHammer;
+	operateAirSystem_01: operateAirSystem;
+	operateCrimper_01: operateCrimper;
+	operateTarget_01: operateTarget;
+	operateWater_01: operateWater;
+
+	(* Centralizer operation *)
+	CENTRALIZER_CLOSE_REQ: BOOL := FALSE;
+	TURNS_TO_OPEN_CENTRALIZER: REAL := 13;
+	MORE_TURNS_TO_OPEN_CENTRALIZER: REAL := 20;
+
+	(* Hydraulic cooler operation. *)
+	FAN_STATE: BOOL := FALSE;
+	FAN_CMD: UINT;
+END_VAR
+(********************** Implementation ****************************)
+(* Trying to get better control of all of the ancillary hardware so that we make sure all of the
+	state variables are respected properly.  Scattered around in different places makes is complicated
+	to get this logic all right. *)
+
+(* The few things that operate even in "no touch" should be only things that are safety required
+	or things that affect throughput because they are slow. *)
+
+// TD-3 hydraulic cooler fan handled by Hutte PLC.
+
+(* Outrigger extened when in screw and RWP mode.  Outrigger is slow, get it started when going down, so
+	we're outside the MACHINE_NO_TOUCH check! *)
+operateOutrigger_01();
+
+IF NOT MACHINE_NO_TOUCH THEN
+	(* Every "normal" ancillary hardware should be operated only here, not between modes. *)
+
+	(* Turn hammer on if pressure is too high and we are in the right state. *)
+	operateHammer_01();
+
+	(* Here's where the straight callable stuff gets called. *)
+	operateAirSystem_01();
+	operateCrimper_01();
+	IF pNVM3^.MACHINE_VERSION >= 1 THEN
+		(* Water system standard on TD3.1 and above. *)
+		operateWater_01();
+	END_IF
+
+	(* Centralizer closes when entering "mast to target", opens when the screw is being
+		inserted and is a certain distance into the ground. *)
+	IF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE THEN
+		IF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET AND isScrewModeStateChange() THEN
+			CENTRALIZER_CLOSE_REQ := TRUE;
+		ELSIF
+			(
+			// We are in any of the states where the screw is actually being driven into the ground and the chuck gets
+			//	too close to the centralizer, or we fall out of these drilling states and it opens on the ELSE... 
+			SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+			SCREW_STATE = SCREW_STATE_DRIVE_ASSIST
+			) AND
+			(
+				(
+					// Normal screws come here, opening the centralizer at after some amount travel.
+					//ABS(AXES[AXIS_LOWER_ROTARY].FEEDBACK.POSITION_ENGR) > TURNS_TO_OPEN_CENTRALIZER AND NOT isNxt3lmNsScrew()
+					//runActuators_01.LOWER_CROWD_01.DRIVE_ACTUAL > 60.0 AND NOT isNxt3lmNsScrew()
+					CHUCK_TO_GROUND - CENTRALIZER_TO_GROUND < 50.0
+				) OR
+				(
+					// Used for weird cases that need the centralizer to hold on longer to the screw.
+					//ABS(AXES[AXIS_LOWER_ROTARY].FEEDBACK.POSITION_ENGR) > MORE_TURNS_TO_OPEN_CENTRALIZER
+					//runActuators_01.LOWER_CROWD_01.DRIVE_ACTUAL > 100.0
+					FALSE
+				) OR
+				(
+					(pNVM3^.EMBED_REDUCTION_ENABLED OR
+						(pNVM4^.HMI_BOOLS[SCREW_PARAMS_SOURCE_IS_PNEZD] AND 
+						 SCREW_PARAMETERS_CURRENT.IE_MIN_HAMMER <> NA AND 
+						 SCREW_PARAMETERS_CURRENT.IE_MIN_EMBED <> NA)) 
+					AND NOT
+					(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) AND
+					((SCREW_PARAMETERS_CURRENT.IE_MIN_HAMMER - HAMMER_DISTANCE) < 3)
+				)
+			) THEN
+			CENTRALIZER_CLOSE_REQ := FALSE;
+		ELSIF
+			(
+			// Screw drive didn't get far enough down to open the centralizer, do that now that screw drive has
+			//	exited.
+			SCREW_STATE = SCREW_STATE_UNLOAD_SCREW OR
+			SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE
+			) THEN
+				// Any other screw screw drive automatic states.
+				CENTRALIZER_CLOSE_REQ := FALSE;
+		ELSE
+			// All other screw drive states just leave the centralizer alone.
+			;
+		END_IF
+	ELSE
+// 		IF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_MANUAL THEN
+// 			f2MonitorStart();
+// 			IF f2Requested() THEN
+// 				CENTRALIZER_CLOSE_REQ := NOT CENTRALIZER_CLOSE_REQ;
+// 			END_IF
+// 		ELSE
+			CENTRALIZER_CLOSE_REQ := FALSE;
+// 		END_IF
+	END_IF
+	operateCentralizer_01(DESIRE_CLOSED := CENTRALIZER_CLOSE_REQ);
+
+	(* Operate the target plate here. *)
+	operateTarget_01();
+END_IF

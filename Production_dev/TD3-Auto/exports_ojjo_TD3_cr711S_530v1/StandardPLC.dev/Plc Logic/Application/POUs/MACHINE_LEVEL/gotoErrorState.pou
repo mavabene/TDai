@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION gotoErrorState : BOOL
+VAR_INPUT
+	REASON: STRING;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+setErrorString(REASON);
+MACHINE_MODE := ERROR_MODE;

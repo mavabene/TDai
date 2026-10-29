@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION isZeroVector : BOOL
+VAR_INPUT
+	COMPARE_VECTOR: Vector3D;
+END_VAR
+VAR
+
+END_VAR
+
+(********************** Implementation ****************************)
+isZeroVector := 
+		(COMPARE_VECTOR[rot.pX] = 0) AND
+		(COMPARE_VECTOR[rot.pY] = 0) AND
+		(COMPARE_VECTOR[rot.pZ] = 0);

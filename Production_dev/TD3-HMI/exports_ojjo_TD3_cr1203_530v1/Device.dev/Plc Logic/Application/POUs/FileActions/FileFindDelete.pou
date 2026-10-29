@@ -1,0 +1,92 @@
+
+(********************** Declaration ****************************)
+PROGRAM FileFindDelete
+VAR
+	hFile_: RTS_IEC_HANDLE := RTS_INVALID_HANDLE;
+	FileOpenResult: RTS_IEC_RESULT;
+		
+	delFile: STRING := '/data/1.csval.jnl';
+	deleted: UDINT;
+	del: BOOL;
+	sFilename: STRING := '/data/1.csval.jnl';
+	state: INT;
+	deleted1: UDINT;
+	deleted2: UDINT;
+	deleted3: UDINT;
+	deleted4: UDINT;
+	deleted5: UDINT;
+	deleted7: UDINT;
+	deleted6: UDINT;
+	deleted8: UDINT;
+	deleted9: UDINT;
+	deleted10: UDINT;
+	deleted11: UDINT;
+	
+	
+	sDirName		: STRING := '/home/cds-apps/PlcLogic/data/';
+	sFirstFileName 	: STRING;
+	sSecondFileName : STRING;
+	sThirdFileName	: STRING;
+	
+	iFilesCount		: INT;
+	
+	sDirEntry		: STRING(1024);
+	stDirInfo		: DirInfo;
+	udiResult		: __XWORD;
+	udiDirHandle	: RTS_IEC_HANDLE;
+	
+	udiReadError: UDINT;
+	xStartTest: BOOL;
+	tmrStartup: TON;
+	rtStartup: R_TRIG;
+	xNoFiles: BOOL := false;
+	stFileName: array [0..15] of string;
+END_VAR
+
+(********************** Implementation ****************************)
+IF del THEN
+	
+	deleted2 := SysFileDelete(szFileName:= '/data/2.csval.jnl');
+	deleted3 := SysFileDelete(szFileName:= '/data/3.csval.jnl');
+	deleted4 := SysFileDelete(szFileName:= '/data/4.csval.jnl');
+	deleted5 := SysFileDelete(szFileName:= '/data/5.csval.jnl');
+	deleted6 := SysFileDelete(szFileName:= '/data/6.csval.jnl');
+	deleted7 := SysFileDelete(szFileName:= '/data/7.csval.jnl');
+	deleted8 := SysFileDelete(szFileName:= '/data/8.csval.jnl');
+	deleted9 := SysFileDelete(szFileName:= '/data/9.csval.jnl');
+	deleted10 := SysFileDelete(szFileName:= '/data/10.csval.jnl');
+	
+
+	deleted11 := SysDirDelete2(szDir:='/home/cds-apps/PlcLogic/data/11/' , xRecursive:=TRUE , xKeepDir:=FALSE );
+	
+END_IF
+del := FALSE;
+
+tmrStartup(IN:=TRUE, PT:=T#1S);
+rtStartup(CLK:=tmrStartup.Q);
+
+xStartTest := rtStartup.Q OR xStartTest;
+
+IF xStartTest THEN
+	
+	udiDirHandle := SysDirOpen(szDir:= sDirName, szDirEntry:= sDirEntry, diMaxDirEntry:= SIZEOF(sDirEntry), 
+					pDirInfo:= ADR(stDirInfo), pResult:= udiResult);
+		
+		(* Iterate through all direcotry entries and count them. The implicit entries with points are not count.
+			when the last entry is reached the SysDirRead always delivers the last entry.*)
+	iFilesCount := 0;
+	REPEAT
+		IF FIND(sDirEntry, '.') <> 1  THEN
+			iFilesCount := iFilesCount +1;
+		END_IF
+		udiReadError:= SysDirRead(hDir:= udiDirHandle, szDirEntry:= sDirEntry, diMaxDirEntry:= SIZEOF(sDirEntry), pDirInfo:=ADR(stDirInfo) );
+		stFileName[iFilesCount] := sDirEntry;
+	UNTIL
+		udiReadError = CmpErrors.Errors.ERR_END_OF_OBJECT
+	END_REPEAT
+		IF iFilesCount = 0 THEN
+			xNoFiles := TRUE;
+		END_IF
+END_IF	
+	
+xStartTest := FALSE; 

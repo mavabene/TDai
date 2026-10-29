@@ -1,0 +1,108 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK GPS
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+
+VAR
+	INIT: BOOL := TRUE;
+	// GPS data - targets to address heading, x, y, z offsets
+	
+	GPS_WP_AUTOTARGET: BOOL := FALSE;
+
+	(*
+		0: not used	
+		1: not all selected axes in range to autotarget;
+		2: all selected axes in range to autotarget;
+		3: all axes on target
+	*)
+	GPS_AUTOTARGET_STATUS_CHECK: UINT := 0; 
+	
+	YAW_SETTLED_IN_BAND: GpsSettledWithinBand1s;
+	Y_SETTLED_IN_BAND: GpsSettledWithinBand1s;
+	i: INT;
+	GpsUpdate: GpsUpdate;
+	GET_pnezD: TON;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+(*processes GPS input
+	inputs:
+	- gps offsets
+	- axes autotargeting selection
+	outputs:
+	- whether actuators should auto-move using gps
+	- when actuators are on target
+	other functions:
+	- sets limits for autotarget to be enabled within
+*)
+//(*
+IF INIT THEN // initiate gps axes
+	(*
+	FOR i := 1 TO NUM_GPS_AXES DO
+		configGPSaxis(i, GPS_RANGE_ARRAY[i], GPS_TARGET_TOLERANCE[i]);
+	END_FOR;
+	*)
+	GET_pnezD(IN := INIT,PT := T#5S);
+	GPS_AXES[GPS_HEADING].AXIS_RANGE_MAX := 24;
+	GPS_AXES[GPS_HEADING].AXIS_RANGE_MIN := -24;
+	GPS_AXES[GPS_HEADING].ACTUATOR_AXIS := AXIS_YAW;
+	GPS_AXES[GPS_X].AXIS_RANGE_MAX := 30;
+	GPS_AXES[GPS_X].AXIS_RANGE_MIN := 0;
+	GPS_AXES[GPS_X].ACTUATOR_AXIS := AXIS_X_SLIDE;
+	GPS_AXES[GPS_Y].AXIS_RANGE_MAX := 24;
+	GPS_AXES[GPS_Y].AXIS_RANGE_MIN := -24;
+	GPS_AXES[GPS_Y].ACTUATOR_AXIS := AXIS_BOOM_SWING;
+	GPS_AXES[GPS_Z].AXIS_RANGE_MAX := 167.5;
+	GPS_AXES[GPS_Z].AXIS_RANGE_MIN := 2;
+	GPS_AXES[GPS_Z].ACTUATOR_AXIS := AXIS_Z_SLIDE;
+	GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+	SCREW_PARAMETERS_D_VALID := FALSE;
+	DecodePnezD();
+	// allow time for pnezD message to be received
+	IF GET_pnezD.Q OR SCREW_PARAMETERS_D_VALID THEN
+		INIT := FALSE;
+	END_IF
+	
+END_IF
+
+//*)
+
+GpsUpdate(); // update status for all gps axes
+
+//AND GPS_RTK_SIGNAL_DELAY < GPS_RTK_SIGNAL_CRITICAL_LIMIT  // activate once we can access this information over CAN - waiting on StonEx software update
+
+// check for settled within band
+IF ( RWP_STATE = RWP_STATE_SQUARE_YAW ) AND AUTOMATIC THEN
+	YAW_SETTLED_IN_BAND( INIT := isRwpModeStateChange(), GPS_AXIS := GPS_HEADING );
+END_IF
+
+GPS_AUTOTARGET_STATUS_CHECK := 4; 
+FOR i := 1 TO NUM_GPS_AXES DO
+	IF GPS_AXES[i].AUTOTARGET_ON THEN
+		// check if any status is less than in range or on target and reduce to lowest common denominator:
+		(* Range status:
+		0: not in range to auto-target; 
+		1: in range to move to target but not on target, OR autotarget not selected;
+		2: in range to move to target, not on target; 
+		3: within target specification; 
+		*)
+		GPS_AUTOTARGET_STATUS_CHECK := MIN(GPS_AUTOTARGET_STATUS_CHECK, GPS_AXES[i].RANGE_STATUS);
+	END_IF
+END_FOR
+
+(* GPS_AUTOTARGET_STATUS by bit#:
+	0: AUTOTARGET engaged
+	1-4: selected axis engaged
+	10: all gps axes are in range for autotarget
+	11: all gps axes are on target
+*)
+GPS_AUTOTARGET_STATUS.ALL_GPS_AXES_IN_RANGE := (GPS_AUTOTARGET_STATUS_CHECK > 1) ; 
+GPS_AUTOTARGET_STATUS.ALL_GPS_AXES_ON_TARGET := (GPS_AUTOTARGET_STATUS_CHECK > 2) ; 
+
+//INIT := FALSE;
+
+

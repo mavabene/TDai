@@ -1,0 +1,21 @@
+
+(********************** Declaration ****************************)
+FUNCTION CanMsgIdToNodeIndexSubIndex : REAL
+VAR_INPUT
+	MSG_ID: UDINT;
+END_VAR
+VAR_OUTPUT
+	NODE_ID: USINT;
+	SUB_INDEX: USINT;
+	INDEX: UINT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+NODE_ID := to_USINT(16#FF and MSG_ID); // pull right 8 bits
+SUB_INDEX := to_USINT(SHR(MSG_ID, 8) and 16#FF); // pull next 8 bits
+INDEX := to_UINT (SHR(MSG_ID, 16) AND 16#FF); // pull last (left most) 16 bits
+
+

@@ -1,0 +1,79 @@
+
+(********************** Declaration ****************************)
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+	(* Flag to let the HMI know it has valid data. *)
+	HMI_RECEIVED_PLC_DATA_6: BOOL := FALSE;
+	HMI_PLC_SYNCH_6_TOP: BOOL := FALSE;
+
+	XMIT_6_COUNT: DWORD := 0;
+
+	// create array of DIAG INTs to send wired output diagnostic info - large enough to cover any TD
+    DIAGS_TRANSMIT: ARRAY [1..6, 1..25] OF INT;
+    DIAGS_TOPICS_LENGTH: INT;
+	
+	// indicate code cycle time
+	CODE_RUN_PERCENT_OF_CYCLE: USINT := 100;
+	CODE_RUN_MAX: USINT := 0;
+	
+	// truss cycle time from entering track until entering track after completing truss
+	CYCLE_START_TIME: DWORD := 0;
+	LAST_CYCLE_TIME: UINT := 0;
+	IN_PROGRESS_CYCLE_TIME: UINT := 0;
+	
+	(* last screw drive complete reason 
+		0 = new screw drive
+		1 =	Normal Drive completion
+		2 = Operator went to Manual
+		3 = Operator changed mode
+		4 = Estopped during screw drive
+	*)
+	SCREW_DRIVE_COMPLETE_REASON: eDataCollection := eDataCollection.NO_SCREW_DRIVEN;
+	TRUSS_COMPLETED: BOOL := TRUE; // upon starting machine, initiate as just completed a truss
+	
+	// persistent vars
+	HMI_BOOLS_VALUES: ARRAY [1..20] OF BOOL; // 
+	HMI_SINTS_VALUES: ARRAY [1..20] OF SINT; // 
+	HMI_UINTS_VALUES: ARRAY [1..20] OF UINT; // 
+	HMI_INTS_VALUES: ARRAY [1..20] OF INT; // 
+	HMI_REALS_VALUES: ARRAY [1..40] OF REAL; //
+	HMI_VECTORS_VALUES: ARRAY [1..10] OF Vector3D; // 
+	HMI_STRINGS_VALUES: ARRAY [1..10] OF STRING(20); //
+	(*
+	HMI_INTS_VALUES: ARRAY [1..30] OF INT := [30(0)]; 
+	HMI_REALS_VALUES: ARRAY [1..30] OF REAL := [30(0)]; 
+	HMI_UDINTS_VALUES: ARRAY [1..30] OF INT := [30(0)]; 
+	HMI_DWORDS_VALUES: ARRAY [1..30] OF REAL := [30(0)]; 
+	*)
+	
+	TestVar1: REAL := 55555; // drive target embedment
+	TestVar2: REAL := 77777; // hammer distance
+	TestVar3: REAL := 99999; // drive current embedment (depth)
+	TestVar4: BOOL := FALSE; // truss completed
+	TestVar5: BOOL := FALSE; // proximity alarm on)
+	TestVar6: BOOL := FALSE; // proximity antenna output on (antenna off)
+	
+	// Data Collection triggers
+	
+	// Hawe valves temp
+	HAWE_AXES_DSW: ARRAY [1..NUM_AXES] OF DWORD;
+	HAWE_AXES_SETPOINT: ARRAY [1..NUM_AXES] OF DWORD;
+	//HAWE_AXES_DCW: ARRAY [1..NUM_AXES] OF UINT;
+// 	HAWE_AXES_FAILURES : ARRAY [1..NUM_AXES] OF INT;
+
+	// has to match HMI_TRANSMIT_1/2_VERSION values to update persistent memory
+	// this prevents out of synch updates of PLC/HMI code from erasing memory
+	PLC_TRANSMIT_1_VERSION: UINT := 3;
+	PLC_TRANSMIT_2_VERSION: UINT := 3;
+	
+	// Internal details of the PLC for display.	
+	PLC_ifmOS_version: STRING := '';
+	PLC_ifmBootloader_version: STRING := '';
+	PLC_SW_related_HW_version: STRING := '';
+	PLC_HW_related_HW_version: STRING := '';
+	PLC_serial_number: STRING := '';
+	PLC_PCB_ERP_number: STRING := '';
+	
+	
+	HMI_PLC_SYNCH_6_BOTTOM: BOOL := FALSE;
+END_VAR

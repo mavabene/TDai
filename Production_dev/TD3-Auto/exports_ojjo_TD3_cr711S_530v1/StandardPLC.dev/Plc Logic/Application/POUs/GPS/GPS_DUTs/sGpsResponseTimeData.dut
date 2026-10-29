@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+TYPE sGpsResponseTimeData : // changes made here must also be made in HMI code
+STRUCT
+	
+	//CYCLE_DATE: 
+	US_TIME: SYSTIME;
+	X_SLIDE_POS: REAL;
+	Z_SLIDE_POS: REAL;
+	X_OFFSET: REAL;
+	Z_OFFSET: REAL;
+	GPS_RESPONSE_TIME: DWORD;
+	
+END_STRUCT
+END_TYPE

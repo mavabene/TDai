@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+TYPE sCanOpenBuffer :
+STRUCT
+	// Entire CanOpen packet getting buffered here.
+	NODE: USINT;
+	INDEX: UINT;
+	SUB_INDEX: USINT;
+	DATA: ARRAY[1..8] OF USINT;
+	LEN: UDINT;
+	// Control stuff or transmitting.
+	EXECUTE: BOOL;
+END_STRUCT
+END_TYPE

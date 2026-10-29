@@ -165,28 +165,60 @@ For later updates, copy the latest changed files here, identify the components
 they replace, review the differences, and update the Git allowlist/inventory when
 names change. Commit the replacement and removal of its prior managed version
 together so history is retained. Do not remove unrelated variants or uncommitted
-files merely because their version numbers are lower. No daily schedule or
-background synchronization is enabled; updates run when requested.
+files merely because their version numbers are lower. No automatic update or
+background synchronization is enabled; updates run when requested. The
+[Daily Update](../Daily%20Update.md) workflow defines the owner-invoked checkpoint
+and requested reminder checks; reminders do not perform synchronization.
+
+The owner maintains broad PLC change descriptions in the `Version` GVL. During
+Git checkpoints, check available new/edited version notes against the previous
+committed notes and actual changes, and use relevant descriptions in commit
+messages. Daily Update owns the detailed rules, including HMI `VersionHMI`,
+provisional notes, and handling of binary-only updates without a fresh export.
 
 ### Owner-supplied snapshots and Box backup
 
-The owner develops in a separate local folder outside the agent's working access.
-When ready to update Git, the owner will copy the relevant updated files into
-this workspace. Review and version those copies; do not access or synchronize
-back to the owner's development folder. Code elsewhere is not automatically
-included, and copying a binary project alone does not update its readable export.
-Exports can be supplied in batches as already agreed.
+The owner authorized read/copy access to
+`C:/Users/jcheney/Documents/TD3/Ojjo_TD3-1` for importing the latest saved PLC/HMI
+projects. Run `tools/import_latest_projects.py` to preview selection and use
+`--apply` during Run Update. The importer uses ordinary Python, not CODESYS.
+It never writes back to the development folder or copies libraries automatically.
+
+Mainline names are exactly `ojjo_TD3_cr711S_<digits>[v<digits>].project` and
+`ojjo_TD3_cr1203_<digits>[v<digits>].project`. Compare the base version and v
+revision numerically, independently for PLC and HMI (v10 is newer than v2).
+Letter suffixes such as `530v1a` and `530v1b` are alternate versions the owner
+is veering away from; exclude them, along with named tests, recovered copies,
+and other suffixes. Ask when an unfamiliar naming pattern could change the
+selection or same-version copies differ; do not repeatedly ask about known a/b
+alternates. Libraries rarely change and remain as-is unless the owner identifies
+an update. No version bump is required to import edits to the same mainline file.
+
+Verify copied files against stable source hashes. Save in CODESYS before import;
+unsaved changes cannot be included. Import only reads development files and writes
+workspace copies; it does not compile, save projects in CODESYS, or connect to a
+controller. No import deletes older versions. After selecting new filenames,
+update the Git allowlist and export runner's input paths before export/commit.
 
 The Box destination supplied by the owner is:
 `C:/Users/jcheney/Box/Jam/Documents/ojjoDev/TD_Projects/Jam_TD3_box/prod_dev_ai`.
-The owner selected a latest-only copy: update changed components and remove their
-superseded versions rather than accumulating dated copies. Git preserves committed
-history. Git ignore rules govern Git tracking; they do not silently narrow the
+The owner selected version retention in Box: replace an existing component only
+when its version matches the incoming version. When starting a new version, add
+it alongside the prior version and retain that prior version. Identify versions
+from versioned filenames and available version declarations/notes; never equate
+different versions merely because they are both the newest file. If version
+identity is ambiguous, preserve both and report the ambiguity rather than overwrite.
+For unversioned project documents, update the corresponding current file normally.
+This supersedes the earlier latest-only Box policy. Git preserves committed
+history independently. Git ignore rules govern Git tracking; they do not silently narrow the
 requested backup. GitHub updates and the Box backup are separate results to report.
 
-**Current hold:** the owner explicitly selected this workspace as the source and
-instructed leaving differing Box code untouched for now. Do not import Box code
-or overwrite/delete its differing files. No Box copy has been performed.
+**Authorization updated October 29, 2026:** the owner lifted the Box hold and
+allows the Box folder to be updated without another confirmation. This workspace
+remains the source, including when replacing the previously differing Box PLC.
+Apply the same-version replacement/new-version retention policy, validate paths,
+and verify copied files.
+This authorizes the copy on Run Update; it does not assert that a copy has run.
 
 The October 28 comparison found matching HMI, motor3_3105, td3_31012, and
 td3_3101011_SP21 files, but different PLC project contents:
@@ -198,17 +230,25 @@ td3_3101011_SP21 files, but different PLC project contents:
 
 The directory layouts also differ: workspace code is under `Production_dev`,
 while Box currently has root `TD3-Auto`, `TD3-HMI`, and `Libraries` directories.
-Before enabling updates, establish an explicit path mapping and resolve protected
-differences. Finish Git operations and coordinate writers before capturing files;
-verify copied files by hashes. Delete only identified superseded managed files
-after replacement succeeds and their history is preserved. Never purge the entire
-Box tree or remove unrelated files. Verify resolved source/destination paths and
-every deletion target before mutation; paths must not recurse into one another.
+`tools/Copy-ToBox.ps1` copies the complete workspace tree, including Git metadata,
+without deleting destination files. It also maps `Production_dev/TD3-Auto`,
+`Production_dev/TD3-HMI`, and `Production_dev/libraries` to the existing flat Box
+folders `TD3-Auto`, `TD3-HMI`, and `Libraries`, respectively, so both layouts have
+the same current code. It verifies source stability and destination SHA-256 values.
+Run only after Git operations and export processes finish. Its local result is
+`.box-copy-result.json`; that file is execution state excluded from Git.
+Use explicit path mapping for updates; the owner authorized replacement of the
+previously differing PLC copy. Finish Git operations and coordinate writers before capturing files;
+verify copied files by hashes. Do not delete prior versions from Box as part of
+an update or mirror source-side deletions into Box. Preserve unrelated files and
+never purge the Box tree. Verify resolved source/destination paths before mutation;
+paths must not recurse into one another. Keep each version's readable exports
+alongside its corresponding project/library version.
 
 A verified local copy establishes that the Box-synced folder received the files.
 Report cloud upload completion only when Box sync status provides that evidence.
 Writing outside this workspace may require a destination-specific filesystem
-permission when writes are enabled. Box backup remains on hold, and no scheduled
+permission when writes are enabled. Box copying is authorized on Run Update; no automatic scheduled
 synchronization is enabled. The GitHub baseline push succeeded separately.
 
 Before handoff, verify internal links and source keys, check source identities,

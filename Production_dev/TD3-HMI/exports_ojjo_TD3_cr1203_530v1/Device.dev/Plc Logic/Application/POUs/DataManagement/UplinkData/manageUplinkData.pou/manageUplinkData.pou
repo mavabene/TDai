@@ -1,0 +1,95 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK manageUplinkData
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	// CanBus details.
+	CHAN: ifmDevice.CAN_CHANNEL := ifmDevice.CAN_CHANNEL.CHAN_0;
+	LHP_NodeID: USINT;
+	CYCLE_INDEX: UINT;
+	CYCLE_SUBINDEX: USINT;
+	SCREW_INDEX: UINT;
+	SCREW_START_1_SUBINDEX: USINT;
+	SCREW_START_2_SUBINDEX: USINT;
+	SCREW_DONE_1_SUBINDEX: USINT;
+	SCREW_DONE_2_SUBINDEX: USINT;
+	COP_SDOwrite_01: ifmCOP_MG.COP_SDOwrite;
+	TIMEOUT: TIME;
+	DONE: BOOL;
+	ERROR: BOOL;
+	DIAG_INFO: ifmTypes.DIAG_INFO;
+
+	// CanBus statistics
+	XMITS: LINT := 0;
+	ERRORS: LINT := 0;
+	OVERFLOWS: LINT := 0;
+	
+	// Buffer control.
+	SIZE: UINT := 10;
+	BUFFER: ARRAY[1..10] OF sCanOpenBuffer;
+	HEAD: UINT := 1;
+	TAIL: UINT := 1;
+	
+	// All times milliseconds here.
+	SYS_TIME: DWORD;
+	XMIT_LAST: DWORD;
+	XMIT_INTERVAL: DWORD := 100;
+END_VAR
+
+(********************** Implementation ****************************)
+IF NOT ENABLE_UPLINK_DATA THEN
+	RETURN;
+END_IF
+
+SYS_TIME := SysTimeGetMs();
+
+// Tail message will go through three states:
+//	- Idle (head == tail)
+//	- Ready for transmit (head <> tail), execute = false
+//	- Transmitting (head <> tail), execute = true
+//
+//	When buffering a new message, the EXECUTE member must be set false!
+//
+
+IF HEAD <> TAIL THEN
+	IF BUFFER[TAIL].EXECUTE = FALSE THEN
+		// We want to send this out on the CanBus!
+		;
+		BUFFER[TAIL].EXECUTE := TRUE;
+		
+		// @TODO: take data out of the structure and push it to COP_SDOwrite
+		COP_SDOwrite_01(xExecute := TRUE, xDone => DONE, xError => ERROR, eDiagInfo => DIAG_INFO,
+			eChannel := CHAN, usiNode := BUFFER[TAIL].NODE, uiIndex := BUFFER[TAIL].INDEX, usiSubIndex := BUFFER[TAIL].SUB_INDEX,
+			pDATA := ADR(BUFFER[TAIL].DATA), udiLen := BUFFER[TAIL].LEN, tTimeout := TIMEOUT);
+	ELSE
+		// SDO write has been called, now just wait for return.
+		COP_SDOwrite_01(xExecute := TRUE, xDone => DONE, xError => ERROR, eDiagInfo => DIAG_INFO);
+	END_IF
+	
+	IF DONE OR ERROR THEN
+		IF ERROR THEN
+			ERRORS := ERRORS + 1;
+		ELSE
+			XMITS := XMITS + 1;
+		END_IF
+		// Clear status flags.
+		COP_SDOwrite_01(xExecute := FALSE, xDone => DONE, xError => ERROR, eDiagInfo => DIAG_INFO,
+			eChannel := CHAN);
+		BUFFER[TAIL].EXECUTE := FALSE;
+		DONE := FALSE;
+		ERROR := FALSE;
+		
+		// Unbuffer message.
+		TAIL := TAIL + 1;
+		IF TAIL > SIZE THEN
+			TAIL := 1;
+		END_IF
+	END_IF
+ELSE
+	// Nothing to transmit.  Just putting the FB back into its idle state.
+	COP_SDOwrite_01(xExecute := FALSE, xDone => DONE, xError => ERROR, eDiagInfo => DIAG_INFO,
+		eChannel := CHAN);
+END_IF

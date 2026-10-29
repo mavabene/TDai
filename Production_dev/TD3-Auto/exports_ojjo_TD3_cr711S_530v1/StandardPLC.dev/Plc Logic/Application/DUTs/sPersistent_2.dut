@@ -1,0 +1,46 @@
+
+(********************** Declaration ****************************)
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)
+
+TYPE sPersistent_2 :
+STRUCT
+	NVM2_NEEDS_INIT: UDINT := 1000;
+	NVM2_FORMAT_VERSION: UDINT := 1;
+	NVM2_FORMAT_PLACEHOLDER_1: UDINT := 0;
+	NVM2_FORMAT_PLACEHOLDER_2: UDINT := 0;
+	
+	PLC_BOARD_TEMP_MAX: INT := -999;
+	PLC_CHIP_TEMP_MAX: INT := -999;
+	PLC_BOARD_TEMP_MIN: INT := 999;
+	PLC_CHIP_TEMP_MIN: INT := 999;
+	VBB15_MV_MAX: UINT := 0;
+	VBB30_MV_MAX: UINT := 0;
+	VBB15_MV_MIN: UINT := 65000;
+	VBB30_MV_MIN: UINT := 65000;
+
+	(* All the variables for calculating the leg length and resulting crowd motion. *)
+	LEG_LENGTHS_CM: ARRAY [1..LEG_LENGTHS_COUNT] OF REAL := [25.0, 35.0, 57.5, 86.5, 110.0, 155.0, 170.0, 0, 0, 0];
+	LEG_LENGTH_USED: ARRAY [1..LEG_LENGTHS_COUNT] OF BOOL := [TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE];
+
+	TCH_DOWN_SPEED: UINT := 100;
+	TCH_UP_SPEED: UINT := 100;
+	CENTRALIZER_OPEN_SPEED: UINT := 50;
+	CENTRALIZER_CLOSE_SPEED: UINT := 50;
+	CRIMPER_LEFT_OPEN_SPEED: UINT := 50;
+	CRIMPER_LEFT_CLOSE_SPEED: UINT := 50;
+	CRIMPER_RIGHT_OPEN_SPEED: UINT := 50;
+	CRIMPER_RIGHT_CLOSE_SPEED: UINT := 50;
+	UPPER_ROTARY_FWD_SPEED: UINT := 100;
+	UPPER_ROTARY_REV_SPEED: UINT := 100;
+	BLADE_UP_SPEED: UINT := 50;
+	BLADE_DOWN_SPEED: UINT := 50;
+	
+	sPersistent_2_AVAIL_01: UINT := 0;
+	sPersistent_2_AVAIL_02: UINT := 0;
+	
+	NVM2_PADDING: UDINT := 16#DEADBEEF;
+
+END_STRUCT
+END_TYPE
+
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)

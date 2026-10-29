@@ -1,0 +1,18 @@
+
+(********************** Declaration ****************************)
+FUNCTION canUintToBuffer : UINT
+VAR_INPUT
+	NUMBER: UINT;
+	pDATA: POINTER TO ARRAY [1..8] OF USINT;
+	START: UINT;
+END_VAR
+VAR
+	USI_L, USI_H: USINT;
+END_VAR
+
+(********************** Implementation ****************************)
+USI_L := TO_USINT(NUMBER AND 16#FF);
+USI_H := TO_USINT(SHR(NUMBER, 8) AND 16#FF);
+
+pDATA^[START] := USI_L;
+pDATA^[START + 1] := USI_H;

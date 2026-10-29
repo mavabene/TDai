@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsLockTargets: BOOL
+VAR_INPUT
+	
+END_VAR
+VAR
+	i: USINT := 0;
+END_VAR
+(********************** Implementation ****************************)
+// lock in targets after everything settles
+FOR i := 1 TO NUM_GPS_AXES DO
+	GPS_AXES[i].LOCKED_TARGET_POSITION := GPS_AXES[i].FILTERED_TARGET_POSITION;
+END_FOR

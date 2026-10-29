@@ -1,0 +1,21 @@
+
+(********************** Declaration ****************************)
+TYPE sScrewParams :
+STRUCT
+(*
+	This structure is used to store pnezD descriptions as well as custom recipes if changes need to be made in the field
+	
+	222 = NA
+*)
+NS_PITCH : REAL := 0;
+SCREW_LENGTH : REAL := 0;
+TRUSS_SIDE_LEG_ANGLE : REAL := 0; // side leg angle
+THIRD_LEG_VERT_ANGLE : REAL := 0;
+EMBED_LENGTH : REAL := 222;
+IE_MIN_HAMMER : REAL := 222;
+IE_MIN_EMBED : REAL := 222;
+TRUSS_TYPE : UINT := 82; // see eGPS, default to remote control
+//MOTOR_TYPE: INT := 0; //  0 - Standard; 1 - Heavy; 2 - Ojjo 2.0 aka Earth Truss 2.0
+
+END_STRUCT
+END_TYPE

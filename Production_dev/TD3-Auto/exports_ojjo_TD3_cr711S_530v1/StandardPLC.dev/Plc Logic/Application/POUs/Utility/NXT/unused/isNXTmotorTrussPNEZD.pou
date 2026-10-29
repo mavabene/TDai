@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXTmotorTrussPNEZD : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXTmotorTruss_perScrewParams :=
+	isNxtProduct_perHMI()
+	AND 
+	(SCREW_PARAMETERS_PNEZD.TRUSS_TYPE = TO_UINT(eTrussType.TRUSS_TYPE_CENTER_STRUCTURE));
+ 

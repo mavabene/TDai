@@ -1,0 +1,35 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK productInit
+VAR_INPUT
+	INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	LAST_PRODUCT_TYPE: SINT;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF INIT OR (LAST_PRODUCT_TYPE <> pNVM3^.PRODUCT_INSTALL) THEN
+	// This captures the distance the TCH needs to move up to make the bottom of the TCH flush with the top
+	//	of the newly installed TC.
+	IF isNxtProduct_perHMI() THEN
+		// Legacy NXT with bottom of TCH flush with TC only had to clear for the TCH to swing.
+		//	LOWER_CROWD_TRACK_CLEARANCE := 0;
+		// The NXT SI has the top of the Hpile top inside the TCH by 13.65 cm.
+		// HP 75 needs more clearance
+		IF pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_VAR THEN
+			LOWER_CROWD_TRACK_CLEARANCE := 20;
+		ELSE
+			LOWER_CROWD_TRACK_CLEARANCE := 13.65;
+		END_IF
+	ELSE
+		// We use the same clearance for motor and array trusses, so we 
+		LOWER_CROWD_TRACK_CLEARANCE := 25;
+	END_IF
+	// Add a clearance tolerance to make sure the TCH can swing up without interfering with the installed TC.
+	LOWER_CROWD_TRACK_CLEARANCE := LOWER_CROWD_TRACK_CLEARANCE + 5;
+	LAST_PRODUCT_TYPE := TO_SINT(pNVM3^.PRODUCT_INSTALL);
+END_IF

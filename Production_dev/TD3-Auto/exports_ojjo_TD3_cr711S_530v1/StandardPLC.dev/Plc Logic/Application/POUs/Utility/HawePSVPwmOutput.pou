@@ -1,0 +1,59 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK HawePSVPwmOutput
+(* This library cannot handle PWM channels because of limitations in the IFM libraries.  You
+	should pull this function out of here, put it into your app with a different name, then
+	uncomment the lines referencing PWM1000 and then drive them with the output of the sAxis. *)
+VAR_INPUT
+	INIT: BOOL;
+	CH_PLUS: UINT;
+	CH_MINUS: UINT;
+	PWM_MAG: WORD;
+	PWM_FREQ: WORD;
+	PWM_POSITIVE: BOOL;
+	DITHER_FREQ: WORD;
+	DITHER_VAL: WORD;
+END_VAR
+VAR_OUTPUT
+	xErrorPlus: BOOL;
+	xPreparedPlus: BOOL;
+	xOutStatePlus: BOOL;
+	eDiagInfoPlus: ifmTypes.DIAG_INFO;
+	xErrorMinus: BOOL;
+	xPreparedMinus: BOOL;
+	xOutStateMinus: BOOL;
+	eDiagInfoMinus: ifmTypes.DIAG_INFO;
+END_VAR
+VAR
+	PWM1000_PLUS: ifmOutPWM.PWM1000;
+	PWM1000_MINUS: ifmOutPWM.PWM1000;
+	DV: WORD;
+
+	ERROR_POS: BOOL;
+	DIAG_INFO_POS: ifmTypes.DIAG_INFO;
+	PREPARED_POS: BOOL;
+	CURRENT_ACTUAL_POS: UINT;
+	PWM_ACTUAL_POS: UINT;
+
+	ERROR_NEG: BOOL;
+	DIAG_INFO_NEG: ifmTypes.DIAG_INFO;
+	PREPARED_NEG: BOOL;
+	CURRENT_ACTUAL_NEG: UINT;
+	PWM_ACTUAL_NEG: UINT;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF PWM_MAG = 0 THEN
+	DV := 0;
+ELSE
+	DV := DITHER_VAL;
+END_IF;
+
+IF PWM_POSITIVE THEN
+	PWM1000_PLUS(xResetError := INIT, uiChannel := CH_PLUS, eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO, uiFrequency := PWM_FREQ, uiValue := PWM_MAG, uiDitherFrequency := DITHER_FREQ, uiDitherValue := DV, eDiagInfo => DIAG_INFO_POS, xPrepared => PREPARED_POS);
+	PWM1000_MINUS(xResetError := INIT, uiChannel := CH_MINUS, eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO, uiFrequency := PWM_FREQ, uiValue := 0, uiDitherFrequency := DITHER_FREQ, uiDitherValue := 0, eDiagInfo => DIAG_INFO_NEG, xPrepared => PREPARED_NEG);
+ELSE
+	PWM1000_PLUS(xResetError := INIT, uiChannel := CH_PLUS, eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO, uiFrequency := PWM_FREQ, uiValue := 0, uiDitherFrequency := DITHER_FREQ, uiDitherValue := 0, eDiagInfo => DIAG_INFO_POS, xPrepared => PREPARED_POS);
+	PWM1000_MINUS(xResetError := INIT, uiChannel := CH_MINUS, eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO, uiFrequency := PWM_FREQ, uiValue := PWM_MAG, uiDitherFrequency := DITHER_FREQ, uiDitherValue := DV, eDiagInfo => DIAG_INFO_NEG, xPrepared => PREPARED_NEG);
+END_IF;

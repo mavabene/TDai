@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+(* Take in a point's coordinates, return the coordinates after a 3d rotation *)
+FUNCTION ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT : Vector3D
+VAR_INPUT
+	POINT_ORIGINAL: Vector3D;
+    ROTATION: Rotation3D;
+	LHR: BOOL; // use to flip orientation to Left Hand Rule - default is RHR
+END_VAR
+VAR
+
+END_VAR
+
+(********************** Implementation ****************************)
+
+
+ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT := 
+		ROTATION_3D_INTRINSIC_YPR_DEG
+		   	(
+			POINT_ORIGINAL[rot.pX], 
+			POINT_ORIGINAL[rot.pY], 
+			POINT_ORIGINAL[rot.pZ], 
+			ROTATION[rot.YAW_DEG], 
+			ROTATION[rot.PITCH_DEG], 
+			ROTATION[rot.ROLL_DEG],
+			LHR
+			);

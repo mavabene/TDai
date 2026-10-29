@@ -1,0 +1,430 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK FileTransferUSB
+VAR_INPUT
+	sSourcePath : STRING(255);
+	sDestinationPath : STRING(255);
+	tTimeout : TIME := T#30S;
+
+	// Set TRUE when either path refers to a USB device.
+	xSourceOnUSB : BOOL;
+	xDestinationOnUSB : BOOL;
+
+	// Status supplied by the existing USB_01 function block.
+	xUSBPresent : BOOL;
+	sUSBAccessPath : STRING(255);
+END_VAR
+VAR_IN_OUT
+	// HMI or calling code sets this TRUE.
+	// This function block clears it after starting or rejecting the request.
+	xTransferRequest : BOOL;
+END_VAR
+VAR_OUTPUT
+	xBusy : BOOL;
+	xDone : BOOL;
+	xError : BOOL;
+
+	eState : eFileTransferState;
+
+	udiDestinationFileSize : UDINT;
+	eErrorCode : DWORD;
+	sErrorMessage : STRING(255);
+END_VAR
+VAR
+	
+	// Capture inputs when the request begins.
+	sSourcePathActive : STRING(255);
+	sDestinationPathActive : STRING(255);
+	sUSBAccessPathActive : STRING(255);
+	tTimeoutActive : TIME;
+
+	xSourceOnUSBActive : BOOL;
+	xDestinationOnUSBActive : BOOL;
+	xUSBRemovedDuringTransfer : BOOL;
+	xInvalidPath : BOOL;
+
+	COMMAND_FILE_TRANSFER : STRING(600);
+	CMD_FILE_TRANSFER_RESULT : WORD;
+
+	FH_FILE_TRANSFER : RTS_IEC_HANDLE := RTS_INVALID_HANDLE;
+
+	FILE_TRANSFER_FILE_SIZE : __XWORD;
+
+	ERROR_OPEN_FILE_TRANSFER : RTS_IEC_RESULT;
+	ERROR_SIZE_FILE_TRANSFER : RTS_IEC_RESULT;
+	ERROR_CLOSE_FILE_TRANSFER : RTS_IEC_RESULT;
+
+	EXEC_FILE_TRANSFER : ifmDevice.LinuxSysCallAsync;
+	ASYNC_FILE_TRANSFER : executeLinuxAsync;
+
+	USB_TON_FILE_TRANSFER : TON;
+END_VAR
+VAR CONSTANT
+	cFILE_TRANSFER_ERR_INVALID_PATH : DWORD := 10;
+	cFILE_TRANSFER_ERR_NO_USB : DWORD := 11;
+	cFILE_TRANSFER_ERR_SOURCE_NOT_FOUND : DWORD := 12;
+	cFILE_TRANSFER_ERR_COPY_FAILED : DWORD := 13;
+	cFILE_TRANSFER_ERR_DESTINATION_OPEN : DWORD := 14;
+	cFILE_TRANSFER_ERR_DESTINATION_SIZE : DWORD := 15;
+	cFILE_TRANSFER_ERR_DESTINATION_EMPTY : DWORD := 16;
+	cFILE_TRANSFER_ERR_USB_REMOVED : DWORD := 17;
+END_VAR
+(********************** Implementation ****************************)
+// Normalize the file handle.
+IF FH_FILE_TRANSFER = 0 THEN
+	FH_FILE_TRANSFER := RTS_INVALID_HANDLE;
+END_IF
+
+// Use a default timeout if the caller supplies zero.
+tTimeoutActive := tTimeout;
+
+IF tTimeoutActive <= T#0S THEN
+	tTimeoutActive := T#30S;
+END_IF
+
+// USB removal detection during an active transfer.
+IF (xSourceOnUSBActive OR xDestinationOnUSBActive) AND
+	NOT xUSBPresent THEN
+
+	xUSBRemovedDuringTransfer := TRUE;
+END_IF
+
+
+CASE eState OF
+
+
+	eFileTransferState.eFILE_TRANSFER_IDLE:
+
+		xBusy := FALSE;
+
+		IF xTransferRequest THEN
+			
+			xDone := FALSE;
+			xError := FALSE;
+			eErrorCode := 0;
+			sErrorMessage := '';
+			udiDestinationFileSize := 0;
+
+			xUSBRemovedDuringTransfer := FALSE;
+
+			// Capture all inputs so they cannot change during the transfer.
+			sSourcePathActive := sSourcePath;
+			sDestinationPathActive := sDestinationPath;
+			sUSBAccessPathActive := sUSBAccessPath;
+
+			xSourceOnUSBActive := xSourceOnUSB;
+			xDestinationOnUSBActive := xDestinationOnUSB;
+
+			tTimeoutActive := tTimeout;
+
+			IF tTimeoutActive <= T#0S THEN
+				tTimeoutActive := T#30S;
+			END_IF
+
+			// Basic path validation.
+			xInvalidPath := FALSE;
+
+			IF LEN(sSourcePathActive) = 0 THEN
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF LEN(sDestinationPathActive) = 0 THEN
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF LEFT(
+				STR := sSourcePathActive,
+				SIZE := 1
+			) <> '/' THEN
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF LEFT(
+				STR := sDestinationPathActive,
+				SIZE := 1
+			) <> '/' THEN
+				xInvalidPath := TRUE;
+			END_IF
+
+			// Prevent shell command injection and path traversal.
+			IF FIND(sSourcePathActive, '"') > 0 OR
+				FIND(sSourcePathActive, ';') > 0 OR
+				FIND(sSourcePathActive, '&') > 0 OR
+				FIND(sSourcePathActive, '|') > 0 OR
+				FIND(sSourcePathActive, '`') > 0 OR
+				FIND(sSourcePathActive, '(') > 0 OR // '$28' = '('
+				FIND(sSourcePathActive, ')') > 0 OR // '$29' = ')'
+				FIND(sSourcePathActive, '..') > 0 THEN
+
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF FIND(sDestinationPathActive, '"') > 0 OR
+				FIND(sDestinationPathActive, ';') > 0 OR
+				FIND(sDestinationPathActive, '&') > 0 OR
+				FIND(sDestinationPathActive, '|') > 0 OR
+				FIND(sDestinationPathActive, '`') > 0 OR
+				FIND(sDestinationPathActive, '(') > 0 OR
+				FIND(sDestinationPathActive, ')') > 0 OR
+				FIND(sDestinationPathActive, '..') > 0 THEN
+
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF sSourcePathActive = sDestinationPathActive THEN
+				xInvalidPath := TRUE;
+			END_IF
+
+			IF xInvalidPath THEN
+
+				xTransferRequest := FALSE;
+				eErrorCode := cFILE_TRANSFER_ERR_INVALID_PATH;
+				sErrorMessage := 'Invalid source or destination path';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSIF
+				(xSourceOnUSBActive OR xDestinationOnUSBActive) AND
+				NOT xUSBPresent THEN
+
+				// Request is rejected immediately if a required USB is absent.
+				xTransferRequest := FALSE;
+				eErrorCode := cFILE_TRANSFER_ERR_NO_USB;
+				sErrorMessage := 'Required USB device is not present';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSE
+				xBusy := TRUE;
+				eState := eFileTransferState.eFILE_TRANSFER_CHECK_SOURCE;
+			END_IF
+		END_IF
+
+
+	eFileTransferState.eFILE_TRANSFER_CHECK_SOURCE:
+
+		xBusy := TRUE;
+
+		IF xUSBRemovedDuringTransfer THEN
+
+			xTransferRequest := FALSE;
+			eErrorCode := cFILE_TRANSFER_ERR_USB_REMOVED;
+			sErrorMessage := 'USB removed while checking source file';
+			eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+		ELSIF NOT EXEC_FILE_TRANSFER.xExecute THEN
+
+			// Test source existence before attempting the copy.
+			COMMAND_FILE_TRANSFER := 'test -f "';
+			COMMAND_FILE_TRANSFER :=
+				CONCAT(
+					COMMAND_FILE_TRANSFER,
+					sSourcePathActive
+				);
+			COMMAND_FILE_TRANSFER :=
+				CONCAT(COMMAND_FILE_TRANSFER, '"');
+
+			DataStorage.prepLinuxAsync(
+				pASYNC := ADR(EXEC_FILE_TRANSFER),
+				pTON := ADR(USB_TON_FILE_TRANSFER),
+				CMD := COMMAND_FILE_TRANSFER,
+				TIMEOUT := tTimeoutActive
+			);
+
+			eState := eFileTransferState.eFILE_TRANSFER_PREPARE_TRANSFER;
+		END_IF
+
+
+	eFileTransferState.eFILE_TRANSFER_PREPARE_TRANSFER:
+
+		xBusy := TRUE;
+
+		// Wait for the asynchronous test -f command to finish.
+		IF NOT EXEC_FILE_TRANSFER.xExecute THEN
+
+			IF xUSBRemovedDuringTransfer THEN
+
+				xTransferRequest := FALSE;
+				eErrorCode := cFILE_TRANSFER_ERR_USB_REMOVED;
+				sErrorMessage := 'USB removed before transfer started';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSIF CMD_FILE_TRANSFER_RESULT <> 0 THEN
+
+				xTransferRequest := FALSE;
+				eErrorCode :=
+					cFILE_TRANSFER_ERR_SOURCE_NOT_FOUND;
+				sErrorMessage :=
+					'Source file was not found';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSE
+				// Overwrite the destination. Do not append.
+				COMMAND_FILE_TRANSFER := 'cp -f "';
+				COMMAND_FILE_TRANSFER :=
+					CONCAT(
+						COMMAND_FILE_TRANSFER,
+						sSourcePathActive
+					);
+				COMMAND_FILE_TRANSFER :=
+					CONCAT(
+						COMMAND_FILE_TRANSFER,
+						'" "'
+					);
+				COMMAND_FILE_TRANSFER :=
+					CONCAT(
+						COMMAND_FILE_TRANSFER,
+						sDestinationPathActive
+					);
+				COMMAND_FILE_TRANSFER :=
+					CONCAT(
+						COMMAND_FILE_TRANSFER,
+						'"'
+					);
+
+				DataStorage.prepLinuxAsync(
+					pASYNC := ADR(EXEC_FILE_TRANSFER),
+					pTON := ADR(USB_TON_FILE_TRANSFER),
+					CMD := COMMAND_FILE_TRANSFER,
+					TIMEOUT := tTimeoutActive
+				);
+
+				// The transfer has now started.
+				xTransferRequest := FALSE;
+
+				eState :=
+					eFileTransferState.eFILE_TRANSFER_EXECUTE_TRANSFER;
+			END_IF
+		END_IF
+
+
+	eFileTransferState.eFILE_TRANSFER_EXECUTE_TRANSFER:
+
+		xBusy := TRUE;
+
+		// Wait until cp finishes.
+		IF NOT EXEC_FILE_TRANSFER.xExecute THEN
+
+			IF xUSBRemovedDuringTransfer THEN
+
+				eErrorCode :=
+					cFILE_TRANSFER_ERR_USB_REMOVED;
+				sErrorMessage :=
+					'USB removed during file transfer';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSIF CMD_FILE_TRANSFER_RESULT <> 0 THEN
+
+				eErrorCode :=
+					cFILE_TRANSFER_ERR_COPY_FAILED;
+				sErrorMessage :=
+					'File transfer command failed';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSE
+				eState :=
+					eFileTransferState.eFILE_TRANSFER_VERIFY_DESTINATION;
+			END_IF
+		END_IF
+
+
+	eFileTransferState.eFILE_TRANSFER_VERIFY_DESTINATION:
+
+		xBusy := TRUE;
+
+		IF FH_FILE_TRANSFER = RTS_INVALID_HANDLE THEN
+
+			FH_FILE_TRANSFER := SysFileOpen(
+				szFile := sDestinationPathActive,
+				am := ACCESS_MODE.AM_READ,
+				pResult := ADR(ERROR_OPEN_FILE_TRANSFER)
+			);
+
+			IF FH_FILE_TRANSFER = RTS_INVALID_HANDLE THEN
+
+				eErrorCode :=
+					cFILE_TRANSFER_ERR_DESTINATION_OPEN;
+				sErrorMessage :=
+					'Destination file could not be opened';
+				eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+			ELSE
+				FILE_TRANSFER_FILE_SIZE :=
+					SysFileGetSize(
+						szFileName := sDestinationPathActive,
+						pResult := ADR(
+							ERROR_SIZE_FILE_TRANSFER
+						)
+					);
+
+				IF ERROR_SIZE_FILE_TRANSFER <> 0 THEN
+
+					eErrorCode :=
+						cFILE_TRANSFER_ERR_DESTINATION_SIZE;
+					sErrorMessage :=
+						'Could not determine destination file size';
+					eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+				ELSIF FILE_TRANSFER_FILE_SIZE = 0 THEN
+
+					eErrorCode :=
+						cFILE_TRANSFER_ERR_DESTINATION_EMPTY;
+					sErrorMessage :=
+						'Destination file is empty';
+					eState := eFileTransferState.eFILE_TRANSFER_ERROR;
+
+				ELSE
+					udiDestinationFileSize :=
+						TO_UDINT(FILE_TRANSFER_FILE_SIZE);
+
+					eState :=
+						eFileTransferState.eFILE_TRANSFER_COMPLETE;
+				END_IF
+			END_IF
+		END_IF
+
+
+	eFileTransferState.eFILE_TRANSFER_COMPLETE:
+
+		xBusy := FALSE;
+		xDone := TRUE;
+		xError := FALSE;
+
+		IF FH_FILE_TRANSFER <> RTS_INVALID_HANDLE THEN
+			SysFileClose(hFile := FH_FILE_TRANSFER);
+			FH_FILE_TRANSFER := RTS_INVALID_HANDLE;
+		END_IF
+
+		// Hold DONE until another request is received.
+		eState := eFileTransferState.eFILE_TRANSFER_IDLE;
+
+
+	eFileTransferState.eFILE_TRANSFER_ERROR:
+
+		xBusy := FALSE;
+		xDone := FALSE;
+		xError := TRUE;
+
+		xTransferRequest := FALSE;
+
+		// Always release the destination handle.
+		IF FH_FILE_TRANSFER <> RTS_INVALID_HANDLE THEN
+
+			ERROR_CLOSE_FILE_TRANSFER :=
+				SysFileClose(
+					hFile := FH_FILE_TRANSFER
+				);
+
+			FH_FILE_TRANSFER := RTS_INVALID_HANDLE;
+		END_IF
+
+		// Hold ERROR until another request is received.
+		eState := eFileTransferState.eFILE_TRANSFER_IDLE;
+
+END_CASE;
+
+
+// Always execute the asynchronous Linux function block.
+ASYNC_FILE_TRANSFER(
+	pASYNC := ADR(EXEC_FILE_TRANSFER),
+	pTON := ADR(USB_TON_FILE_TRANSFER),
+	wCmdOut => CMD_FILE_TRANSFER_RESULT
+);

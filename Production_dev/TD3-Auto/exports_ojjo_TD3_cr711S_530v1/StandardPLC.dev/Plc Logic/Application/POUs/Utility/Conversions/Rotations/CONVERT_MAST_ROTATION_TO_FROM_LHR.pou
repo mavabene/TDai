@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION CONVERT_MAST_ROTATION_TO_FROM_LHR : Rotation3D
+VAR_INPUT
+	FRAME_ROTATION: Rotation3D;
+END_VAR
+VAR
+END_VAR
+
+
+(********************** Implementation ****************************)
+
+
+CONVERT_MAST_ROTATION_TO_FROM_LHR[rot.YAW_DEG] := FRAME_ROTATION[rot.YAW_DEG];
+CONVERT_MAST_ROTATION_TO_FROM_LHR[rot.PITCH_DEG] := FRAME_ROTATION[rot.PITCH_DEG];
+CONVERT_MAST_ROTATION_TO_FROM_LHR[rot.ROLL_DEG] := FRAME_ROTATION[rot.ROLL_DEG];
+

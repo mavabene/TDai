@@ -1,0 +1,51 @@
+
+(********************** Declaration ****************************)
+
+
+FUNCTION ROTATE_BS_ARM : Vector3D
+(*
+   	from operator at rear of machine coordinate frame is:
+		positive x toward operator, 
+		positive y to the right, 
+		postive up, 
+		yaw ccw from above is positive,
+		pitch nose up is positive,
+		roll to left is positive
+	 Rotate the endpoint of a North–South, level Boom Swing Arm:
+      BS Pivot = [0, 0, 0]
+      Yaw Pivot   = [L, 0, 0]   (aligned N–S along negative Y)
+    Returns rotated endpoint in the original/world frame.
+*)
+
+VAR_INPUT
+    L          : LREAL;    // line length (e.g., 135.0)
+    yaw_deg    : LREAL;    // heading angle from N/S (deg), about Z
+    pitch_deg  : LREAL;    // machine pitch (deg), reversed per machine convention
+    roll_deg   : LREAL;    // machine roll (deg)
+END_VAR
+VAR
+    BS_ENDPOINT_YAW_PIVOT : Vector3D;
+	ROTATION : Rotation3D ;
+	i : USINT ;
+END_VAR
+(********************** Implementation ****************************)
+BS_ENDPOINT_YAW_PIVOT[rot.pX] := -L;
+BS_ENDPOINT_YAW_PIVOT[rot.py] := 0.0;
+BS_ENDPOINT_YAW_PIVOT[rot.pZ] := 0.0;
+
+ROTATION[rot.YAW_DEG] := yaw_deg;
+ROTATION[rot.PITCH_DEG] := pitch_deg; 
+ROTATION[rot.ROLL_DEG] := roll_deg;
+
+ROTATION := CONVERT_BS_ROTATION_TO_FROM_LHR(ROTATION);
+
+
+ROTATE_BS_ARM := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT(
+    BS_ENDPOINT_YAW_PIVOT,
+    ROTATION,
+	FALSE
+	);
+
+FOR i := 1 TO 3 DO
+	ROTATE_BS_ARM[i] := roundLReal(ROTATE_BS_ARM[i], 3);
+END_FOR

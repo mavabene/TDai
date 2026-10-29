@@ -1,0 +1,20 @@
+
+(********************** Declaration ****************************)
+FUNCTION RotateGpsTdToWorldNS : REAL // input offsets as given and rotate in world frame by given amount (YAW_BEGIN)
+VAR_INPUT
+	X_TD: REAL := 0; // offsets given by gps, + is forward of operator 
+	Y_TD: REAL := 0; // + is to the right of operator (facing forward at rear [mast end] of TD)
+	YAW_BEGIN: REAL := 0; // heading offset to rotate by as given by gps, + is moving mast to the right (CCW) of operator
+END_VAR
+VAR_OUTPUT
+	X_WORLD: REAL :=0; // final x after yaw move to align yaw arm with North-South, + forward of operator 
+	Y_WORLD: REAL :=0; // final y after yaw move, + to operators right
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+X_WORLD := X_TD * COS_DEG(YAW_BEGIN) - Y_TD * SIN_DEG(YAW_BEGIN); // rotate origin at yaw pivot by gps heading offset
+Y_WORLD := X_TD * SIN_DEG(YAW_BEGIN) + Y_TD * COS_DEG(YAW_BEGIN);
+

@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE LcStallRecovery :
+(
+	NO_LC_STALL := 0,
+	LC_STALLED_NO_RECOVERY_METHOD := 1,
+	LC_STALLED_RECOVER_WITH_ROTARY := 2,
+	LC_STALLED_RECOVER_WITH_HAMMER := 3
+);
+END_TYPE

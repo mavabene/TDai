@@ -1,0 +1,36 @@
+
+(********************** Declaration ****************************)
+FUNCTION GPSaxisReadyToTarget : BOOL  // check if gps is ready and axis is on and able to reach target
+VAR_INPUT
+	GPS_AXIS: INT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+GPSaxisReadyToTarget := FALSE;
+IF GPS_READY AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON THEN
+	IF  ( GPS_AXIS = 0 ) THEN // check 0 condition first, because there is no GPS_AXES[0], so don't go there
+		GPSaxisReadyToTarget := TRUE;
+	ELSIF GPS_AXES[GPS_AXIS].AUTOTARGET_ON AND ( GPS_AXES[GPS_AXIS].RANGE_STATUS >= TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO ) ) THEN 
+		GPSaxisReadyToTarget := TRUE;
+	END_IF
+END_IF
+
+(*
+IF ( GPS_AXIS = 0 )THEN
+	IF 
+ELSIF 
+	pNVM4^.GPS_AUTOTARGET_STATUS.GPS_WP_AUTOTARGET_ON 
+	//AND pNVM4^.GPS_AUTOTARGET_STATUS.ALL_GPS_AXES_IN_RANGE 
+	AND GPS_AXES[GPS_AXIS].AUTOTARGET_ON 
+	AND ABS(GPS_AXES[GPS_AXIS].OFFSET) < GPS_AXES[GPS_AXIS].REACH
+	AND GPS_READY 
+	THEN 
+	GPSaxisReadyToTarget := TRUE;
+ELSE
+	GPSaxisReadyToTarget := FALSE;
+END_IF
+	*)
+		

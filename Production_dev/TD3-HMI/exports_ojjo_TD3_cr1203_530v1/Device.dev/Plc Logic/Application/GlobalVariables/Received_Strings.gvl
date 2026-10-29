@@ -1,0 +1,6 @@
+
+(********************** Declaration ****************************)
+VAR_GLOBAL
+	PLC_VERSION			: STRING(20);
+	MACHINE_STATE		: STRING(50);
+END_VAR

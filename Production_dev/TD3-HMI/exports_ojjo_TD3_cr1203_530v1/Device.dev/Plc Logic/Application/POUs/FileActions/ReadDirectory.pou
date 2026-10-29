@@ -1,0 +1,75 @@
+
+(********************** Declaration ****************************)
+PROGRAM ReadDirectory
+VAR
+	fb_OpenDirectory 		: FILE.DirOpen;
+	fb_DirectoryList		: FILE.DirList;
+	fb_CloseDirectory		: FILE.DirClose;
+	fFileEntry				: FILE.FILE_DIR_ENTRY;  //Properties of entry in directory
+	hDirHandle				: FILE.CAA.HANDLE;	//Open directory Handle
+	RunState				: USINT := 255;
+	fb_StartTrig			: R_TRIG;
+	Start					: BOOL;
+	sDirectory				: FILE.CAA.FILENAME := '/home/cds-apps/PlcLogic/data/';
+	dirCount 				: ULINT;
+	fileCount				: ULINT;
+	sError					: STRING;
+	aFiles					: array [0..7] of string; 
+END_VAR
+
+(********************** Implementation ****************************)
+fb_StartTrig(CLK:= Start);
+
+IF fb_StartTrig.Q THEN
+	fb_OpenDirectory(xExecute := FALSE);
+	fb_DirectoryList(xExecute := FALSE);
+	fb_CloseDirectory(xExecute := FALSE);
+	dirCount := 0;
+	fileCount := 0;
+	RunState := 0;
+
+END_IF
+
+CASE RunState OF
+	0: //Get handle of directory
+		fb_OpenDirectory(xExecute := TRUE, sDirName := sDirectory);
+		IF fb_OpenDirectory.xDone THEN
+			hDirHandle := fb_OpenDirectory.hDir;
+			RunState := 1;
+		ELSIF fb_OpenDirectory.xError THEN
+			RunState := 100;
+		END_IF
+		
+	1: //Read through directory and count directories and files
+		fb_DirectoryList(xExecute:= TRUE, hDir := hDirHandle, deDirEntry=>fFileEntry);
+		IF fb_DirectoryList.xDone THEN
+			IF NOT fFileEntry.xDirectory THEN
+				aFiles[fileCount] := fFileEntry.sEntry;
+				fileCount := fileCount + 1;
+				
+			ELSE
+				dirCount := dirCount + 1;
+			END_IF
+			fb_DirectoryList(xExecute:= FALSE);
+		ELSIF fb_DirectoryList.eError = FILE.ERROR.NO_MORE_ENTRIES THEN
+			RunState := 2;
+		ELSIF (fb_DirectoryList.xError AND fb_DirectoryList.eError <> FILE.ERROR.NO_MORE_ENTRIES) THEN
+			RunState := 101;	
+		END_IF
+		
+	2: //close the handle
+		fb_CloseDirectory(xExecute:= TRUE, hDir := hDirHandle);
+		IF fb_CloseDirectory.xDone THEN
+			RunState := 255;
+		ELSIF fb_CloseDirectory.xError THEN
+			RunState := 102;
+		END_IF
+ELSE
+	CASE RunState OF
+		100 : sError := TO_STRING(fb_OpenDirectory.eError);
+		101 : sError := TO_STRING(fb_DirectoryList.eError);
+		102 : sError := TO_STRING(fb_CloseDirectory.eError);
+		103 : sError := 'Done';
+
+	END_CASE
+END_CASE

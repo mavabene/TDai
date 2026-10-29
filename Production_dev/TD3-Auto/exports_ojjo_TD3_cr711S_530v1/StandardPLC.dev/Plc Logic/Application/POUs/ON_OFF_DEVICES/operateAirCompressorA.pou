@@ -1,0 +1,95 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateAirCompressorA
+VAR_INPUT
+	NEEDS_INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	COMPRESSOR_START_TIME: DWORD := 0;
+
+	SUPPLY_DIAG: ifmTypes.DIAG_INFO;
+	SUPPLY_CMD: UINT;
+	SUPPLY_ERROR: BOOL;
+	SUPPLY_ACTIVATED: BOOL;
+	SUPPLY_PREPARED: BOOL;
+	
+	REQUEST_DIAG: ifmTypes.DIAG_INFO;
+	REQUEST_CMD: UINT;
+	REQUEST_ERROR: BOOL;
+	REQUEST_ACTIVATED: BOOL;
+	REQUEST_PREPARED: BOOL;
+
+END_VAR
+
+(********************** Implementation ****************************)
+(* This is the code for the older BOSS air compressor, that is used on the TD-2.0 and TD-3.0 machines.
+
+	This unit has the following interface:
+	
+	- An output to request the air compressor to run.  This goes high to say "check your safety conditions, then return
+		to me a status output that says whether you are ready to run".
+	- An input that is the air compressor status.  Unfortunately since the air compressor is 12V, this is an analog input,
+		and we monitor that for a level.
+	- An output that turns on hydraulic flow to the air compressor.  Should only be done when the compressor status shows OK.
+
+	@TODO: does not work for TD-2.
+*)
+
+IF NEEDS_INIT THEN
+	(* Start with the compressor off. *)
+	COMPRESSOR_TURNED_ON := FALSE;
+	RETURN;
+END_IF
+
+IF SET_OPERATOR_BREAK THEN
+	COMPRESSOR_TURNED_ON := FALSE;
+ELSIF NOT COMPRESSOR_TURNED_ON AND pNVM1^.AIR_COMPRESSOR_POWERED THEN
+	// Compressor not yet turned on, but wants to be turned on.
+	COMPRESSOR_TURNED_ON := TRUE;
+	COMPRESSOR_START_TIME := TIME_SECONDS;
+ELSIF COMPRESSOR_TURNED_ON AND NOT pNVM1^.AIR_COMPRESSOR_POWERED THEN
+	// Compressor currently turned on, but wants to be turned off.
+	COMPRESSOR_TURNED_ON := FALSE;
+END_IF
+
+IF AIR_COMPRESSOR_REQUEST_FORCE.FORCED THEN
+	REQUEST_CMD := TO_UINT(AIR_COMPRESSOR_REQUEST_FORCE.DOUT_STATE);
+ELSIF COMPRESSOR_TURNED_ON THEN
+	REQUEST_CMD := 1;
+ELSE
+	REQUEST_CMD := 0;
+END_IF
+
+// TD-2 and TD-3.0 use the same air compressors.  However, TD-2 jumpers together the request for the
+//		air compressor controls and the valve controlling hydraulic flow, so this output does everything.
+//		On TD-3.0, this is just a request to the control system of the air compressor to start monitoring,
+//		so further logic is needed to read the compressor status and turn the hydraulic flow on...
+OUT_AIR_COMPRESSOR_REQUEST(uiChannel := AIR_COMPRESSOR_REQUEST_POINT,
+	uiValue := REQUEST_CMD, xError => REQUEST_ERROR, eDiagInfo => REQUEST_DIAG, xPrepared => REQUEST_PREPARED,
+	xOutState => REQUEST_ACTIVATED);
+
+// Sample the air compressor status value.  The air compressor unfortunately has a 12V control system, so we have to
+//	take this in as an analog value and compare it to 0.7 * 12V ~= 8 V.
+IN_AIR_COMPRESSOR_STATUS(uiValueAnalogue => AIR_COMPRESSOR_STATUS_RAW);
+
+IF AIR_COMPRESSOR_STATUS_RAW > 8000 THEN
+	AIR_COMPRESSOR_STATUS := TRUE;
+ELSE
+	AIR_COMPRESSOR_STATUS := FALSE;
+END_IF
+
+IF AIR_COMPRESSOR_SUPPLY_FORCE.FORCED THEN
+	SUPPLY_CMD := TO_UINT(AIR_COMPRESSOR_SUPPLY_FORCE.DOUT_STATE);
+ELSIF COMPRESSOR_TURNED_ON AND AIR_COMPRESSOR_STATUS THEN
+	SUPPLY_CMD := 1;
+ELSE
+	SUPPLY_CMD := 0;
+END_IF
+
+// This is the request to the control system of the air compressor to start monitoring...
+OUT_AIR_COMPRESSOR_SUPPLY(uiChannel := AIR_COMPRESSOR_SUPPLY_POINT,
+	uiValue := SUPPLY_CMD, xError => SUPPLY_ERROR, eDiagInfo => SUPPLY_DIAG, xPrepared => SUPPLY_PREPARED,
+	xOutState => SUPPLY_ACTIVATED);
+	

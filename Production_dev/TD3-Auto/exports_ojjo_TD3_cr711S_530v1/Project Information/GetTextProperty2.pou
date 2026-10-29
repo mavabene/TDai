@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+// This function has been automatically generated from the project information.
+{attribute 'signature_flag' := '1073741824'}
+{attribute 'register_in_runtime'}
+FUNCTION GetTextProperty2 : POINTER TO WSTRING
+VAR_INPUT
+	stKey: WSTRING;
+END_VAR
+(********************** Implementation ****************************)
+IF stKey = "Author" THEN
+	GetTextProperty2 := ADR("SMK");
+ELSIF stKey = "Company" THEN
+	GetTextProperty2 := ADR("Ojjo Inc");
+ELSIF stKey = "Description" THEN
+	GetTextProperty2 := ADR("Truss Driver control software.");
+ELSIF stKey = "Project" THEN
+	GetTextProperty2 := ADR("ojjo_TD3_cr711S_530v1");
+ELSIF stKey = "Title" THEN
+	GetTextProperty2 := ADR("TD-3 control software");
+ELSE
+	GetTextProperty2 := ADR("");
+END_IF

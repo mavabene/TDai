@@ -1,0 +1,40 @@
+
+(********************** Declaration ****************************)
+TYPE sAsBuiltFoundationEvent :
+STRUCT
+    sPnezdP : STRING(21);
+	udiMessageSequence : UDINT;
+    rLatitude : REAL;
+    rLongitude : REAL;
+	iEventType : USINT;
+
+    rXOffset : REAL;
+    rYOffset : REAL;
+    rZOffset : REAL;
+    rYawOffset : REAL;
+
+    rPnezdNorthing : REAL;
+    rPnezdEasting : REAL;
+    rPnezdHeight : REAL;
+    sPnezdDescription : STRING(63);
+
+    xRtkFixed : BOOL;
+    usiRadioSignalDelay : USINT;
+    iHrms : INT;
+    iVrms : INT;
+    rPdop : REAL;
+    usiSatelliteCount : USINT;
+
+    rMastRoll : REAL;
+    rCorrectedMastPitch : REAL;
+    rGpsYaw : REAL;
+
+    uiTotalCycleTime : UINT;
+    usiTrackAssistStatus : USINT;
+
+    rFinalXSlidePosition : REAL;
+    rFinalBoomSwingPosition : REAL;
+    rFinalYawPosition : REAL;
+    rFinalZSlidePosition : REAL;
+END_STRUCT
+END_TYPE

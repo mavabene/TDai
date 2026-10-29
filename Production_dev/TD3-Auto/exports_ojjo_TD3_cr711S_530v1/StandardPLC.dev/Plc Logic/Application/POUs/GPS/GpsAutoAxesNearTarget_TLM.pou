@@ -1,0 +1,58 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsAutoAxesNearTarget_TLM : BOOL // GPS axes selected for autotarget are on target
+VAR_INPUT
+	ACTUATOR_SETTLING_REQUIRED: BOOL;
+	USE_FILTERED_OFFSETS: BOOL;
+	NEARNESS_FACTOR: REAL;
+	//MAST_PLUMB_REQUIRED: BOOL; // not needed since mast tilt corrections working
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// MAST_PLUMB_REQUIRED := FALSE;
+
+
+
+GpsAutoAxesNearTarget_TLM := 
+
+			GPS_READY 
+		AND 
+			pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON 
+// 		AND
+// 			( 
+// 					GpsAxisNearTarget(GPS_HEADING, FALSE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR) 
+// 				OR 
+// 					NOT GPS_AXES[GPS_HEADING].AUTOTARGET_ON 
+// 			) 
+		AND
+			( 
+					GpsAxisNearTarget(GPS_X, FALSE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR) 
+				OR 
+					NOT GPS_AXES[GPS_X].AUTOTARGET_ON 
+			) 
+// 		AND
+// 			( 
+// 					GpsAxisNearTarget(GPS_Y, TRUE, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, 
+// 					NEARNESS_FACTOR) 
+// 				OR 
+// 					NOT GPS_AXES[GPS_Y].AUTOTARGET_ON
+// 			) 
+// 		
+			(*
+		AND
+			(
+					(
+							( ABS(AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR) <= GPS_MAST_PITCH_ACCEPTANCE_LIMIT )
+						AND
+							( ABS(AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR) <= GPS_MAST_ROLL_ACCEPTANCE_LIMIT )
+					) 
+				OR 
+					NOT MAST_PLUMB_REQUIRED
+			) *)
+		;
+
+
+
+

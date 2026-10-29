@@ -1,0 +1,8 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK LED_CONTROL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+

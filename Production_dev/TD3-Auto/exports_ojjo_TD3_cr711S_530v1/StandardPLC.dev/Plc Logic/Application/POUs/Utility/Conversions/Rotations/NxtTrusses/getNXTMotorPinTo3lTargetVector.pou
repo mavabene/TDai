@@ -1,0 +1,39 @@
+
+(********************** Declaration ****************************)
+
+(* --- deliver TRUSS FRAME Result (TD driving north installing plumb, means third leg points SOUTH, or - x direction) --- *)
+
+FUNCTION getNXTmotorPinTo3lTargetVector : Vector3D // this is the vector to add to the target pin location to set ET2 motor truss third leg target pNEZd position, results in world frame (not including truss pitch offsets) 
+VAR_INPUT
+	PLANNED_Z_OFFSET_FROM_STD_WP_MM: REAL; // mm from gps offset typically, use planned offset because actual z offset can result in a feedback runaway issue
+	PLANNED_Z_SLIDE_MOVE: REAL; // how far up we plan to move z slide.  use zero if you want just the current x offset
+	NXT_STD_WP_TO_3LWP: Vector3D;
+	TRUSS_FRAME_3L_ANGLE: REAL;
+END_VAR
+VAR
+	TRUSS_FRAME_Z_OFFSET_FROM_WP_TO_3L_WP : REAL;
+	TRUSS_FRAME_X_DISTANCE_TRUSS_AXIS_TO_3L_AXIS: REAL; //
+
+END_VAR
+
+(********************** Implementation ****************************)
+// get location to shift target by such that if mast is pitched properly and targeted to that point, third leg will install in correct location
+
+// leave in mm!
+// convert to cm:
+//CURRENT_GPS_Z_OFFSET_TO_REF_CM := GPS_AXES[GPS_Z].OFFSET / 10.0;
+//Z_SLIDE_AVAILABLE_MOVE_MM := 10 * (AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - Z_SLIDE_MARGIN_MM -  AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR);
+
+(* -- truss frame -- *)
+// get x offset from pin x location to target x location
+
+// - get z deficit to target from expected position
+// use z offset from pin we are planning on having
+TRUSS_FRAME_Z_OFFSET_FROM_WP_TO_3L_WP := PLANNED_Z_OFFSET_FROM_STD_WP_MM - NXT_STD_WP_TO_3LWP[rot.pZ];
+
+// *** Get truss frame offset from expected z height to third leg axis 
+TRUSS_FRAME_X_DISTANCE_TRUSS_AXIS_TO_3L_AXIS := (TAN_DEG(TRUSS_FRAME_3L_ANGLE) * (TRUSS_FRAME_Z_OFFSET_FROM_WP_TO_3L_WP));
+
+// build truss frame vector
+// input height in Z, plus calculated x offset
+getNXTmotorPinTo3lTargetVector := BUILD_VECTOR(TRUSS_FRAME_X_DISTANCE_TRUSS_AXIS_TO_3L_AXIS, 0, PLANNED_Z_OFFSET_FROM_STD_WP_MM);

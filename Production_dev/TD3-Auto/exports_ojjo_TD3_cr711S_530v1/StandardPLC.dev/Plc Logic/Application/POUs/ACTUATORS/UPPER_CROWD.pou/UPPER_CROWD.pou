@@ -1,0 +1,587 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK UPPER_CROWD
+VAR_INPUT
+	INIT: BOOL;
+	pUPPER_CROWD: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	TARGET_POS: REAL;
+	TARGET_VEL: REAL;
+	TARGET_ACCEL: REAL;
+	POSITION_RAW: DINT;
+	PROFILER: BOOL := FALSE;
+	CLOSED_LOOP: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	LC_CM_TO_REVERSE: REAL := 0.0;
+	LC_START_POS: REAL := 0.0;
+	UPPER_CROWD_REVEAL_POS: REAL := 0.0;
+	UPPER_CROWD_REVEAL_START_POS: REAL;
+	UPPER_CROWD_REVEAL_START: BOOL;
+	UPPER_CROWD_START_POS: REAL;
+	
+	DRILL_AHEAD_POSITION: REAL;
+	DRILL_FINAL_POSITION: REAL;
+	WINGS_REVEALED_POSITION: REAL;
+	
+	VEL: REAL;
+	ACCEL: REAL;
+	
+	POSITION_SETPOINT: REAL;
+	DELTA_P: REAL;
+	VELOCITY_SETPOINT: REAL;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the upper crowd axis based on the top-level state of the machine.  Upper crowd is positive moving up,
+	with position measured from the top of the lower crowd's top slide block to the bottom of the upper crowd's
+	bottom slide block. *)
+VALID := TRUE;
+PROFILER := FALSE;
+CLOSED_LOOP := FALSE;
+
+// This is the one and only place that the A/B encoder values should be referenced!
+IF pNVM4^.HMI_SINTS[UPPER_CROWD_ENCODER_TYPE] = 1 THEN
+	// Siko WV5800
+	UPPER_CROWD_ENCODER_STATUS := UPPER_CROWD_ENCODER_B.CANopenState;
+	UPPER_CROWD_POS_RAW := UPPER_CROWD_POS_RAW_B;
+ELSE
+	// Default to IFM RM7012
+	UPPER_CROWD_ENCODER_STATUS := UPPER_CROWD_ENCODER_A.CANopenState;
+	UPPER_CROWD_POS_RAW := UPPER_CROWD_POS_RAW_A;
+END_IF
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(POS_RAW_TO_ENGR(pUPPER_CROWD^.FEEDBACK, pUPPER_CROWD^.SETPOINT.POSITION_RAW));
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	VALID := (UPPER_CROWD_ENCODER_STATUS = 5);
+	POSITION_RAW := TO_DINT(UPPER_CROWD_POS_RAW);
+END_IF
+Sampled(ADR(pUPPER_CROWD^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+DRILL_AHEAD_POSITION := drillAheadPosition();
+DRILL_FINAL_POSITION := finalDrillPosition();
+WINGS_REVEALED_POSITION := wingsRevealedPosition();
+
+(* Values to send to the display for monitoring screw drive. *)
+UPPER_CROWD_POSITION := pUPPER_CROWD^.FEEDBACK.POSITION_ENGR;
+
+SS_PLUG_GAP := FALSE;
+
+(* This is a bit of a hack.  The upper crowd has a substate to screw drive state, and that is when it is revealing
+	itself before the end of the screw drive.  This calculation determines whether we want manual control over lower
+	crowd position or automatic control to pull it out. *)
+IF MACHINE_MODE = SCREW_MODE AND (SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR SCREW_STATE = SCREW_STATE_UNLOAD_SCREW) THEN
+	IF isScrewModeStateChange()
+		AND (
+			(SCREW_STATE = SCREW_STATE_DRIVE_SCREW) OR
+			(SCREW_STATE = SCREW_STATE_UNLOAD_SCREW AND pNVM4^.SOFT_SOIL_ENABLED)
+		)
+		THEN
+		(* This is the entry function to screw drive state. *)
+		UPPER_CROWD_REVEAL_START := FALSE;
+		UPPER_CROWD_REVEALING := FALSE;
+		UPPER_CROWD_DONE_REVEALING := FALSE;
+	END_IF;
+
+	(* Still driving and looking for point to bring mandrel out. *)
+	IF NOT UPPER_CROWD_REVEALING AND NOT UPPER_CROWD_DONE_REVEALING THEN
+		LC_CM_TO_REVERSE := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR - runActuators_01.LOWER_CROWD_01.SCREW_END_POS;
+		// IF LC_CM_TO_REVERSE < (pNVM3^.DRILL_BIT_WING_POSITION - (pNVM1^.DRILL_BIT_LENGTH - pNVM1^.DRILL_BIT_DRIVE_PROTRUSION))
+		// Reverse either on basis of user settings or because user logic was never hit.
+		IF ((NOT pNVM4^.SOFT_SOIL_ENABLED OR (pNVM4^.SOFT_SOIL_ENABLED AND HARD_SOIL_DETECTED)) AND LC_CM_TO_REVERSE < pNVM1^.UC_END_RETRACT_HARD)
+			OR (pNVM4^.SOFT_SOIL_ENABLED AND NOT HARD_SOIL_DETECTED AND LC_CM_TO_REVERSE < pNVM4^.UC_END_RETRACT_SOFT)
+			OR (SCREW_STATE = SCREW_STATE_UNLOAD_SCREW)
+			THEN
+			(* Bring the upper crowd all the way out of the screw, this will allow us start running the rotator quicker after
+				screw drive is completed, becuase the mandrel is already pulled out of the screw. *)
+			UPPER_CROWD_REVEAL_START_POS := AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR;
+			(* We want to get the upper rotary totally out of the screw before we start pulling the lower crowd up.
+				In soft soil, not doing this can cause the drill bit to bind in the screw and yank the screw out
+				of the ground. *)
+			IF pNVM4^.SOFT_SOIL_ENABLED AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW THEN
+				// In soft soil mode, we typically pull out well before the end of the drive.  This can lead to stalls
+				//	at the very end of screw drive.  So here we retract only a short distance into the screw, then we
+				//	pull out fully in the UNLOAD state.  We just retract a bit more than the size of the soil plug
+				//	we might get.
+				UPPER_CROWD_REVEAL_POS := UPPER_CROWD_DRILL_TIP_FLUSH + DRIVE_REMAINING;
+			ELSE
+				UPPER_CROWD_REVEAL_POS := UPPER_CROWD_TRACK_POS;
+			END_IF
+			UPPER_CROWD_REVEALING := TRUE;
+			UPPER_CROWD_REVEAL_START := TRUE;
+		END_IF;
+	END_IF;
+END_IF
+
+(* Calculate UC limits for DRIVE_ASSIST depending on what is happening. *)
+
+// Calculate the desired drill position for this state first!
+IF UPPER_CROWD_REVEALING OR UPPER_CROWD_DONE_REVEALING THEN
+	UC_DRILL_DESIRED_POSITION := UPPER_CROWD_REVEAL_POS;
+ELSIF DRILL_SETUP_SOFT_SOIL = 1 THEN
+	// We can just go +/- from the plug position.
+	UC_DRILL_DESIRED_POSITION := UPPER_CROWD_SS_NORMAL;
+ELSIF DRILL_SETUP_SOFT_SOIL <> 1 THEN
+	UC_DRILL_DESIRED_POSITION := UPPER_CROWD_SS_HARD_SOIL;
+END_IF
+
+//	Always limit drill down to keep a small portion of the bit in the screw.
+UC_DRILL_DOWN_LIMIT := UPPER_CROWD_DRILL_TIP_FLUSH - pNVM1^.DRILL_BIT_LENGTH + DRILL_IN_SCREW_MINIMUM;
+IF UC_DRILL_DOWN_LIMIT < UC_DRILL_DESIRED_POSITION - 15 THEN
+	UC_DRILL_DOWN_LIMIT := UC_DRILL_DESIRED_POSITION - 15;
+END_IF
+
+// Always limit the drill up position to keep the wings outside the screw if that's the situation we're in.
+UC_DRILL_UP_LIMIT := UC_DRILL_DESIRED_POSITION + 15;
+IF pNVM3^.DRILL_BIT_WING_POSITION > 0 AND DRILL_SETUP_SOFT_SOIL <> 1 THEN
+	UC_DRILL_UP_LIMIT := wingsRevealedPosition();
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pUPPER_CROWD^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR SCREW_STATE = SCREW_STATE_UNLOAD_SCREW) AND
+	UPPER_CROWD_REVEALING
+	THEN
+	(* While at the very end of screw drive, we want to be pulling the drill out of the screw.  Sometimes this
+		will finish while the drive is happening (DRIVE_SCREW), sometimes this will take longer than the screw drive
+		and will finish in UNLOAD_SCREW. *)
+	IF UPPER_CROWD_REVEAL_START THEN
+		// Start the move out of the screw.
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			UPPER_CROWD_REVEAL_POS, UPPER_CROWD_VEL_MAX, UPPER_CROWD_ACCEL_MAX);
+		PROFILER := TRUE;
+		CLOSED_LOOP := TRUE;	
+		UPPER_CROWD_REVEAL_START := FALSE;			
+	ELSIF UPPER_CROWD_DONE_REVEALING THEN
+		(* All done, turn upper crowd off. *)
+		setOutput(ADR(pUPPER_CROWD^.OUTPUT), 0, FALSE);
+	ELSIF UPPER_CROWD_REVEALING THEN
+		// We are just ripping the bit out of the screw here.  We don't really care exactly where the upper crowd ends up,
+		//	we just want it to be pretty much out of the screw.  When the state logic determines this is complete, later
+		//	steps will exactly position the drill bit where it is needed, for next screw load, for crimp, etc.
+		IF pUPPER_CROWD^.PROFILER.STATE <> HOLD OR NOT SettledWithin(ADR(pUPPER_CROWD^.LOOP_PID), 2) THEN
+			(* Motion is already started, just run it. *)
+			PROFILER := TRUE;
+			CLOSED_LOOP := TRUE;
+		ELSE
+			(* Upper crowd has backed off, stop it. *)
+			UPPER_CROWD_REVEALING := FALSE;
+			UPPER_CROWD_DONE_REVEALING := TRUE;
+			setOutput(ADR(pUPPER_CROWD^.OUTPUT), 0, FALSE);
+		END_IF
+	END_IF
+ELSIF AUTOMATIC AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW
+	AND NOT HARD_SOIL_DETECTED AND NOT UPPER_CROWD_REVEALING AND NOT UPPER_CROWD_DONE_REVEALING THEN
+	// In soft soil, we want the drill bit to be hovering in the position it was when the screw drive started =
+	//	just above the ground.  To do this, latch the starting positions of the UC and LC, then as the LC goes
+	//	down, the UP has to go up to react.
+	DELTA_P := (LC_START_POS - AXES[AXIS_LOWER_CROWD].SETPOINT.POSITION_ENGR);
+	IF pNVM4^.SS_BIT_PROTRUSION >= 0 THEN
+		// Running SS, but with bit protruding from screw.  We don't hover over the soil at beginning of screw
+		//	drive in this case.
+		TARGET_POS := UPPER_CROWD_SS_NORMAL;
+	ELSE
+		IF DELTA_P > -pNVM4^.SS_BIT_PROTRUSION THEN
+			TARGET_POS := UPPER_CROWD_SS_NORMAL;
+			// Used to turn on air when plug gap is attained between drill and bottom of screw.
+			SS_PLUG_GAP := TRUE;
+		ELSE
+			TARGET_POS := UPPER_CROWD_START_POS + DELTA_P;
+			SS_PLUG_GAP := FALSE;
+		END_IF
+	END_IF
+	setVelAccel(TARGET_POS, pUPPER_CROWD^.FEEDBACK.POSITION_ENGR,
+		4, 1, LOWER_CROWD_VEL_SMOOTHED, 5,
+		ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pUPPER_CROWD^.SETPOINT), pUPPER_CROWD^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+
+	// Turn the integrator off.
+	pUPPER_CROWD^.PROFILER.STATE := CRUISE;
+	
+	PROFILER := FALSE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END THEN
+	// Bring drill tip down to bottom of screw.
+	IF isScrewModeStateChange() THEN
+		// Use the maximum screw velocity when running the drill through known soft soil.
+		TARGET_POS := UPPER_CROWD_DRILL_TIP_FLUSH;
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+	END_IF
+
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_LC_REWIND THEN
+	// We're just running the drill down the screw to reveal the wings.
+	IF isScrewModeStateChange() THEN
+		// Use the maximum screw velocity when running the drill through known soft soil.
+		TARGET_POS := finalDrillPosition();
+
+		// The vel and accel here want to be the same as the lower crowd, as the LC is driving back as the
+		//	drill bit is extending, keeping the drill bit out of the hard stuff until the wings are revealed.
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+	END_IF
+
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = SCREW_MODE AND NOT AUTOMATIC THEN
+	(* Enable manual controls of the upper crowd. *)
+	IF isScrewModeStateChange() THEN
+		(* This is where we return to, in manual, when the operator gets done clearing refusal. *)
+		UC_RETURN_POS := pUPPER_CROWD^.FEEDBACK.POSITION_ENGR;
+	END_IF
+
+	(* Allow the operator to manually adjust the upper crowd.  The position of the hard stop on this axis depends on the
+		position of the lower crowd. *)
+		
+	IF OPERATOR_LEVEL = eOperatorLevel.OPERATOR THEN
+		pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MAX := UPPER_CROWD_UP_LIMIT; //UPPER_CROWD_TRACK_POS;
+	ELSE
+		pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MAX := pUPPER_CROWD^.FEEDBACK.POSITION_ENGR + DRIFTER_TO_TOP - DRIFTER_TO_TOP_MIN;
+	END_IF
+
+	(* Allow the operator to manually adjust the upper crowd. *)
+	
+	(* Check to see if the hardstop protection is required.  *)
+	IF nearHardStop(pUPPER_CROWD^, JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pUPPER_CROWD^);
+	ELSE
+		(* Normal jogging. *)	
+		OUTPUT_MAX := pUPPER_CROWD^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+
+	// If we are running down with manual controls, we limit the upper crowd to the low velocity setting for the lower crowd.
+	//	This is assuming that we are assisting because of a stall, so whatever we are hitting we want to go into slowly.
+	
+	JOYSTICK_01(JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := TRUE, STEP := 200, OUTMAX := OUTPUT_MAX,
+		MAG => pUPPER_CROWD^.OUTPUT.MAGNITUDE, POSITIVE => pUPPER_CROWD^.OUTPUT.POSITIVE);
+	
+	IF (DRIFTER_TO_TOP < DRIFTER_TO_TOP_MIN AND pUPPER_CROWD^.OUTPUT.POSITIVE) OR
+		(NOT pUPPER_CROWD^.OUTPUT.POSITIVE AND NOT TARGET_PLATE_UP) OR
+		((OPERATOR_LEVEL = eOperatorLevel.OPERATOR) AND (pUPPER_CROWD^.FEEDBACK.POSITION_ENGR >= UPPER_CROWD_UP_LIMIT) AND pUPPER_CROWD^.OUTPUT.POSITIVE)
+		THEN
+		(* Don't let the operator:
+			1) Using the remote run the sled off the top of the mast!
+			2) Run the drill down on the target plate!
+			3) Run the drill into the bushing.
+		*)
+		pUPPER_CROWD^.OUTPUT.MAGNITUDE := 0;
+	END_IF
+// don't need to do this anymore because tch not coming down	
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = TRACK_MODE AND
+	(TRACK_STATE = TRACK_STATE_CLEAR_GROUND OR TRACK_STATE = TRACK_STATE_CROWDS_DOWN) AND FALSE THEN
+	(* We want to use the mandrel tip as a plumb bob to help the operator spot the X position. *)
+	IF isTrackModeStateChange() THEN
+		IF TRACK_STATE = TRACK_STATE_CLEAR_GROUND THEN
+			IF pUPPER_CROWD^.FEEDBACK.POSITION_ENGR < UPPER_CROWD_TRACK_POS THEN
+				TARGET_POS := UPPER_CROWD_TRACK_POS;
+			ELSE
+				TARGET_POS := pUPPER_CROWD^.FEEDBACK.POSITION_ENGR;
+			END_IF
+		ELSIF TRACK_STATE = TRACK_STATE_CROWDS_DOWN THEN
+			TARGET_POS := UPPER_CROWD_TRACK_POS;
+		END_IF
+
+		(* Just send mandrel to loading position. *)
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, UPPER_CROWD_VEL, UPPER_CROWD_ACCEL);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL) THEN
+	(* Just use the same position for tracking and RWP. *)
+	IF isRwpModeStateChange() THEN
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			UPPER_CROWD_TRACK_POS, UPPER_CROWD_VEL, UPPER_CROWD_ACCEL);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRILL_REVERSE) THEN
+	IF isScrewModeStateChange() THEN
+		IF pNVM3^.DRILL_BIT_WING_POSITION > 0.0 THEN
+			(* Back the drill off as far as possible without putting the wing back in the screw. *)
+			TARGET_POS := wingsRevealedPosition();
+		ELSE
+			// No wings on bit, go to the final drill position.
+			TARGET_POS := UPPER_CROWD_DRILL_TIP_FLUSH;
+		END_IF
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			//TARGET_POS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+			//TARGET_POS, UPPER_CROWD_VEL, UPPER_CROWD_ACCEL);// ie 30, 30;
+			TARGET_POS,  20, 20);
+
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_CLEAR_SPOILS) THEN
+	(* Run the drill down the screw to try to get spoils clear out of the bottom. *)
+	IF isScrewModeStateChange() THEN
+		(* @TODO: Removed this; we'll go straight to a more aggressive drilling posture for cycle time reasons.
+		IF UPPER_CROWD_DONE_REVEALING AND LC_REVEAL_STALL_COUNT = 1 THEN
+			TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+				UPPER_CROWD_SS_PLUG, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+		ELSE
+		*)
+			TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+				UPPER_CROWD_SS_CLEAR_SPOILS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+		(* END_IF *)
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE) THEN
+	(* Back the drill up far enough to unwind the drifter compliance and clear the spoils. *)
+	IF isScrewModeStateChange() THEN
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR + WING_TO_SCREW_MINIMUM, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRILL_AHEAD) THEN
+	IF isScrewModeStateChange() THEN
+		// We are allowed to predrill until the bit only has a very small amount left in the screw.
+		TARGET_POS := drillAheadPosition();
+		IF TARGET_POS < pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MIN THEN
+			TARGET_POS := pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MIN;
+		END_IF
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, pNVM1^.LC_DRIVE_VEL_LOW, pNVM1^.LC_DRIVE_VEL_LOW);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+		(
+			SCREW_STATE = SCREW_STATE_DRILL_RETURN OR
+			SCREW_STATE = SCREW_STATE_DRILL_EXTEND
+		)
+	THEN
+	(* Return to the nominal screw drive position to get ready to continue automatic drive. *)
+	IF isScrewModeStateChange() THEN
+		TARGET_POS := finalDrillPosition();
+		// Changed this so that drill extend uses the max travel speed, which helps cycle time but will hurt bit lifetime.
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = IDLE_MODE OR MACHINE_MODE = RWP_MODE OR MACHINE_MODE = FWP_MODE THEN
+	(* Don't run upper crowd in this case.  Set outputs to 0. *)
+	setOutput(ADR(pUPPER_CROWD^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_PREPARE_TO_LOAD OR
+	SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE OR
+	SCREW_STATE = SCREW_STATE_MAST_TO_TARGET OR
+	SCREW_STATE = SCREW_STATE_RETURN_TO_DRIVE OR
+	SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP OR
+	SCREW_STATE = SCREW_STATE_ASSEMBLE OR
+	SCREW_STATE = SCREW_STATE_FWP)
+	THEN
+	(* We want the mandrel to go to the loading position either (1) when preparing to have the operator
+		load a screw or (2) when we retract after driving a screw.  This operation respects pause/continue.
+		position, and respect the pause continue. *)
+
+	// Default the velocity here, then change this state by state if required.
+	TARGET_VEL := UPPER_CROWD_VEL;
+	TARGET_ACCEL := UPPER_CROWD_ACCEL;
+	IF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+		(* Nominals are for 2m screw.  When the lower crowd has moved down to accept a shorter
+			screw, the upper crowd must move up to keep the mandrel tip in the same position, as
+			the mandrel length hasn't changed! *)
+		(* New logic:
+			The upper crowd position when we start screw drive is calculated by:
+				- Start with the drill steel tip at the bottom of the chuck.
+				- Offset this back to the reference surface.
+				- Move it down the length of the current screw, this puts the drill steel tip at the tip of the screw.
+				- Move it up by the length of the drill bit, putting the drill bit tip at the tip of the screw.
+				- Move it down by the protrusion value.
+		*)
+		
+		UPPER_CROWD_DRILL_TIP_FLUSH := pNVM1^.UPPER_CROWD_DRILL_STEEL + CHUCK_BOTTOM_TO_REFERENCE - SCREW_PARAMETERS_CURRENT.SCREW_LENGTH 
+			+ (pNVM1^.DRILL_BIT_LENGTH - pNVM1^.DRILL_BIT_THREAD_LENGTH);
+	
+		// This extension is two step on a bit with wings.  Before mast slide goes down, just get the wings out of the screw.
+		IF pNVM3^.DRILL_BIT_WING_POSITION > 0.0 THEN
+			// Wings on bit, just get them out of the screw.
+			TARGET_POS := wingsRevealedPosition();
+		ELSE
+			// No wings on bit, go to the final drill position.
+			TARGET_POS := finalDrillPosition();
+		END_IF
+		
+		UPPER_CROWD_DRIVE_END_POS := TARGET_POS;
+
+		// Now if we are setup for soft soil, we want to start 5 cm above the ground, where the bit will hover.
+		//	This is only for the case where the bit is hidden in the screw in soft soil!
+		IF pNVM4^.SOFT_SOIL_ENABLED AND NOT HARD_SOIL_DETECTED THEN
+			IF pNVM4^.SS_BIT_PROTRUSION < 0 OR pNVM4^.HMI_BOOLS[SOFT_SOIL_CONE_ON_SCREW_TIP] THEN
+				TARGET_POS := UPPER_CROWD_DRILL_TIP_FLUSH + 5;
+			ELSE
+				// Soft soil with the drill bit half-in/half-out comes here.
+				TARGET_POS := UPPER_CROWD_DRILL_TIP_FLUSH - pNVM4^.SS_BIT_PROTRUSION;
+			END_IF
+		END_IF
+		UPPER_CROWD_START_POS := TARGET_POS;
+		LC_START_POS := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+		
+		// Set these up for the soft soil.
+		
+		IF pNVM4^.HMI_BOOLS[SOFT_SOIL_CONE_ON_SCREW_TIP] THEN
+			UPPER_CROWD_SS_NORMAL := UPPER_CROWD_DRILL_TIP_FLUSH - pNVM4^.HMI_SINTS[SOFT_SOIL_CONE_TIP_PROTRUSION];
+		ELSE
+			UPPER_CROWD_SS_NORMAL := UPPER_CROWD_DRILL_TIP_FLUSH - pNVM4^.SS_BIT_PROTRUSION;
+		END_IF
+		UPPER_CROWD_SS_CLEAR_SPOILS := UPPER_CROWD_DRILL_TIP_FLUSH - pNVM4^.SS_CLEAR_SPOILS;
+		UPPER_CROWD_SS_HARD_SOIL := UPPER_CROWD_DRIVE_END_POS;
+		
+		(* Some machine setups can prevent certain combinations from working, for example a 2m screw with a short
+			drill steel.  Generate error here in that case.  This will check the wing position, and the final extents! *)
+		IF TARGET_POS < AXES[AXIS_UPPER_CROWD].CONFIG.COMMAND_LIMIT_MIN OR
+			finalDrillPosition() < AXES[AXIS_UPPER_CROWD].CONFIG.COMMAND_LIMIT_MIN OR
+			drillAheadPosition() < AXES[AXIS_UPPER_CROWD].CONFIG.COMMAND_LIMIT_MIN
+			THEN
+			(* Error, we cannot get the drill bit where it has been requested! *)
+			gotoErrorState(REASON := 'Cannot move UC to meet screw tip position!');
+			RETURN;
+		END_IF
+
+	ELSIF SCREW_STATE = SCREW_STATE_RETURN_TO_DRIVE THEN
+		TARGET_POS := UC_RETURN_POS;
+		IF pUPPER_CROWD^.FEEDBACK.POSITION_ENGR > UC_RETURN_POS THEN
+			// The operator has brought the drill up in ASSIST state.  Now we are going to bring this
+			//	down.  We want this to use a speed normally used by the lower crowd when driving a screw.
+			TARGET_VEL := pNVM1^.LC_DRIVE_VEL_LOW;
+		END_IF
+	ELSIF SCREW_STATE = SCREW_STATE_FWP OR SCREW_STATE = SCREW_STATE_ASSEMBLE OR
+		SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP OR
+		(SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE AND SCREW_SIDE_LATCH = SCREW_LEFT) //OR
+		//(SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL AND SCREW_SIDE_LATCH = SCREW_LEFT) 
+		THEN
+		TARGET_POS := UPPER_CROWD_TRACK_POS;
+	ELSE
+		(* Here we want to position the upper crowd relative to the lower crowd, so that the
+			mandrel tip is always slightly revealed from the chuck.  So this does not depend on
+			the length of the screw! *)
+		UPPER_CROWD_LOAD_POS := pNVM1^.UPPER_CROWD_DRILL_STEEL + (pNVM1^.DRILL_BIT_LENGTH - pNVM1^.DRILL_BIT_THREAD_LENGTH) - pNVM1^.DRILL_BIT_LOAD_PROTRUSION;
+		TARGET_POS := UPPER_CROWD_LOAD_POS;
+		IF SCREW_PARAMETERS_CURRENT.SCREW_LENGTH > 202 THEN
+			TARGET_POS := MIN(TARGET_POS, 260);// todo make this number depend on drifter to top limits
+		END_IF
+		
+		IF SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE THEN
+			IF pUPPER_CROWD^.FEEDBACK.POSITION_ENGR > TARGET_POS THEN
+				// When we are just pulling off a screw, the drill bit is up in the chuck and will be coming down,
+				//	the lower crowd is pulling up.  So we want the bit to go down slower than the chuck goes up, so that
+				//	the bit never re-enters the screw.  As a result, the velocity used here is from the *lower crowd*!
+				TARGET_VEL := LOWER_CROWD_VEL / 2.0;
+			ELSE
+				// We didn't make it out of the ground during reveal in screw drive, so complete that here.
+				TARGET_VEL := UPPER_CROWD_VEL_MAX;
+				TARGET_ACCEL := UPPER_CROWD_ACCEL_MAX;
+			END_IF
+		END_IF
+	END_IF
+
+	IF (isScrewModeStateChange() AND SCREW_STATE <> SCREW_STATE_ASSEMBLE) OR isContinueRequested() THEN
+		// Start whatever move was prepared above.
+		TrapezoidStart(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.FEEDBACK,
+			TARGET_POS, TARGET_VEL, TARGET_ACCEL);
+	ELSIF isPauseRequested() THEN
+		(* Stop what we are doing. *)
+		TrapezoidStop(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US, pUPPER_CROWD^.CONFIG ,pUPPER_CROWD^.FEEDBACK);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	((SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) OR
+	(SCREW_STATE = SCREW_STATE_CONFIRM_MAST_CLEAR)) THEN
+	(* This requires that the state immediately before (RETRACT) has issue a motion command.
+		We just keep running that here. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSE
+	setOutput(ADR(pUPPER_CROWD^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF PROFILER THEN
+		TrapezoidRun(ADR(pUPPER_CROWD^.PROFILER), ADR(pUPPER_CROWD^.SETPOINT), TIME_US);
+	END_IF;
+	
+	IF CLOSED_LOOP THEN
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pUPPER_CROWD^.LOOP_PID), pOUTPUT := ADR(pUPPER_CROWD^.OUTPUT),
+			SP := pUPPER_CROWD^.SETPOINT, FB:= pUPPER_CROWD^.FEEDBACK, CFG := pUPPER_CROWD^.CONFIG,
+			I_ENABLED := (pUPPER_CROWD^.PROFILER.STATE = HOLD));
+	ELSE
+		pUPPER_CROWD^.SETPOINT.POSITION_ENGR := pUPPER_CROWD^.FEEDBACK.POSITION_ENGR;
+		pUPPER_CROWD^.SETPOINT.POSITION_RAW := pUPPER_CROWD^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pUPPER_CROWD);
+END_IF
+
+	(*
+	// This is a contraint put in at ESM, to keep the operator from running the bit to far below the drill bit
+	//	drilling position, as this removes lateral support from the bit and causes problems.
+	IF (SCREW_STATE = SCREW_STATE_DRIVE_ASSIST) AND
+		(NOT pUPPER_CROWD^.OUTPUT.POSITIVE)
+		THEN
+		pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MIN := (UPPER_CROWD_DRIVE_END_POS - 12.5);
+	ELSE
+		pUPPER_CROWD^.CONFIG.COMMAND_LIMIT_MIN := 0;
+	END_IF
+	*)
+	
+(*
+	IF (SCREW_STATE = SCREW_STATE_DRIVE_SCREW) AND
+		(
+			// Limit the downward motion of the drill.
+			(NOT pUPPER_CROWD^.OUTPUT.POSITIVE AND NOT (pUPPER_CROWD^.FEEDBACK.POSITION_ENGR >= UPPER_CROWD_DRIVE_END_POS - 10)) OR
+			// When running in soft soil mode, don't allow the drill to go down when lower crowd is moving.
+			//(pNVM4^.SOFT_SOIL_ENABLED AND ABS(AXES[AXIS_LOWER_CROWD].FEEDBACK.VELOCITY_ENGR) > pNVM1^.LC_DRIVE_VEL_LOW / 2) OR
+			// In soft soil mode, only allow this when we have detected hard soil; otherwise, with wing bits, operator could
+			//	attempt to push bit out of screw with this, which might deploy wings inside the screw.
+			(NOT pUPPER_CROWD^.OUTPUT.POSITIVE AND DRILL_SETUP_SOFT_SOIL = 1) OR
+			// Don't let the operator go above the nominal drilling position.
+			//	@TODO: limits in a way that we don't want in soft soil with the plug position.
+			(pUPPER_CROWD^.OUTPUT.POSITIVE AND (pUPPER_CROWD^.FEEDBACK.POSITION_ENGR >= UPPER_CROWD_DRIVE_END_POS))
+		) THEN
+		// In auto, don't allow the operator to drive the up from the nominal bit position, or down a huge amount.
+		pUPPER_CROWD^.OUTPUT.MAGNITUDE := 0;
+	ELSIF (SCREW_STATE = SCREW_STATE_DRIVE_ASSIST) AND
+		(
+			(NOT pUPPER_CROWD^.OUTPUT.POSITIVE AND NOT (pUPPER_CROWD^.FEEDBACK.POSITION_ENGR >= (UPPER_CROWD_DRIVE_END_POS - 12.5))) OR
+			((DRIFTER_AIR_OPEN_SETPOINT <> 0) AND pUPPER_CROWD^.OUTPUT.POSITIVE AND (pUPPER_CROWD^.FEEDBACK.POSITION_ENGR >= (UPPER_CROWD_DRIVE_END_POS + 5)))
+		) THEN
+		// In auto, don't allow the operator to drive down a huge amount, or up into the screw if the air is still on.
+		pUPPER_CROWD^.OUTPUT.MAGNITUDE := 0;
+	END_IF
+*)
+		

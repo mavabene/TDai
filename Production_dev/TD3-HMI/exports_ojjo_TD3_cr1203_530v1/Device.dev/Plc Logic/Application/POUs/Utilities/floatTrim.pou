@@ -1,0 +1,36 @@
+
+(********************** Declaration ****************************)
+FUNCTION floatTrim : STRING
+VAR_INPUT
+	IN: REAL;
+	DECIMALS: INT;
+END_VAR
+VAR
+	REMOVE_DOT: INT := 0;
+	DOT: INT;
+	L: INT;
+	TMP_STR: STRING;
+END_VAR
+
+(********************** Implementation ****************************)
+IF DECIMALS < 0 THEN
+	RETURN;
+END_IF
+
+TMP_STR := TO_STRING(IN);
+
+DOT := FIND(TMP_STR, '.');
+L := LEN(TMP_STR);
+
+IF DOT <> 0 AND DOT < L - DECIMALS THEN
+	IF DECIMALS = 0 THEN
+		REMOVE_DOT := 1;
+	ELSE
+		REMOVE_DOT := 0;
+	END_IF
+	floatTrim := REPLACE(TMP_STR, '', L - (DOT + DECIMALS) + REMOVE_DOT, DOT + DECIMALS + 1 - REMOVE_DOT);
+ELSIF DOT >= L - DECIMALS THEN
+	// We can't get that many decimals.
+	floatTrim := TMP_STR;
+END_IF
+

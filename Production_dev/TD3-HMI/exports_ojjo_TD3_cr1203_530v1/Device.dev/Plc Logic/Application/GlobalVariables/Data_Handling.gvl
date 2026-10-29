@@ -1,0 +1,92 @@
+
+(********************** Declaration ****************************)
+(** DataStorage vars - Data Storage runs at 100ms vs 10ms, so triggers in HMI vars might not be detected in Data Storage **)
+VAR_GLOBAL
+	
+(* As-Built snapshot handoff: written by PLC_PRG, consumed by DataStorage. *)
+stAsBuiltActiveScrew : sAsBuiltScrewEvent;
+xAsBuiltActiveScrewValid : BOOL := FALSE;
+xAsBuiltScrewReadyForQueue : BOOL := FALSE;
+
+stAsBuiltFoundation : sAsBuiltFoundationEvent;
+xAsBuiltFoundationReadyForQueue : BOOL := FALSE;
+
+(* Transition history used by the 10 ms capture method. *)
+xAsBuiltStateHistoryValid : BOOL := FALSE;
+iAsBuiltLastScrewState : INT := -1;
+iAsBuiltLastMachineMode : INT := -1;
+eAsBuiltLastScrewDriveReason : eDataCollection :=
+    eDataCollection.NO_SCREW_DRIVEN;
+
+(* Counts events that arrived while their one-slot mailbox was occupied. *)
+udiAsBuiltScrewCaptureOverruns : UDINT := 0;
+udiAsBuiltFoundationCaptureOverruns : UDINT := 0;
+xAsBuiltLastTrussCompleted : BOOL := FALSE;
+
+// DataStorage 100ms triggers
+DS_GPS_PNEZD_P_LAST : STRING(32);
+
+(* Read USB *)
+FILE_TRANSFER_SOURCE_PATH : STRING(255);
+FILE_TRANSFER_DESTINATION_PATH : STRING(255);
+
+FILE_TRANSFER_SOURCE_ON_USB : BOOL;
+FILE_TRANSFER_DESTINATION_ON_USB : BOOL;
+
+FILE_TRANSFER : FileTransferUSB;
+
+// 	FILE_TRANSFER_BUSY : BOOL;
+FILE_WRITE_BUSY : BOOL;
+FILE_READ_BUSY : BOOL;
+FILE_TRANSFER_DONE : BOOL;
+FILE_TRANSFER_ERROR : BOOL;
+FILE_TRANSFER_STATE : eFileTransferState;
+
+FILE_TRANSFER_SIZE : UDINT;
+FILE_TRANSFER_ERROR_CODE : DWORD;
+FILE_TRANSFER_ERROR_MESSAGE : STRING(255);
+
+FILE_TRANSFER_USB_PRESENT : BOOL;
+
+// Stores the complete JSON text and is later parsed
+CONFIG_JSON_READ_TEXT : STRING(16383);
+// Indicates whether the local file was read successfully;
+CONFIG_JSON_READ_TEXT_VALID : BOOL;
+
+FH_CONFIG_JSON_TEXT : RTS_IEC_HANDLE :=
+	RTS_INVALID_HANDLE;
+
+CONFIG_JSON_TEXT_BYTES_READ : LWORD;
+
+ERROR_OPEN_CONFIG_JSON_TEXT : RTS_IEC_RESULT;
+ERROR_READ_CONFIG_JSON_TEXT : RTS_IEC_RESULT;
+
+CONFIG_JSON_READ_TEXT_ATTEMPTED : BOOL;
+
+(* Parse JSON *)
+// Command: set TRUE once after CONFIG_JSON_READ_TEXT is valid.
+CONFIG_JSON_PARSE_REQUEST : BOOL := FALSE;
+
+CONFIG_JSON_PARSE_BUSY : BOOL := FALSE;
+CONFIG_JSON_PARSE_DONE : BOOL := FALSE;
+CONFIG_JSON_PARSE_ERROR : BOOL := FALSE;
+
+(* JSON reader input. *)
+CONFIG_JSON_READ_WSTRING : WSTRING(16383);
+
+// Configuration File Handing
+CONFIG_FILE_TYPE : eConfigFileType := 0;
+CONFIG_FILE_TYPE_LAST : eConfigFileType := 0;
+USB_PROCESSING: BOOL := FALSE; // used for indicator lamp
+USB_READ_WRITE_VALID: BOOL := FALSE;
+
+CONFIG_STATUS_MSG: STRING(50) := 'No Error';
+
+// temp debug
+numScrewMsgsSent : UINT := 0;
+numScrewMsgsSendFails : UINT := 0;
+numAsBuiltMsgsSent : UINT := 0;
+numAsBuiltMsgsSendFails : UINT := 0;
+DataHandlingSimCode : USINT := 0;
+
+END_VAR

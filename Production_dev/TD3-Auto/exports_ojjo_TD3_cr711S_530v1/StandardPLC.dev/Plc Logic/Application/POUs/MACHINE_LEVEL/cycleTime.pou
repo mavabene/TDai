@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION cycleTime : SYSTIME
+VAR_INPUT
+	pLastUs: POINTER TO SYSTIME;
+	pCount: POINTER TO DINT;
+END_VAR
+VAR
+	thisUs: SYSTIME;
+END_VAR
+
+(********************** Implementation ****************************)
+
+SysTimeGetUs(pUsTime := thisUs);
+cycleTime := thisUs - pLastUs^;
+pLastUs^ := thisUs;
+pCount^ := pCount^ + 1;

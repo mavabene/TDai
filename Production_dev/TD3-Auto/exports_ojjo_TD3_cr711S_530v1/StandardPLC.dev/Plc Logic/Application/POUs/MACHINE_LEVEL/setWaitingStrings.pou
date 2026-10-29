@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+FUNCTION setWaitingStrings : BOOL
+VAR_INPUT
+	LONG: STRING;
+	SHORT: STRING;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+WAITING_ON_STRING := LONG; // how long can it be?
+WAITING_ON_STRING_SHORT := SHORT; // how long can it be?

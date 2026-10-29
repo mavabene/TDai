@@ -1,0 +1,53 @@
+
+(********************** Declaration ****************************)
+// take GPS values and return world (pNEZD) values
+FUNCTION CONVERT_GPS_FRAME_TO_WORLD_FRAME : Vector3D
+VAR_INPUT
+	GPS_FRAME_VECTOR: Vector3D;
+	// reference heading, can be actual heading or reference heading - ie typically will be facing North (0°) or South (180°)
+	GPS_FRAME_ROTATION: Rotation3D; // typically [heading, 0, 0]
+END_VAR
+VAR
+	LHR_FRAME: BOOL := TRUE; // is it a LHR frame
+	LHR_FRAME_ROTATION: Rotation3D;
+	
+END_VAR
+// VAR_OUTPUT
+// 	WORLD_FRAME_VECTOR: Vector3D;
+// 	WORLD_FRAME_ROTATION: Rotation3D;
+// END_VAR
+
+
+(*  
+GPS (from operator position at rear of machine facing target plate) (LHR)
+- X is positive moving forward
+- Y is positive looking to the right
+- Z is positive going up
+- Yaw is positive going ccw looking down from above (ie machine turning to the left moving forward, must flip sign to use LHR rotation)
+- Pitch - mast top forward is positive
+- Roll - Mast top tilting left is positive
+
+World frame (pNEZd)
+- Left Hand Rule
+- Positive x is toward positive Northing
+- Positive y is toward positive Easting
+- Positive z is up
+- Positive yaw is CW looking down from above (compass dir)
+- Positive roll is (doesn’t matter, we aren’t going to roll anything for this purpose, so choose convenient reference): top rolling toward West
+- Positive pitch is toward South (must flip sign to use LHR rotation)
+
+*)
+(********************** Implementation ****************************)
+
+// put in LHR
+LHR_FRAME_ROTATION := CONVERT_GPS_ROTATION_TO_FROM_LHR(GPS_FRAME_ROTATION);
+
+// call LHR rotation
+CONVERT_GPS_FRAME_TO_WORLD_FRAME := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT(GPS_FRAME_VECTOR, LHR_FRAME_ROTATION, LHR_FRAME);
+
+(*
+NORTHING_DELTA := CONVERT_GPS_FRAME_TO_WORLD_FRAME[rot.pX];
+EASTING_DELTA := CONVERT_GPS_FRAME_TO_WORLD_FRAME[rot.pY];
+Z_DELTA := CONVERT_GPS_FRAME_TO_WORLD_FRAME[rot.pZ];
+*)
+

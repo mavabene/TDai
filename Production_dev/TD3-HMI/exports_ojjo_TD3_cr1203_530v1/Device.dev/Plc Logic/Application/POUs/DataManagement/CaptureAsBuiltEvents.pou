@@ -1,0 +1,246 @@
+
+(********************** Declaration ****************************)
+FUNCTION CaptureAsBuiltEvents 
+VAR_INPUT
+END_VAR
+VAR
+    xBeganScrewDrive : BOOL;
+    xEndScrewDrive : BOOL;
+    eFoundationTrigger : eDataCollection := eDataCollection.NO_TA_COLLECTION;
+END_VAR
+
+(********************** Implementation ****************************)
+(* This method is called from PLC_PRG every 10 ms. *)
+
+(* Capture screw setup on entry to DRIVE_SCREW. *)
+xBeganScrewDrive :=
+    ((RECEIVE_1.MACHINE_MODE_TRANSMIT =
+        td3_1.eMachineModes.SCREW_MODE)
+    AND (RECEIVE_1.SCREW_STATE_TRANSMIT =
+        td3_1.eScrewStates.SCREW_STATE_DRIVE_SCREW)
+    AND (
+        NOT xAsBuiltStateHistoryValid
+        OR (iAsBuiltLastScrewState <>
+            TO_INT(td3_1.eScrewStates.SCREW_STATE_DRIVE_SCREW))
+        OR (iAsBuiltLastMachineMode <>
+            TO_INT(td3_1.eMachineModes.SCREW_MODE))
+    ))
+	OR
+	DataHandlingSimCode = 1;
+
+IF xBeganScrewDrive THEN
+    IF xAsBuiltActiveScrewValid OR xAsBuiltScrewReadyForQueue THEN
+        (* Preserve the pending record rather than overwrite it. *)
+        udiAsBuiltScrewCaptureOverruns :=
+            udiAsBuiltScrewCaptureOverruns + 1;
+    ELSE
+        stAsBuiltActiveScrew.sPnezdP :=
+            RECEIVE_7_GPS.GPS_PNEZD_P;
+        stAsBuiltActiveScrew.udiScrewNumber :=
+            RECEIVE_1.SCREW_NUMBER_TRANSMIT;
+        stAsBuiltActiveScrew.iScrewSideCode :=
+            TO_INT(RECEIVE_1.SCREW_SIDE_LATCH);
+
+        stAsBuiltActiveScrew.rTargetEmbedment :=
+            RECEIVE_1.DRIVE_TARGET_EMBEDMENT;
+
+        stAsBuiltActiveScrew.xMastPreloadOn :=
+            TRANSMIT_2.SET_HMI_BOOLS[AUTO_PRELOAD_ON];
+        stAsBuiltActiveScrew.xAutoMastLeanCompensation :=
+            TRANSMIT_2.SET_HMI_BOOLS[
+                PRELOAD_AUTO_MAST_LEAN_COMPENSATION];
+
+        stAsBuiltActiveScrew.rClearSpoilsBitProtrusion :=
+            TRANSMIT_2.SET_SS_CLEAR_SPOILS_VALUE;
+        stAsBuiltActiveScrew.rScrewStallPressure :=
+            TRANSMIT_2.SET_SS_LC_STALL_PRESSURE_VALUE;
+        stAsBuiltActiveScrew.rScrewStallTime :=
+            TRANSMIT_2.SET_SS_LC_STALL_TIME_VALUE;
+        stAsBuiltActiveScrew.rHardSoilDetectPressure :=
+            TRANSMIT_2.SET_SS_DETECT_BAND_VALUE;
+        stAsBuiltActiveScrew.rHardSoilDetectTime :=
+            TRANSMIT_2.SET_SS_DETECT_TIME_VALUE;
+        stAsBuiltActiveScrew.iMaxStallsNormal :=
+            TRANSMIT_2.SET_SS_MAX_STALLS_VALUE;
+        stAsBuiltActiveScrew.iMaxStallsRetracted :=
+            TRANSMIT_2.SET_SS_REVEAL_MAX_STALLS_VALUE;
+
+        stAsBuiltActiveScrew.rHighestScrewDriveSpeed :=
+            TRANSMIT_2.SET_SS_DRIVE_VEL_HI_VALUE;
+        stAsBuiltActiveScrew.rLowControlPressure :=
+            TRANSMIT_2.SET_LC_DRIVE_PRESSURE_LOW_VALUE;
+        stAsBuiltActiveScrew.rLowestScrewSpeed :=
+            TRANSMIT_2.SET_SS_DRIVE_VEL_LOW_VALUE;
+        stAsBuiltActiveScrew.rHighControlPressure :=
+            TRANSMIT_2.SET_LC_DRIVE_PRESSURE_HI_VALUE;
+        stAsBuiltActiveScrew.xSoftSoilEnabled :=
+            TRANSMIT_1.SET_SOFT_SOIL_ENABLED_VALUE;
+
+        stAsBuiltActiveScrew.iHammerControlSource :=
+            TRANSMIT_1.SET_HAMMER_CONTROL_SOURCE_VALUE;
+        stAsBuiltActiveScrew.rHammerOnPressure :=
+            TRANSMIT_1.SET_HAMMER_ON_PRESSURE_VALUE;
+        stAsBuiltActiveScrew.rHammerOffPressure :=
+            TRANSMIT_1.SET_HAMMER_OFF_PRESSURE_VALUE;
+
+        (* Set valid only after the start snapshot is complete. *)
+        xAsBuiltActiveScrewValid := TRUE;
+    END_IF
+END_IF
+
+
+(* Capture screw results when the PLC changes the completion reason
+   from NEW_SCREW_DRIVE to a completion or interruption reason. *)
+xEndScrewDrive :=
+    ((eAsBuiltLastScrewDriveReason =
+        eDataCollection.NEW_SCREW_DRIVE)
+    AND (RECEIVE_6.SCREW_DRIVE_COMPLETE_REASON <>
+        eDataCollection.NEW_SCREW_DRIVE))
+	OR DataHandlingSimCode = 2;
+
+IF xEndScrewDrive
+    AND xAsBuiltActiveScrewValid
+    AND NOT xAsBuiltScrewReadyForQueue THEN
+
+    stAsBuiltActiveScrew.iScrewDriveCompleteCode :=
+        RECEIVE_6.SCREW_DRIVE_COMPLETE_REASON;
+    stAsBuiltActiveScrew.rActualEmbedment :=
+        RECEIVE_3.DRIVE_CURRENT_EMBEDMENT;
+    stAsBuiltActiveScrew.rHammerDistance :=
+        RECEIVE_3.HAMMER_DISTANCE;
+    stAsBuiltActiveScrew.xIntelligentEmbedmentTriggered :=
+        RECEIVE_3.EMBED_REDUCTION_DETECTED;
+    stAsBuiltActiveScrew.rFinalLegLength :=
+        RECEIVE_1.DRIVE_LEG_LENGTH;
+    stAsBuiltActiveScrew.rEmbedmentReduction :=
+        RECEIVE_3.EMBEDMENT_REDUCTION;
+    stAsBuiltActiveScrew.rEmbedmentReductionStructural :=
+        RECEIVE_3.EMBEDMENT_REDUCTION_STRUCTURAL;
+
+    (* Publish the completed, stable record to DataStorage. *)
+    xAsBuiltScrewReadyForQueue := TRUE;
+END_IF
+
+
+(* Detect the two intended mode-transition location samples and
+   the cap/crimp location sample. *)
+eFoundationTrigger := eDataCollection.NO_TA_COLLECTION;
+
+IF xAsBuiltStateHistoryValid THEN
+    IF ((RECEIVE_1.MACHINE_MODE_TRANSMIT =
+            td3_1.eMachineModes.RWP_MODE)
+        AND (iAsBuiltLastMachineMode =
+            TO_INT(td3_1.eMachineModes.TRACK_MODE))) 
+		OR DataHandlingSimCode = 3 THEN
+
+        eFoundationTrigger :=
+            eDataCollection.TA_COLLECT_TRACK_TO_RWP;
+
+    ELSIF ((RECEIVE_1.MACHINE_MODE_TRANSMIT =
+            td3_1.eMachineModes.SCREW_MODE)
+        AND (iAsBuiltLastMachineMode =
+            TO_INT(td3_1.eMachineModes.RWP_MODE)))
+		OR DataHandlingSimCode = 4 THEN
+
+        eFoundationTrigger :=
+            eDataCollection.TA_COLLECT_RWP_TO_SCREW;
+
+    ELSIF (TRUSS_COMPLETED
+   		AND NOT xAsBuiltLastTrussCompleted)
+		OR DataHandlingSimCode = 5 THEN
+		
+        eFoundationTrigger := eDataCollection.AB_COLLECT_CRIMP;
+    END_IF
+END_IF
+
+
+(* Snapshot all foundation-location values in the 10 ms task. *)
+IF eFoundationTrigger <> eDataCollection.NO_TA_COLLECTION THEN
+    IF xAsBuiltFoundationReadyForQueue THEN
+        (* Preserve the older pending snapshot rather than overwrite it. *)
+        udiAsBuiltFoundationCaptureOverruns :=
+            udiAsBuiltFoundationCaptureOverruns + 1;
+    ELSE
+        stAsBuiltFoundation.sPnezdP :=
+            RECEIVE_7_GPS.GPS_PNEZD_P;
+        stAsBuiltFoundation.rLatitude :=
+            RECEIVE_1.LATITUDE;
+        stAsBuiltFoundation.rLongitude :=
+            RECEIVE_1.LONGITUDE;
+        stAsBuiltFoundation.iEventType :=
+            eFoundationTrigger;
+
+        stAsBuiltFoundation.rXOffset :=
+            RECEIVE_7_GPS.GPS_AXES[GPS_X].OFFSET;
+        stAsBuiltFoundation.rYOffset :=
+            RECEIVE_7_GPS.GPS_AXES[GPS_Y].OFFSET;
+        stAsBuiltFoundation.rZOffset :=
+            RECEIVE_7_GPS.GPS_AXES[GPS_Z].OFFSET;
+        stAsBuiltFoundation.rYawOffset :=
+            RECEIVE_7_GPS.GPS_AXES[GPS_HEADING].OFFSET;
+
+        stAsBuiltFoundation.rPnezdNorthing :=
+            RECEIVE_7_GPS.GPS_PNEZD_N;
+        stAsBuiltFoundation.rPnezdEasting :=
+            RECEIVE_7_GPS.GPS_PNEZD_E;
+        stAsBuiltFoundation.rPnezdHeight :=
+            RECEIVE_7_GPS.GPS_PNEZD_Z;
+        stAsBuiltFoundation.sPnezdDescription :=
+            RECEIVE_7_GPS.GPS_PNEZD_D;
+
+        stAsBuiltFoundation.xRtkFixed :=
+            RECEIVE_7_GPS.GPS_RTK_FIXED;
+        stAsBuiltFoundation.usiRadioSignalDelay :=
+            RECEIVE_7_GPS.GPS_RTK_SIGNAL_DELAY;
+        stAsBuiltFoundation.iHrms :=
+            RECEIVE_7_GPS.GPS_HRMS;
+        stAsBuiltFoundation.iVrms :=
+            RECEIVE_7_GPS.GPS_VRMS;
+        stAsBuiltFoundation.rPdop :=
+            RECEIVE_7_GPS.GPS_PDOP;
+        stAsBuiltFoundation.usiSatelliteCount :=
+            RECEIVE_7_GPS.GPS_NUM_SAT;
+
+        stAsBuiltFoundation.rMastRoll :=
+            RECEIVE_1.ROTATOR_ANGLE;
+        stAsBuiltFoundation.rCorrectedMastPitch :=
+            RECEIVE_7_GPS.CORRECTED_MAST_PITCH;
+        stAsBuiltFoundation.rGpsYaw :=
+            RECEIVE_7_GPS.GPS_ABSOLUTE_HEADING;
+
+        stAsBuiltFoundation.usiTrackAssistStatus :=
+            RECEIVE_7_GPS.TA_STATUS_FLAG;
+
+        stAsBuiltFoundation.rFinalXSlidePosition :=
+            RECEIVE_1.X_SLIDE_POSITION;
+        stAsBuiltFoundation.rFinalBoomSwingPosition :=
+            RECEIVE_1.BOOM_SWING_ANGLE;
+        stAsBuiltFoundation.rFinalYawPosition :=
+            RECEIVE_1.TRUNION_ANGLE;
+        stAsBuiltFoundation.rFinalZSlidePosition :=
+            RECEIVE_1.Z_SLIDE_POSITION;
+
+        IF eFoundationTrigger = eDataCollection.AB_COLLECT_CRIMP THEN
+            stAsBuiltFoundation.uiTotalCycleTime :=
+                RECEIVE_6.LAST_CYCLE_TIME;
+        ELSE
+            stAsBuiltFoundation.uiTotalCycleTime :=
+                RECEIVE_6.IN_PROGRESS_CYCLE_TIME;
+        END_IF
+		eFoundationTrigger := eDataCollection.NO_TA_COLLECTION;
+        (* Set ready last, after every structure field is written. *)
+        xAsBuiltFoundationReadyForQueue := TRUE;
+    END_IF
+END_IF
+
+
+(* Save current values for edge detection on the next 10 ms call. *)
+iAsBuiltLastScrewState := RECEIVE_1.SCREW_STATE_TRANSMIT;
+iAsBuiltLastMachineMode := RECEIVE_1.MACHINE_MODE_TRANSMIT;
+eAsBuiltLastScrewDriveReason :=
+    RECEIVE_6.SCREW_DRIVE_COMPLETE_REASON;
+xAsBuiltLastTrussCompleted := TRUSS_COMPLETED;
+xAsBuiltStateHistoryValid := TRUE;
+
+// debug, reset sim trigger
+DataHandlingSimCode := 0;

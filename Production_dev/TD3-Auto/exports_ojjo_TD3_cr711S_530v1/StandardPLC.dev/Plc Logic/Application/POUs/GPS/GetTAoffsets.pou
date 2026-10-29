@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+FUNCTION GetTAoffsets : BOOL
+VAR_INPUT
+	IS_TA: BOOL;
+END_VAR
+VAR
+	index: USINT;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(*
+GPS_HEADING := 1,
+GPS_X := 2,
+GPS_Y := 3,
+GPS_Z := 4
+*)
+
+FOR index := 1 TO 4 DO
+	IF IS_TA THEN
+		TA_OFFSETS[index] := GPS_AXES[index].OFFSET;
+	ELSE
+		TA_OFFSETS[index] := 6666; // invalid
+	END_IF
+END_FOR
+

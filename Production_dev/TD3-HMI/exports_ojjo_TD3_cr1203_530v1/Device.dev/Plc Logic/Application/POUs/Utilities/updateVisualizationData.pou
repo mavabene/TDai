@@ -1,0 +1,86 @@
+
+(********************** Declaration ****************************)
+FUNCTION updateVisualizationData
+
+VAR_INPUT
+END_VAR
+
+VAR_OUTPUT
+END_VAR
+
+VAR
+	INDEX: INT;
+	TEST_X: LINT := 0;
+	TEST_Y: LINT := 0;
+	TEST_Z: LINT := 0;
+END_VAR
+(********************** Implementation ****************************)
+(* Updates that only affect HMI *)
+
+// display GPS pnezD description screw parameters
+(*
+IF GPS_READY THEN
+	;
+END_IF
+IF SCREW_PARAMS_COPY_PNEZD THEN
+	SCREW_PARAMS_CUSTOM_FROM_HMI := Visualization_Variables.SCREW_PARAMETERS_PNEZD;
+END_IF
+IF SCREW_PARAMS_LOAD_CUSTOM THEN
+	SCREW_PARAMS_CUSTOM_FROM_HMI := SCREW_PARAMS_CALLED;
+END_IF
+*)
+IF SET_KNUCKLE_TO_MAST_PITCH_DELTA THEN
+	SET_HMI_REALS[KNUCKLE_TO_MAST_PITCH_DELTA] := PITCH_ANGLE;
+	SET_KNUCKLE_TO_MAST_PITCH_DELTA := FALSE;
+END_IF
+ 
+IF COOLDOWN THEN
+    // --- Cooldown: time 2s and ignore presses ---
+    ForceTimer(IN := TRUE, PT := T#2s);
+
+    IF HMI_HAMMER_FORCE = 1 THEN
+        HMI_HAMMER_FORCE := 0;  // snap back during cooldown
+    END_IF
+
+    IF ForceTimer.Q THEN
+        ForceTimer(IN := FALSE);      // stop timer
+        COOLDOWN := FALSE;            // cooldown finished
+    END_IF
+
+ELSE
+    // --- Run/Idle ---
+    // Start run if operator selects 1 and timer isn't already running
+    IF (HMI_HAMMER_FORCE = 1) AND (NOT ForceTimer.IN) THEN
+        ForceTimer(IN := TRUE, PT := T#3s);     // begin 3s run
+    END_IF
+
+    // Keep timing the run even if operator releases 1 early
+    IF ForceTimer.IN THEN
+        ForceTimer(IN := TRUE, PT := T#3s);     // call TON every scan
+
+        // End run if 3s elapsed OR unforced
+        IF ForceTimer.Q OR (HMI_HAMMER_FORCE <> 1) THEN
+            HMI_HAMMER_FORCE := 0;       // unforce
+            COOLDOWN := TRUE;                  // enter cooldown
+            ForceTimer(IN := FALSE);           // reset; cooldown starts next scan
+        END_IF
+    END_IF
+END_IF
+
+// update graphs
+// pNEZd adjustments
+pNEZd_offsets_ZN.MeasCount := 1;
+pNEZd_offsets_ZN.RefCount := 1;
+pNEZd_offsets_NE.MeasCount := 1;
+pNEZd_offsets_NE.RefCount := 1;
+
+pNEZd_offsets_ZN.X_DATA[1] := TO_REAL(PNEZD_ADJUST_NORTHING);
+pNEZd_offsets_ZN.Y_DATA[1] := TO_REAL(PNEZD_ADJUST_Z);
+pNEZd_offsets_NE.X_DATA[1] := TO_REAL(PNEZD_ADJUST_NORTHING);
+pNEZd_offsets_NE.Y_DATA[1] := TO_REAL(PNEZD_ADJUST_EASTING);
+
+// update based on changing gps points // removed because it resets if StonEx Tablet taken out of stakeout and returned
+// IF GPS_PNEZD_P_LAST <> GPS_PNEZD_P THEN
+// 	GPS_CALIBRATE := FALSE;
+// END_IF
+GPS_PNEZD_P_LAST := GPS_PNEZD_P;

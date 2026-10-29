@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION isRotaryMotionAllowed : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isRotaryMotionAllowed := 
+	(NOT pNVM4^.HMI_BOOLS[PROXIMITY_SENSOR_INSTALLED]) 
+	OR
+	// ensure no fault on proximity sensor AND it's not alarming
+	(PROXIMITY_SENSOR_PRESENCE_CONFIRMED AND NOT (PROXIMITY_SENSOR_WARNING OR PROXIMITY_SENSOR_ALARM_ON));
+	//( PROXIMITY_SENSOR_ON_ALARM_OFF AND NOT PROXIMITY_SENSOR_ALARM_ON ) // this could happen during switching for one cycle - warning requires two cycles

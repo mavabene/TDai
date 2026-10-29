@@ -1,0 +1,53 @@
+
+(********************** Declaration ****************************)
+(* 	These var names correlate to HMI_BOOLS array values.  
+	To add persistent REALs, just add name here and call via HMI_REALS[ENUM_NAME]
+	!! If you change positions, persistent memory will be affected! !!
+	** Updates here must be made in both PLC and HMI code **
+*)
+TYPE eHMI_SettingsReals :
+(
+	KNUCKLE_TO_MAST_PITCH_DELTA := 1,
+	// TA: Track Assist
+	TA_PITCH_REDUCTION_ANGLE := 2, 
+	TA_ROLL_REDUCTION_ANGLE := 3,
+	TA_MAX_SPEED := 4,
+	TA_CORRECTION_AGGRESSION := 5,
+	NXT2_TLM_3L_ATOL_TO_WP := 6,
+	NXT2_TLM_T_ATOL_TO_WP := 7,
+	NXT_INT_VAR_MOTOR_3L_EMBED := 8,
+	NXT_VAR_3L_ANGLE := 9,
+	LC_STALL_HAMMER_TIME := 10, // time in seconds to run hammer for LC stall
+	THIRD_LEG_ANGLE_COMPENSATION := 11,
+	eHMI_SettingsReals_RESERVED_12 := 12,
+    eHMI_SettingsReals_RESERVED_13 := 13,
+    eHMI_SettingsReals_RESERVED_14 := 14,
+	eHMI_SettingsReals_RESERVED_15 := 15,
+    eHMI_SettingsReals_RESERVED_16 := 16,
+    eHMI_SettingsReals_RESERVED_17 := 17,
+    eHMI_SettingsReals_RESERVED_18 := 18,
+    eHMI_SettingsReals_RESERVED_19 := 19,
+	eHMI_SettingsReals_RESERVED_20 := 20,
+	eHMI_SettingsReals_RESERVED_21 := 21,
+    eHMI_SettingsReals_RESERVED_22 := 22,
+    eHMI_SettingsReals_RESERVED_23 := 23,
+    eHMI_SettingsReals_RESERVED_24 := 24,
+    eHMI_SettingsReals_RESERVED_25 := 25,
+    eHMI_SettingsReals_RESERVED_26 := 26,
+    eHMI_SettingsReals_RESERVED_27 := 27,
+    eHMI_SettingsReals_RESERVED_28 := 28,
+    eHMI_SettingsReals_RESERVED_29 := 29,
+    eHMI_SettingsReals_RESERVED_30 := 30,
+	eHMI_SettingsReals_RESERVED_31 := 31,
+    eHMI_SettingsReals_RESERVED_32 := 32,
+    eHMI_SettingsReals_RESERVED_33 := 33,
+    eHMI_SettingsReals_RESERVED_34 := 34,
+    eHMI_SettingsReals_RESERVED_35 := 35,
+    eHMI_SettingsReals_RESERVED_36 := 36,
+    eHMI_SettingsReals_RESERVED_37 := 37,
+    eHMI_SettingsReals_RESERVED_38 := 38,
+    eHMI_SettingsReals_RESERVED_39 := 39,
+    eHMI_SettingsReals_RESERVED_40 := 40
+	
+);
+END_TYPE

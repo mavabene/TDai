@@ -1,0 +1,61 @@
+
+(********************** Declaration ****************************)
+FUNCTION ByteArrayToReal : REAL // takes in array and returns a REAL
+
+VAR_INPUT
+	ARRAY_SIZE: INT := 4; // accept arrays of 2 - 8 BYTES
+	LITTLE_ENDIAN: BOOL := TRUE;
+	SIGNED_TWOS: BOOL := TRUE;
+	SCALE: REAL;
+	OFFSET: REAL;
+	pUSINT: POINTER TO USINT; // must pass ADR() or will kill PLC
+END_VAR
+
+VAR_IN_OUT
+	
+END_VAR
+
+VAR
+	i: INT :=0;
+	dataLWORD: LWORD :=0;
+	PACK_ONES: BOOL := FALSE; // for signed 2's Complement to get negatives
+END_VAR
+
+(********************** Implementation ****************************)
+(* Take in array of 4 BYTES and return a REAL
+	1) combine BYTES into an LWORD
+	2) scale and offset and return REAL
+
+	Planned use is for de-serializing data where the  built-in conversion doesn't work
+*)
+
+IF (TO_SINT(pUSINT^)< 0) AND (NOT LITTLE_ENDIAN) AND SIGNED_TWOS THEN // negative number
+	PACK_ONES := TRUE;
+ELSE
+	PACK_ONES := FALSE;
+END_IF
+
+dataLWORD := TO_LWORD(pUSINT^);
+FOR i := 1 TO ARRAY_SIZE - 1 DO
+	pUSINT := pUSINT + 1;
+	IF LITTLE_ENDIAN THEN
+		dataLWORD := dataLWORD + TO_LWORD(EXPT(256, i)) * TO_LWORD(pUSINT^);
+	ELSE
+		dataLWORD := dataLWORD * 256 + TO_LWORD(pUSINT^);
+	END_IF
+END_FOR
+
+IF LITTLE_ENDIAN AND (TO_SINT(pUSINT^) < 0) THEN // negative number
+	PACK_ONES := TRUE;
+END_IF
+
+IF PACK_ONES AND SIGNED_TWOS AND (ARRAY_SIZE < 8) THEN
+	dataLWORD := dataLWORD + TO_LWORD(EXPT(256, i)) * TO_LWORD(-1);
+END_IF
+
+IF SIGNED_TWOS THEN
+	ByteArrayToReal := TO_REAL(LWORD_TO_LINT(dataLWORD)) * SCALE + OFFSET;
+ELSE
+	ByteArrayToReal := TO_REAL(dataLWORD) * SCALE + OFFSET;
+END_IF
+

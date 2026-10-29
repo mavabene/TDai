@@ -1,0 +1,20 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXTmotorThirdLeg_perRemote : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isNXTmotorThirdLeg_perRemote :=
+
+		isNxtProduct_perHMI()
+		AND
+		(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) 
+// 		(getTrussType() = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+		//AND 
+		//(ABS(SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE) > 0)
+		AND
+		(getScrewSide() = eScrewSide.SCREW_CENTER) ;
+	//	(SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER) ;

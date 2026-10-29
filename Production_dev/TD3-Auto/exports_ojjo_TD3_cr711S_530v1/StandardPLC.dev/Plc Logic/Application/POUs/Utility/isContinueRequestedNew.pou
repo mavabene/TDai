@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+FUNCTION isContinueRequestedNew : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isContinueRequestedNew := (REMOTE.LMB1_RE AND NOT LAST_PAUSED);

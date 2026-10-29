@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+TYPE eMqttSlotState :
+(
+    MQTT_SLOT_EMPTY,
+    MQTT_SLOT_WRITING,
+    MQTT_SLOT_READY,
+    MQTT_SLOT_SENDING
+);
+END_TYPE

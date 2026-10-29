@@ -1,0 +1,70 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK machineInit
+VAR_INPUT
+	INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF INIT THEN
+	IF pNVM3^.MACHINE_VERSION = 0 THEN
+		LOWER_CROWD_MIN_END_POS := 44;
+		CENTRALIZER_TO_GROUND_NOMINAL := -32;
+	ELSE
+		LOWER_CROWD_MIN_END_POS := 37;
+		CENTRALIZER_TO_GROUND_NOMINAL := -14;
+	END_IF
+	//DRIFTER_TO_TOP_ESTOP := 15;
+	DRIFTER_TO_TOP_ESTOP := 10; // trying to enable disengagement of truss when going to track after crimping without required z slide movement.  Pushing it, because the lower crowd doesn't stop immediately? measured at 9.15 cm before e stopping stops it moving
+	LOWER_CROWD_UP_ESTOP := 310;
+	LOWER_CROWD_CHAIN_LIMIT := 350;
+	DRIFTER_TO_TOP_MIN := 5;
+	PITCH_BACK_ESTOP := -12;
+	PITCH_BACK_WARNING := -8;
+	PITCH_FWD_WARNING := 40;
+	BS_PIVOT_TO_YAW_PIVOT := 135.0;
+	BS_PIVOT_TO_DRILL_ROD := 270.0;
+	PITCH_PIVOT_TO_DRILL_ROD := 36.8 * 2.54;
+	PITCH_PIVOT_TO_CENTER_OF_ROTATOR_AT_MAX_Z_SLIDE := 19.2; // cm
+	ROTATOR_HEIGHT_MINIMUM := 87;
+	MAST_SLIDE_LENGTH := 197.5;
+	BASE_PITCH_PIVOT_LEN := 300.0;
+	PITCH_TRACK_POS := 8;
+	LOWER_CROWD_DOWN_WARNING := 45;
+	PITCH_PIVOT_HEIGHT := 91 * 2.54;
+
+	X_SLIDE_VEL := 4.0;
+	X_SLIDE_ACCEL := 4.0;
+	MAST_AND_Z_SLIDE_VEL := 7.0;			(* cm/second *)
+	MAST_AND_Z_SLIDE_ACCEL := 10.0;		(* cm/second/second *)
+	X_SLIDE_TRACK_POS := 15;
+	MAST_SLIDE_TRACK_POS := 185;
+	Z_SLIDE_RWP_POS := 82 + 9 * 2.54;
+	Z_SLIDE_TRACK_POS := 82 + 9 * 2.54;
+
+	(* Temperature sensor is 0 to 10 VDC, so signal raw value from 0 to 10000.  This span of 10000 corresponds
+		to -40C to 120C, so slope of 160/10000 degrees/count and offset of -40 degrees. *)
+	TEMPERATURE_SCALE_FACTOR := 160.0 / 10000.0;
+	TEMPERATURE_OFFSET := 0.0;
+	TEMPERATURE_ZERO := -40.0;
+	
+	(* Hydraulic pressure sensor is 4-20mA, and is reading from 0-5800 PSI. *)
+	PRESSURE_SCALE_FACTOR := 5800.0 / 16000.0;
+	PRESSURE_OFFSET := 4000;
+
+	BOOTUP_ERROR_DELAY_SEC := 40;
+	
+	// Calculated values that rely on machine specific dimensions, but are calculated in a machine independent way.
+	YAW_PIVOT_TO_DRILL_ROD := BS_PIVOT_TO_DRILL_ROD - BS_PIVOT_TO_YAW_PIVOT;
+	LOWER_CROWD_DOWN_ESTOP := LOWER_CROWD_MIN_END_POS - 1.0;
+	
+	Z_SLIDE_VEL := MAST_AND_Z_SLIDE_VEL;
+	Z_SLIDE_ACCEL := MAST_AND_Z_SLIDE_ACCEL;
+	MAST_SLIDE_VEL := MAST_AND_Z_SLIDE_VEL;
+	MAST_SLIDE_ACCEL := MAST_AND_Z_SLIDE_ACCEL;
+	TRUSS_COMPLETED := TRUE;
+END_IF

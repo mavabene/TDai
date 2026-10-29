@@ -1,0 +1,70 @@
+
+(********************** Declaration ****************************)
+(*
+This is the root function for GPS____NearTarget and GPS____OnTarget.  Changing this changes how they all behave.
+*)
+
+FUNCTION GpsAxisNearTarget : BOOL
+VAR_INPUT
+	GPS_AXIS: INT;
+	VEL_AND_OFFSET_SAME_SIGN: BOOL; // velocity sign to correct offset is same sign as offset
+	ACTUATOR_SETTLING_REQUIRED: BOOL;
+	USE_FILTERED_OFFSETS: BOOL; // have to ensure filtered offsets are being set in the state calling from  - in GpsUpdate
+	NEARNESS_FACTOR: REAL;
+END_VAR
+VAR
+	SIGN_SWITCHER: SINT;
+	AXIS: USINT;
+	VEL: REAL;
+	OFFSET: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+GpsAxisNearTarget := FALSE;
+
+IF VEL_AND_OFFSET_SAME_SIGN THEN
+	SIGN_SWITCHER := 1;
+ELSE
+	SIGN_SWITCHER := -1;
+END_IF
+
+// prevent /0 error on startup
+IF ACTUATOR_SETTLING_REQUIRED AND AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].FEEDBACK.RAW_PER_ENGR <> 0 THEN
+	VEL := AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].SETPOINT.VELOCITY_RAW / 
+		   AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].FEEDBACK.RAW_PER_ENGR;
+ELSE
+	VEL := 0.0;
+END_IF
+
+IF USE_FILTERED_OFFSETS THEN
+	OFFSET := GPS_AXES[GPS_AXIS].SMOOTHED_OFFSET;
+ELSE
+	OFFSET := GPS_AXES[GPS_AXIS].OFFSET;
+END_IF
+
+GpsAxisNearTarget :=
+						GPS_READY 
+					AND // on target
+						( 
+							ABS(OFFSET) < ( GPS_AXES[GPS_AXIS].TARGET_LIMIT * NEARNESS_FACTOR )
+						) 
+					AND 
+						(
+								( NOT ACTUATOR_SETTLING_REQUIRED )
+							OR //AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].LOOP_PID.SETTLED OR
+								(
+										( (VEL * OFFSET * TO_REAL(SIGN_SWITCHER)) >= 0 ) // check if moving towards target or stopped
+									AND 
+										( ABS(VEL) < 0.1 ) // TODO: not ideal, find a better way to confirm actuator is barely moving 
+								)
+							OR
+								( AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].OUTPUT.MAGNITUDE = 0 )
+						)
+						
+						(*
+						( (AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].FEEDBACK.VELOCITY_ENGR * GPS_AXES[GPS_AXIS].OFFSET * TO_REAL(SIGN_SWITCHER)) >= 0 ) AND // stopped or moving towards 0 offset  
+						(ABS(AXES[GPS_AXES[GPS_AXIS].ACTUATOR_AXIS].FEEDBACK.VELOCITY_ENGR) < 0.05) // moving slowly - actuator default speeds range 3 - 4 
+						*)
+						;
+
+

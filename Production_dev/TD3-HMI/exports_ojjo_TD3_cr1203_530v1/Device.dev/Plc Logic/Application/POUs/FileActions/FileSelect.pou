@@ -1,0 +1,56 @@
+
+(********************** Declaration ****************************)
+PROGRAM FileSelect
+VAR
+	g_FileListProvider : ifmUSA_VisuDialogs.Visu_FbFileListProvider;
+	sFileExt		: STRING := '.csv';
+	bInit: BOOL := TRUE;
+	xFileOpen: BOOL;
+	stFilter: STRING(255);
+	stFileSelected: STRING;
+	
+	g_ElemTextEditor: VisuFbElemTextEditor;
+	rtLoadFileTree: R_trig;
+END_VAR
+
+(********************** Implementation ****************************)
+rtLoadFileTree(CLK:= VisuElems.CURRENTVISU = 'P00030');
+
+IF rtLoadFileTree.Q THEN
+	 g_FileListProvider.Initialize(
+	stDirectory:='/home/cds-apps/PlcLogic/data/' , 
+	stFilter:= '*.csv'  , 
+	stFileIn:='' , 
+	stTitle:='' , 
+	iRowCount:=6 , 
+	bBrowseDirectory:=TRUE , 
+	bTouch:=TRUE );
+	bInit := FALSE;
+END_IF
+(*
+IF xFileOpen THEN
+	
+	// Create an instance of the FileListProvider if the button is clicked.
+	g_FileListProvider();
+END_IF*)
+
+	stFileSelected := g_FileListProvider.GetSelectedFileName();
+	
+	xFileOpen := xFileOpen OR g_FileListProvider.Count > 1;
+	
+	g_ElemTextEditor(
+	m_StaticPosition:= , 
+	EffectivePosition=> , 
+	m_Font:= , 
+	m_ControlVariables:= , 
+	m_iMaxLineLength:= , 
+	m_EditorEditMode:= , 
+	m_NewFilesConfiguration:= , 
+	m_iScrollbarSize:=50 , 
+	EffectiveState=> , 
+// 	EffectiveSelectedVisu=> // deprecated in newer library?
+	);
+	
+	VISU_PRG();
+	
+	

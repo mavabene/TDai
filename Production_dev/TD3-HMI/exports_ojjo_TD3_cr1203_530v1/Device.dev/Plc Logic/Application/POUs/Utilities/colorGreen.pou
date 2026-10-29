@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION colorGreen : DWORD
+VAR_INPUT
+	GREEN: UINT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+colorGreen := colorMask(0, GREEN, 0);

@@ -1,14 +1,16 @@
 # Current code inventory
 
-Selected October 28, 2026. The owner designated workspace copies as the source
+Selected October 28, 2026; project fingerprints refreshed October 29, 2026. The owner designated workspace copies as the source
 and requested tracking all existing library binaries initially. This inventory
 identifies the copied baseline; it does not establish deployed versions, a
 successful compile, or that each library is a resolved project dependency.
 
-The owner reported applying the ASIN bounds correction in CODESYS. The supplied
-export archives still identify the original review snapshot; that reported fix
-has not been verified in a fresh readable export. Do not assume project and
-export contents are synchronized merely because their version names match.
+The October 29 CODESYS extraction confirms the ASIN bounds correction in the
+current saved PLC project. Original ZIP archives remain historical review inputs;
+current loose export directories were compared with newly generated output.
+See [CODESYS_EXPORTS](CODESYS_EXPORTS.md) for source hashes, coverage, and the
+unresolved-library limitations. This table fingerprints binary/archive inputs;
+readable-export validation is recorded there separately.
 
 The [original assessment baseline](SOURCE_BASELINE.md) preserves the provenance
 of the earlier review. [DEVELOPMENT](DEVELOPMENT.md) owns the update and backup
@@ -16,9 +18,9 @@ workflow, including the hold on the differing Box PLC project.
 
 | Workspace file | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v1.project` | 3123180 | `fd5fc26baf2eb8694bb4a43ca07fa4628548cb3b5e1e1d4f9e7096a3bde8e1c3` |
+| `Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v1.project` | 3120334 | `eb39fe01c8bf5dcdc873e062de2177c10bf91aa55d363a1769d989c049a8b3d1` |
 | `Production_dev/TD3-Auto/exports_ojjo_TD3_cr711S_530v1.zip` | 517681 | `a6a5631cf65a7353bffe910c6bf18b8044e5a59df4071fb1e249fc62888f8ea5` |
-| `Production_dev/TD3-HMI/ojjo_TD3_cr1203_530v1.project` | 9918960 | `47158217a2f81c311b9412fabb4169662c06093350027a679543fd5194966dc8` |
+| `Production_dev/TD3-HMI/ojjo_TD3_cr1203_530v1.project` | 9948704 | `ad4fb78de83fa85d38f8e1bafd03178d6fb3d57bd2586765ce9490395fd65af3` |
 | `Production_dev/TD3-HMI/exports_ojjo_TD3_cr1203_530v1.zip` | 276031 | `3d23432e7fb07d3079c295c0a35548edecdf9fa5c699348e04b7c6db6a711cb5` |
 | `Library/gps.library` | 255954 | `3e2f53993dd7857e2326ad74e3a435ab74e381d9a9e84eb63afe73978ff71b32` |
 | `Library/motor3.library` | 205828 | `bb73e4983983f8fd609dd95d873311fd355deac48db8ef98dd06953a8f8fa188` |

@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+FUNCTION CONVERT_WORLD_ROTATION_TO_FROM_LHR : Rotation3D
+VAR_INPUT
+	FRAME_ROTATION: Rotation3D;
+END_VAR
+VAR
+END_VAR
+
+(*
+Truss in World (pNEZd) coordinate frame
+- Assume Truss aligned EW
+Left Hand Rule:
+- Positive x is toward positive Northing
+- Positive y is toward positive Easting
+- Positive z is up
+- Positive yaw is CW looking down from above (compass dir)
+- Positive roll is (we aren’t doing anything with roll, so choose convenient reference): top rolling toward West
+- Positive pitch is top leaning toward South (MUST FLIP SIGN to use LHR rotation matrix)
+*)
+(********************** Implementation ****************************)
+
+
+CONVERT_WORLD_ROTATION_TO_FROM_LHR[rot.YAW_DEG] := FRAME_ROTATION[rot.YAW_DEG];
+CONVERT_WORLD_ROTATION_TO_FROM_LHR[rot.PITCH_DEG] := - FRAME_ROTATION[rot.PITCH_DEG];
+CONVERT_WORLD_ROTATION_TO_FROM_LHR[rot.ROLL_DEG] := FRAME_ROTATION[rot.ROLL_DEG];
+

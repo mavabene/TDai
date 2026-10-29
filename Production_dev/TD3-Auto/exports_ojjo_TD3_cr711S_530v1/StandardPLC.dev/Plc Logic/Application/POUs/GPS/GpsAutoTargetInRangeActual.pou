@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+(*
+	Determine whether gps auto-targeting is possible given actuator limits for active autotargeting axes.
+	NOTE: this does NOT account for an axis out of range that is not selected for autotarget.  
+	If that is desired use GpsTargetInRangeActual
+*)
+FUNCTION GpsAutoTargetInRangeActual : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	i: INT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+GpsAutoTargetInRangeActual := FALSE;
+GpsAutoTargetInRangeActual := GPS_READY AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON AND
+						( GPS_AXES[GPS_HEADING].RANGE_STATUS >= TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO ) ) AND
+						( GPS_AXES[GPS_X].RANGE_STATUS >= TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO ) ) AND
+						( GPS_AXES[GPS_Y].RANGE_STATUS >= TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO ) ) AND
+						( GPS_AXES[GPS_Z].RANGE_STATUS >= TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO ) )
+						;
+	

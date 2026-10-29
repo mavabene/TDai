@@ -1,0 +1,46 @@
+
+(********************** Declaration ****************************)
+FUNCTION isStartAllowed : bool
+VAR_INPUT
+END_VAR
+VAR
+	GPS_X_TOLERANCE: SINT := 50;
+END_VAR
+
+(********************** Implementation ****************************)
+// Default is disallowed.
+isStartAllowed := FALSE;
+
+// We limit the conditions under which starting a screw drive is allowed.
+IF ABS(BASE_ROLL_FILTERED_SLOW) > pNVM4^.MAX_ROLL_START THEN
+	gotoErrorState('Cannot start, frame ROLL too large');
+ELSIF ABS(BASE_PITCH_FILTERED_SLOW) > pNVM4^.MAX_PITCH_FWD_START THEN
+	gotoErrorState('Cannot start, frame PITCH FWD too large');
+ELSIF ABS(BASE_PITCH_FILTERED_SLOW) > pNVM4^.MAX_PITCH_BACK_START THEN
+	gotoErrorState('Cannot start, frame PITCH BACK too large');
+ELSIF ABS(AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR) > pNVM4^.MAX_BS_START THEN
+	gotoErrorState('Cannot start, BOOM SWING range');
+ELSIF 	GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS 
+		AND isNXTmotorTruss_perScrewParams() 
+		AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_3RD_LEG_X_ADJUST 
+		AND NOT
+			(
+				//GpsAutoAxesNearTarget(FALSE, FALSE, 1, 2) AND
+				//GpsAxisNearTarget(GPS_X, FALSE, FALSE, FALSE, 2.0) AND
+				//ABS(GPS_AXES[GPS_X].OFFSET) < GPS_X_TOLERANCE AND
+				(
+					(SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER AND GPS_THIRD_LEG_ADJUST_ON) OR
+					(SCREW_SIDE_LATCH <> eScrewSide.SCREW_CENTER AND NOT GPS_THIRD_LEG_ADJUST_ON)
+				)
+			)
+		THEN
+
+		gotoErrorState('Cannot start, check screwside vs position');
+				(*  match leg selection to target
+					if gps AND
+						if center leg and 3rd leg adjust on and on target then continue  OR
+						if side leg and not 3rd leg adjust on and on target  *)
+			
+ELSE
+	isStartAllowed := TRUE;
+END_IF

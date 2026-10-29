@@ -1,0 +1,28 @@
+
+(********************** Declaration ****************************)
+FUNCTION isTrussBeingAssembled : bool
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isTrussBeingAssembled :=
+
+	  	AUTOMATIC
+	AND
+		(MACHINE_MODE = SCREW_MODE)
+	AND
+		(
+				(SCREW_STATE = SCREW_STATE_ASSEMBLE)
+			OR
+				(SCREW_STATE = SCREW_STATE_CRIMP)
+			OR
+				(SCREW_STATE = SCREW_STATE_FWP)
+			OR	
+				(SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP)
+			OR
+				(SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS)
+		)
+		;
+	

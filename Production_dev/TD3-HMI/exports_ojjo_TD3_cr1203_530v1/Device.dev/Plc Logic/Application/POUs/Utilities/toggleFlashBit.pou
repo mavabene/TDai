@@ -1,0 +1,21 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK toggleFlashBit
+
+VAR_INPUT
+END_VAR
+
+VAR_OUTPUT
+	FlashBit	: BOOL;
+END_VAR
+
+VAR
+	FLASH_TIME	: TIME	:= T#1s;
+	TON_1		: TON;
+	TON_2		: TON;
+END_VAR
+(********************** Implementation ****************************)
+TON_1(IN := NOT(TON_2.Q), PT := FLASH_TIME);
+TON_2(IN := TON_1.Q, PT := FLASH_TIME);
+
+FlashBit := TON_1.Q;

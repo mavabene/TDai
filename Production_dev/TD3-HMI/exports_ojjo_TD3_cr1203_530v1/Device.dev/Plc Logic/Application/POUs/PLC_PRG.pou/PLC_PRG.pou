@@ -1,0 +1,152 @@
+
+(********************** Declaration ****************************)
+PROGRAM PLC_PRG
+VAR
+	COUNT: DINT := 0;
+	LED_CONTROL_01: LED_CONTROL;
+	NODE_STATUS_01: NODE_STATUS;
+	KARTECH_ANALOG_ERRORS_01: KARTECH_ANALOG_ERRORS;
+	updateTransmitPlcVars_01: updateTransmitPlcVars;
+	interpretReceivePlcVars_01: interpretReceivePlcVars;
+	loginCheck_01: loginCheck;
+	manageUplinkData_01: manageUplinkData;
+
+	(* Below is the FB instance with initial values to hide splash screen and show CODESYS visualisation if a visualization exists in the application. In this case 
+	Visu_Default is displayed. This FB is executed for once due to initial value set to xExecute input at the first scan cycle of the device *)
+	fbHideSplashScreen	: ifmDevice.HideSplashScreen 	:= (xExecute := TRUE, xHide := TRUE);
+
+	loadSplashScreen_01: ifmDevice.LoadSplashScreen;
+	xSplashDone: BOOL := FALSE;
+	xSplashError: BOOL := FALSE;
+	DIAG_SPLASH: ifmTypes2.eDIAG_INFO;
+	
+	SetTouchOptimisationMode_01: ifmDevice.SetTouchOptimisationMode;
+	xTouchDone: BOOL := FALSE;
+	xTouchError: BOOL := FALSE;
+	DIAG_TOUCH: ifmTypes2.eDIAG_INFO;
+	
+	(* Find rising trigger of key press event *)
+	fbRTrig		: ARRAY[0..77] OF Standard.R_TRIG;
+ 
+	(* Find falling trigger of key release event *)
+	fbFTrig		: ARRAY[0..77] OF Standard.F_TRIG;
+
+	GET_DATE_TIME_01: ifmDevice.GetSysTimeCyclic;
+
+	BootIntoRecovery_01: ifmDevice.BootIntoRecovery;
+	DONE: BOOL;
+	ERROR: BOOL;
+	DIAG: ifmTypes2.eDIAG_INFO;
+	INIT: BOOL := TRUE;
+	DAYS: UINT;
+	HOURS: UINT;
+	MINUTES: UINT;
+	SECONDS: UINT;
+
+	INFO_BASIC: ifmDevice.stSYS_INFO_BASIC;
+	GET_SYS_INFO_01:ifmDevice.GetSysInfo;
+	INFO_EXECUTE: BOOL := TRUE;
+	INFO_DONE: BOOL := FALSE;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF INFO_EXECUTE AND NOT INFO_DONE THEN
+	GET_SYS_INFO_01(xExecute := INFO_EXECUTE, xDone => INFO_DONE, stSysInfoBasic => INFO_BASIC);
+	HMI_sDevice_FWver := INFO_BASIC.sDevice_FWver;	
+	HMI_sDeviceHWver := INFO_BASIC.sDevice_HWver;	
+	HMI_sDevice_SerialNum := INFO_BASIC.sDevice_SerialNum;	
+	HMI_sDevice_ArticleNum := INFO_BASIC.sDevice_ArticleNum;	
+	HMI_sDevice_ArticleRev := INFO_BASIC.sDevice_ArticleRev;	
+	HMI_sDevice_ArticleName := INFO_BASIC.sDevice_ArticleName;	
+END_IF
+
+HMI_WATCHDOG := SysTimeGetMs(); //HMI_WATCHDOG + 1;
+
+(* Hide splash screen and show CODESYS application visualization *)
+fbHideSplashScreen(
+	xExecute	:= ,
+	xHide		:= ,
+	xDone		=> , 
+	xError		=> , 
+	eDiagInfo	=> );
+
+//LED_CONTROL_01();
+IF COUNT = 0 THEN
+	manageNvmUpdates();
+END_IF
+NODE_STATUS_01();
+KARTECH_ANALOG_ERRORS_01();
+updateVisualizationData();
+updateTransmitPlcVars_01();
+interpretReceivePlcVars_01();
+loginCheck_01();
+manageUplinkData_01();
+CaptureAsBuiltEvents();
+
+GET_DATE_TIME_01(xEnable := TRUE, stDateTime => DATE_TIME, xError => ERROR, eDiagInfo => DIAG);
+IF NOT ERROR AND DIAG = ifmTypes2.eDIAG_INFO.STAT_DONE THEN
+	IF INIT THEN
+		INIT := FALSE;
+
+		IF DATE_TIME.uiHour >= NVM.POWERDOWN_DATE_TIME.uiHour THEN
+			HOURS := DATE_TIME.uiHour - NVM.POWERDOWN_DATE_TIME.uiHour;
+		ELSE
+			HOURS := 24 - (NVM.POWERDOWN_DATE_TIME.uiHour - DATE_TIME.uiHour);
+		END_IF
+		
+		IF DATE_TIME.uiMinute >= NVM.POWERDOWN_DATE_TIME.uiMinute THEN
+			MINUTES := DATE_TIME.uiMinute - NVM.POWERDOWN_DATE_TIME.uiMinute;
+		ELSE
+			MINUTES := 60 - (NVM.POWERDOWN_DATE_TIME.uiMinute - DATE_TIME.uiMinute);
+			HOURS := HOURS - 1;
+		END_IF
+		
+		IF DATE_TIME.uiSeconds >= NVM.POWERDOWN_DATE_TIME.uiSeconds THEN
+			SECONDS := DATE_TIME.uiSeconds - NVM.POWERDOWN_DATE_TIME.uiSeconds;
+		ELSE
+			SECONDS := 60 - (NVM.POWERDOWN_DATE_TIME.uiSeconds - DATE_TIME.uiSeconds);
+			MINUTES := MINUTES - 1;
+		END_IF
+		POWEROFF_TIME := (((HOURS * 60) + MINUTES) * 60) + SECONDS;
+	
+		// I don't have time for this shit to optimize the air compressor off time...
+		IF DATE_TIME.uiDay <> NVM.POWERDOWN_DATE_TIME.uiDay OR
+			DATE_TIME.uiMonth <> NVM.POWERDOWN_DATE_TIME.uiMonth OR
+			DATE_TIME.uiYear <> NVM.POWERDOWN_DATE_TIME.uiYear THEN
+			// Rather than figure all this out, just make the operator wait in this rare circumstance.
+			POWEROFF_TIME := 30;
+		END_IF
+	END_IF
+	
+	// In case the PLC is powered down, then powered up rapidly, we don't want by default to wait 2 minutes
+	//	for the blowdown timer to expire.  So the HMI monitors the last time the compressor was on, so if the system
+	//	reboots, the HMI has memory of the last time the PLC had hydraulic fluid running to it, so we don't wait for
+	//	the blowdown timer when it is unnecessary.
+	//
+	// Most useful in demonstrations, or in testing situations!
+	//
+	IF LAST_SECONDS <> DATE_TIME.uiSeconds AND AIR_COMPRESSOR_WET_PRESSURE > 5 THEN
+		NVM.POWERDOWN_DATE_TIME := DATE_TIME;
+		LAST_SECONDS := DATE_TIME.uiSeconds;
+	END_IF
+END_IF
+
+READABLE_TIME := ifmFileUtil.RTC_To_String(DATE_TIME);
+
+IF BOOT_RECOVERY THEN
+	BootIntoRecovery_01(xExecute := BOOT_RECOVERY, xDone => DONE, xError => ERROR, eDiagInfo => DIAG);
+END_IF
+
+IF NOT xSplashError AND NOT xSplashDone THEN
+	// Do not execute this in a loop, it will wear out flash memory very quickly!!
+	loadSplashScreen_01(xExecute := TRUE, sPathToSplash := '/home/cds-apps/PlcLogic/visu/hmi_splash.bmp',
+		xDone => xSplashDone, xError => xSplashError, eDiagInfo => DIAG_SPLASH);
+END_IF
+
+IF NOT xTouchDone AND NOT xTouchError THEN
+	SetTouchOptimisationMode_01(xExecute := TRUE, xDone => xTouchDone, xError => xTouchError, eDiagInfo => DIAG_TOUCH,
+		eMode := ifmDevice.eTOUCH_OPTIMISATION_MODE.GLOVE);
+END_IF
+
+COUNT := COUNT + 1;

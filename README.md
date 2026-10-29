@@ -19,8 +19,9 @@ See [repository setup](docs/DEVELOPMENT.md#repository-and-document-maintenance)
 for the remote and tracking policy.
 The initial code/documentation baseline has been committed and pushed to `main`.
 The selected code-tracking scope and fingerprints are in
-[current code inventory](docs/CURRENT_CODE.md). Box updates are on hold to preserve
-the differing PLC project already in that folder.
+[current code inventory](docs/CURRENT_CODE.md). Box updates are authorized as part of Run Update, using this workspace as the source.
+The [October 29 propagation check](docs/verification/2026-10-29-update.md)
+identifies the imported PLC/HMI test markers and current source fingerprints.
 
 The owner plans separate chats for different milestones. The first will likely
 be a new locating process. The recommended next step in that milestone chat is
@@ -36,6 +37,8 @@ CODESYS, with clear instructions identifying exactly where to paste each block.
 | Record | Owns |
 | --- | --- |
 | [TODO list](TODO.md) | Pending/deferred work and its dedicated chat names |
+| [Daily Update](Daily%20Update.md) | Owner-invoked checkpoint procedure, local receipt, and conditional reminder rules |
+| [Readable CODESYS exports](docs/CODESYS_EXPORTS.md) | Tested export route, input identities, limitations, and refresh procedure |
 | [Agent guidance](AGENTS.md) | Reviewed working rules, active for this workspace |
 | [Source baseline](docs/SOURCE_BASELINE.md) | Exact inputs, hashes, version identity, and archive-member reference keys |
 | [Architecture and source map](docs/ARCHITECTURE.md) | Observed PLC/HMI execution, task configuration, interfaces, and navigation |

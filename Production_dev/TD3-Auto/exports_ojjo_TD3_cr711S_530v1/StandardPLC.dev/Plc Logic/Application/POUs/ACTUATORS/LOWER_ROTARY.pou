@@ -1,0 +1,233 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK LOWER_ROTARY
+VAR_INPUT
+	INIT: BOOL;
+	pLOWER_ROTARY: POINTER TO sAxis;
+	pLOWER_CROWD: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	(* For debugging. *)
+	ROTARY_ERROR_LEAD_MAX: REAL;
+	ROTARY_ERROR_LAG_MAX: REAL;
+	ROTARY_ERROR: REAL;
+
+	(* Motor control. *)
+	INC_ENC_01: ifmFastInput.IncEncoder;
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	OUTPUT_LEVER: WORD;
+	POSITIVE_LEVER: BOOL;
+
+	(* Following code. *)
+	LOWER_ROTARY_START : DINT := 0;
+	LOWER_CROWD_START : DINT := 0;
+	CROWD_LAST_FB : DINT := 0;
+
+	VEL: REAL := 0.0;
+	ACCEL: REAL := 0.0;
+	
+	(* Limit acceleration. *)
+	VEL_SETPOINT_SLEW: REAL := 0.1;
+	VEL_SETPOINT: REAL := 0.0;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the lower rotary axis based on the top-level state of the machine.  Lower rotary is positive in the direction that
+	screws an anchor into the ground. *)
+VALID := TRUE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pLOWER_ROTARY^.SETPOINT.POSITION_ENGR);
+ELSE
+	POSITION_RAW := 0;
+	INC_ENC_01(uiChannel := ROTARY_SPEED_A_POINT, eMode := ifmFastInput.MODE_INC_ENCODER.IN_INC_ENCODER_CSI, eResolution := ifmFastInput.ENCODER_RESOLUTION.EVERY_EDGE,
+		xPreset := FALSE, udiTimebase := 60, diValue => POSITION_RAW, xUp => ROTARY_UP_COUNT, xDown => ROTARY_DOWN_COUNT);
+	IN_ROTARY_SPEED_A(
+		uiChannel := ROTARY_SPEED_A_POINT, xValueDigital => ROTARY_SPEED_A);
+	IN_ROTARY_SPEED_B(
+		uiChannel := ROTARY_SPEED_B_POINT, xValueDigital => ROTARY_SPEED_B);
+END_IF
+
+(* Always valid, no way to determine failure. *)
+Sampled(ADR(pLOWER_ROTARY^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pLOWER_ROTARY);
+	RETURN;
+END_IF
+
+CLOSED_LOOP := FALSE;
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF (MACHINE_MODE = SCREW_MODE AND NOT AUTOMATIC)
+	THEN
+
+// 	IF SCREW_STATE = SCREW_STATE_DRIVE_ASSIST THEN
+// 		// Limit the lower rotary velocity to the velocity it would take at the lower crowd's maximum insertion speed.
+// 		//	This has to be in valve opening MPCT, not cm/sec, as this is manual controls!
+// 		OUTPUT_MAX := (VEL_ENGR_TO_RAW(pLOWER_ROTARY^.FEEDBACK, (pNVM1^.LC_DRIVE_VEL_HI / pNVM4^.SCREW_PITCH_CM)) *
+// 			pLOWER_ROTARY^.CONFIG.VFF_MPCT_PER_CPS_MINUS) / 10000;
+// 		// Try to put the lever range with the high velocity setting in the middle.
+// 		OUTPUT_MAX := 2 * OUTPUT_MAX;
+// 		// Check the desired output and make sure it is within the range of the rotary.
+// 		IF OUTPUT_MAX > pLOWER_ROTARY^.CONFIG.OUTPUT_PLUS_MAX THEN
+// 			OUTPUT_MAX := pLOWER_ROTARY^.CONFIG.OUTPUT_PLUS_MAX;
+// 		END_IF
+// 	ELSE
+		// In full manual, allow full hydraulic flow.
+		OUTPUT_MAX := pLOWER_ROTARY^.CONFIG.OUTPUT_PLUS_MAX;
+	//END_IF
+	JOYSTICK_01(JS := REMOTE.V3_FB, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pLOWER_ROTARY^.OUTPUT.MAGNITUDE, POSITIVE => pLOWER_ROTARY^.OUTPUT.POSITIVE);
+ELSIF MACHINE_MODE = TRACK_MODE OR MACHINE_MODE = IDLE_MODE OR MACHINE_MODE = SETUP_MODE OR MACHINE_MODE = RWP_MODE OR MACHINE_MODE = FWP_MODE THEN
+	(* Don't run lower rotary in this case.  Set outputs to 0. *)
+	setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_SELECT_OPERATION THEN
+	(* Reset the counter on the lower rotary. *)
+	INC_ENC_01(uiChannel := ROTARY_SPEED_A_POINT, xPreset := TRUE, diPresetValue := 0);
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET OR SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE)
+	THEN
+	IF NOT AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED THEN
+		(* Just drive the rotary at a low speed to help it get the screw in the centralizer. *)
+		setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+	ELSE
+		setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+	END_IF
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	(
+		SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+		SCREW_STATE = SCREW_STATE_DRIVE_ASSIST OR
+		SCREW_STATE = SCREW_STATE_RETURN_TO_DRIVE OR
+		SCREW_STATE = SCREW_STATE_LC_REWIND OR
+
+		SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END OR
+		SCREW_STATE = SCREW_STATE_CLEAR_SPOILS OR
+		SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE
+	)
+	THEN
+	(* The lower rotary simply follows the lower crowd in all of the states where the lower crowd can move
+		in the drill cycle.  We only want to latch the LR to the LC on the start of the drilling cycle and
+		nowhere else. *)
+	IF isScrewModeStateChange() AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND (NOT RETURNING_TO_DRIVE) THEN
+		(* Set the state flag and latch the beginning position for position lock. *)
+		ROTARY_ERROR_LEAD_MAX := 0;
+		ROTARY_ERROR_LAG_MAX := 0;
+		LOWER_CROWD_START := pLOWER_CROWD^.FEEDBACK.POSITION_RAW;
+		// Use 0 as the lower rotary start instead of the sFeedback element beause the call to reset may not have
+		//	had a round trip effect on the position reading.
+		LOWER_ROTARY_START := 0;
+	END_IF
+
+	IF TEST AND SCREW_STATE = SCREW_STATE_LC_REWIND AND MACHINE_MODE = SCREW_MODE THEN
+		// lower rotary lags lower crowd movement by not activating until lower crowd moves up by LC_REWIND_LAG (in mm converted to cm)
+		pLOWER_ROTARY^.SETPOINT.POSITION_RAW :=
+		LOWER_ROTARY_START + REAL_TO_DINT((CTS_LR_PER_CT_LC * SCREW_PITCH_NOMINAL / pNVM4^.SCREW_PITCH_CM) 
+			* MAX(0.0, TO_REAL(pLOWER_CROWD^.FEEDBACK.POSITION_RAW - LOWER_CROWD_START - pNVM4^.HMI_SINTS[LC_REWIND_LAG] / 10 )));	
+	ELSE
+		pLOWER_ROTARY^.SETPOINT.POSITION_RAW :=
+		LOWER_ROTARY_START + REAL_TO_DINT((CTS_LR_PER_CT_LC * SCREW_PITCH_NOMINAL / pNVM4^.SCREW_PITCH_CM) * TO_REAL(pLOWER_CROWD^.FEEDBACK.POSITION_RAW - LOWER_CROWD_START));
+	END_IF
+	pLOWER_ROTARY^.SETPOINT.POSITION_ENGR := POS_RAW_TO_ENGR(pLOWER_ROTARY^.FEEDBACK, pLOWER_ROTARY^.SETPOINT.POSITION_RAW);
+	ROTARY_ERROR := pLOWER_ROTARY^.SETPOINT.POSITION_ENGR - pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR;
+	DRIVE_LOWER_ROTARY_DELTA := pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR;
+	
+	(* Only calculate max errors when we've got the screw in the ground and it matters. *)
+	IF ABS(pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR) > 5.0 THEN
+		IF ROTARY_ERROR > 0 THEN
+			(* Lagging setpoint. *)
+			IF ABS(ROTARY_ERROR) > ROTARY_ERROR_LAG_MAX THEN
+				ROTARY_ERROR_LAG_MAX := ABS(ROTARY_ERROR);
+			END_IF
+		ELSE
+			(* Leading setpoint. *)
+			IF ABS(ROTARY_ERROR) > ROTARY_ERROR_LEAD_MAX THEN
+				ROTARY_ERROR_LEAD_MAX := ABS(ROTARY_ERROR);
+			END_IF
+		END_IF
+	END_IF
+
+	IF pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR <> 0 THEN
+		SCREW_PITCH_ACTUAL := ABS(runActuators_01.LOWER_CROWD_01.DRIVE_ACTUAL / pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR);
+	END_IF
+
+	(* We know that the pitch of the screw, and we know we want 1 rev of the lower rotary
+		for every 1-pitch of insertion of the lower crowd. *)
+	VEL_SETPOINT :=  LOWER_CROWD_VEL_SMOOTHED / pNVM4^.SCREW_PITCH_CM;
+
+	(* Limit the acceleration in the lower rotary. *)
+	IF VEL_SETPOINT > (VEL_SETPOINT + VEL_SETPOINT_SLEW) THEN
+		VEL_SETPOINT := VEL_SETPOINT + VEL_SETPOINT_SLEW;
+	ELSIF VEL_SETPOINT < (VEL_SETPOINT - VEL_SETPOINT_SLEW) THEN
+		VEL_SETPOINT := VEL_SETPOINT - VEL_SETPOINT_SLEW;
+	END_IF
+	pLOWER_ROTARY^.SETPOINT.VELOCITY_ENGR := VEL_SETPOINT;
+
+	pLOWER_ROTARY^.SETPOINT.VELOCITY_RAW := VEL_ENGR_TO_RAW(pLOWER_ROTARY^.FEEDBACK, pLOWER_ROTARY^.SETPOINT.VELOCITY_ENGR);
+
+	(* Prepare to run the profiler and the loop. *)
+	CLOSED_LOOP := TRUE;
+ELSE
+	setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+END_IF
+
+// stop/prevent rotary motion and shutdown machine if operator detected in rotary exclusion zone 
+IF (isRotaryActive() AND NOT isRotaryMotionAllowed()) OR
+	ROTARY_DESIRED_AND_PROXIMITY_VIOLATED THEN
+	ROTARY_DESIRED_AND_PROXIMITY_VIOLATED := TRUE;
+	setOutput(ADR(pLOWER_ROTARY^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pLOWER_ROTARY^.LOOP_PID), pOUTPUT := ADR(pLOWER_ROTARY^.OUTPUT),
+			SP := pLOWER_ROTARY^.SETPOINT, FB:= pLOWER_ROTARY^.FEEDBACK, CFG := pLOWER_ROTARY^.CONFIG,
+			I_ENABLED := FALSE);
+			//I_ENABLED := (pLOWER_ROTARY^.PROFILER.STATE = HOLD));
+
+		// This logic is only operative when:
+		//
+		//	- We are in screw drive auto
+		//	- The screw tip has hit the ground
+		//	- The LC is stalled
+		//	- The LR advance has not pushed us outside of the allowable window
+		//			
+// 		IF pNVM4^.LC_STALL_ENABLED AND 
+		IF pNVM4^.HMI_SINTS[LC_STALL_DETECT_MODE] = 1 AND
+			MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND
+			HARD_SOIL_DETECTED AND
+			AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR <	(SCREW_START_POS - pNVM1^.SCREW_TIP_TO_GROUND) AND
+			// Changed over once we have a better version of LC stall detect!
+			//ABS(LOWER_CROWD_VEL_SMOOTHED) < pNVM4^.LC_STALL_SPEED AND
+			(LC_STALL_DETECTED = LcStallRecovery.LC_STALLED_RECOVER_WITH_ROTARY) AND
+			ABS(pLOWER_ROTARY^.SETPOINT.POSITION_ENGR - pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR) < pNVM4^.LC_STALL_LR_ADVANCE
+			THEN
+			// Override the control loop while the lower crowd is running really slowly and the operator is trying
+			//	to drive the screw with the lower rotary.  This should be used only in the case of a lower crowd stall,
+			//	because we guess in this situation the screw threads are engaged with the hard ground, and driving the
+			//	lower rotary will suck the screw into the ground.
+			//
+			// Note user units for outputs are percent, control is for millepercent.
+			pLOWER_ROTARY^.OUTPUT.MAGNITUDE := TO_WORD(pNVM4^.LC_STALL_LR_OUTPUT * 10);
+		END_IF
+	ELSE
+		pLOWER_ROTARY^.SETPOINT.POSITION_ENGR := pLOWER_ROTARY^.FEEDBACK.POSITION_ENGR;
+		pLOWER_ROTARY^.SETPOINT.POSITION_RAW := pLOWER_ROTARY^.FEEDBACK.POSITION_RAW;
+	END_IF
+	HaweOutput(pLOWER_ROTARY);
+END_IF

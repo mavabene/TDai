@@ -1,0 +1,98 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK processRemote
+VAR_INPUT
+	INIT: BOOL;
+	VISUALIZATION: BOOL;
+END_VAR
+VAR
+	HEARTBEAT_LAST: BOOL := FALSE;
+	TIMEOUT: BOOL := FALSE;
+	AVAILABLE_TON: TON;
+
+	LMB1_RTRIG: R_TRIG;
+	RMB1_RTRIG: R_TRIG;
+	RMB2_RTRIG: R_TRIG;
+	RTCB1_UP_RTRIG: R_TRIG;
+	RTCB1_DN_RTRIG: R_TRIG;
+	RTCB2_UP_RTRIG: R_TRIG;
+	RTCB2_DN_RTRIG: R_TRIG;
+	T3P1_UP_RTRIG: R_TRIG;
+	T3P1_UP_FTRIG: F_TRIG;
+	T3P1_DN_RTRIG: R_TRIG;
+	T3P1_DN_FTRIG: F_TRIG;
+	T3P2_UP_RTRIG: R_TRIG;
+	T3P2_UP_FTRIG: F_TRIG;
+	T3P2_DN_RTRIG: R_TRIG;
+	T3P2_DN_FTRIG: F_TRIG;
+	T3P3_UP_RTRIG: R_TRIG;
+	T3P3_UP_FTRIG: F_TRIG;
+	T3P3_DN_RTRIG: R_TRIG;
+	T3P3_DN_FTRIG: F_TRIG;
+	T3P4_UP_RTRIG: R_TRIG;
+	T3P4_UP_FTRIG: F_TRIG;
+	T3P4_DN_RTRIG: R_TRIG;
+	T3P4_DN_FTRIG: F_TRIG;
+END_VAR
+(********************** Implementation ****************************)
+(* Decode the inputs into states and edges. *)
+
+
+(* The remote function pulls the data, this is where postprocessing is done.  When
+	the heartbeat signal hasn't changed state, the timer is enabled.  As soon as the
+	heartbeat (toggle) changes state, it resets the timer. *)
+AVAILABLE_TON(IN := (HEARTBEAT_LAST = REMOTE.HEARTBEAT), PT := T#5s, Q => TIMEOUT);
+
+(* We need the heartbeat from the receiver, and a connection from the receiver to the transmitter,
+	in order for the remote to be avaiable. *)
+REMOTE.AVAILABLE := NOT TIMEOUT AND REMOTE.RF_CAN;
+
+IF NOT REMOTE.AVAILABLE THEN
+	(* Remote drives all analog inputs to max negative when remote goes away (DOH!), so
+		we set these to 0 in that situation. *)
+	REMOTE.LJ_FB := 0;
+	REMOTE.LJ_LR := 0;
+	REMOTE.RJ_FB := 0;
+	REMOTE.RJ_LR := 0;
+
+	REMOTE.V1_FB := 0;
+	REMOTE.V2_FB := 0;
+	REMOTE.V3_FB := 0;
+	REMOTE.V4_FB := 0;
+ELSE
+	;
+END_IF
+
+HEARTBEAT_LAST := REMOTE.HEARTBEAT;
+
+(* Everything below here should be generic, that is the same whether we are visualizing or real remote.
+	This is mostly just calculating rising and falling edges for the buttons that use edge triggered
+	functions. *)
+LMB1_RTRIG(CLK := REMOTE.LMB1, Q => REMOTE.LMB1_RE);
+RMB1_RTRIG(CLK := REMOTE.RMB1, Q => REMOTE.RMB1_RE);
+RMB2_RTRIG(CLK := REMOTE.RMB2, Q => REMOTE.RMB2_RE);
+
+RTCB1_UP_RTRIG(CLK := REMOTE.RTCB1_UP, Q => REMOTE.RTCB1_UP_RE);
+RTCB1_DN_RTRIG(CLK := REMOTE.RTCB1_DN, Q => REMOTE.RTCB1_DN_RE);
+RTCB2_UP_RTRIG(CLK := REMOTE.RTCB2_UP, Q => REMOTE.RTCB2_UP_RE);
+RTCB2_DN_RTRIG(CLK := REMOTE.RTCB2_DN, Q => REMOTE.RTCB2_DN_RE);
+
+T3P1_UP_RTRIG(CLK := REMOTE.T3P1_UP, Q => REMOTE.T3P1_UP_RE);
+T3P1_UP_FTRIG(CLK := REMOTE.T3P1_UP, Q => REMOTE.T3P1_UP_FE);
+T3P1_DN_RTRIG(CLK := REMOTE.T3P1_DN, Q => REMOTE.T3P1_DN_RE);
+T3P1_DN_FTRIG(CLK := REMOTE.T3P1_DN, Q => REMOTE.T3P1_DN_FE);
+
+T3P2_UP_RTRIG(CLK := REMOTE.T3P2_UP, Q => REMOTE.T3P2_UP_RE);
+T3P2_UP_FTRIG(CLK := REMOTE.T3P2_UP, Q => REMOTE.T3P2_UP_FE);
+T3P2_DN_RTRIG(CLK := REMOTE.T3P2_DN, Q => REMOTE.T3P2_DN_RE);
+T3P2_DN_FTRIG(CLK := REMOTE.T3P2_DN, Q => REMOTE.T3P2_DN_FE);
+
+T3P3_UP_RTRIG(CLK := REMOTE.T3P3_UP, Q => REMOTE.T3P3_UP_RE);
+T3P3_UP_FTRIG(CLK := REMOTE.T3P3_UP, Q => REMOTE.T3P3_UP_FE);
+T3P3_DN_RTRIG(CLK := REMOTE.T3P3_DN, Q => REMOTE.T3P3_DN_RE);
+T3P3_DN_FTRIG(CLK := REMOTE.T3P3_DN, Q => REMOTE.T3P3_DN_FE);
+
+T3P4_UP_RTRIG(CLK := REMOTE.T3P4_UP, Q => REMOTE.T3P4_UP_RE);
+T3P4_UP_FTRIG(CLK := REMOTE.T3P4_UP, Q => REMOTE.T3P4_UP_FE);
+T3P4_DN_RTRIG(CLK := REMOTE.T3P4_DN, Q => REMOTE.T3P4_DN_RE);
+T3P4_DN_FTRIG(CLK := REMOTE.T3P4_DN, Q => REMOTE.T3P4_DN_FE);

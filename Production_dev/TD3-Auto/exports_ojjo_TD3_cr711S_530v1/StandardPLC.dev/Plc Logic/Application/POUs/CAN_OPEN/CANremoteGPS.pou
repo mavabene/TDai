@@ -1,0 +1,46 @@
+
+(********************** Declaration ****************************)
+(*****************************************************************
+We would like to expressly point out that the examples made available must
+not be used for industrial purposes without checking.
+We assume no guarantee whatsoever for their functionality, particularly
+regarding machines and plants. The example is only intended for testing
+during the development of new machines and plants and has been designed and
+manufactured for this purpose in coordination with you. Consequently, it
+is not a (software) product subject to European directives. Compliance with
+relevant directives and standards to meet legal requirements regarding the
+placing on the market will only be determined during the verification and
+validation in the context of your development.
+Until then, it must not be put onto the market for use by end users.
+*****************************************************************)
+
+PROGRAM CANremoteGPS
+VAR CONSTANT
+	usiCANremoteNode: USINT:= 29;
+	eCanRemoteChannel: ifmDevice.CAN_CHANNEL:= ifmDevice.CAN_CHANNEL.CHAN_0;
+	
+	tGetGpsEvery: TIME:= T#2S;
+	
+	uiLatitudeIdx: UINT:= 16#5209;
+	usiLatitudeSubIdx: USINT:= 0;
+	
+	uiLongitudeIdx: UINT:= 16#5208;
+	usiLongitudeSubIdx: USINT:= 0;
+END_VAR
+VAR_INPUT
+	
+END_VAR
+VAR_OUTPUT
+	xError: BOOL;
+	rLatitude: REAL;
+	rLongitude: REAL;
+END_VAR
+VAR
+	xStartCanRemote: BOOL:= TRUE;
+	tonGetGps: CIA405.TON;
+	xReadLat: BOOL;
+	xReadLong: BOOL;
+	sdoReadLatitude: ifmR360_3.ifmCOP_MG.COP_SDOread;
+	sdoReadLongitude: ifmR360_3.ifmCOP_MG.COP_SDOread;
+	nmtCanRemote: ifmR360_3.ifmCOP_MG.COP_SendNMT;
+END_VAR

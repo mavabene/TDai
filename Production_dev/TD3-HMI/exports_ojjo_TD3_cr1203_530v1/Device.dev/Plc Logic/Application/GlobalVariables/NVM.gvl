@@ -1,0 +1,35 @@
+
+(********************** Declaration ****************************)
+(* 	If variables are changed, built packages without mem_retain (.swu's) may not load properly, while codesys loaded software will.  
+	So, unless we want to reformat the memory -
+	ONLY ADD VARIABLES TO THE END!!!
+*)
+{attribute 'qualified_only'}
+VAR_GLOBAL PERSISTENT RETAIN
+	HMI_BOARD_TEMP_MAX: REAL := -999;
+	HMI_BOARD_TEMP_MIN: REAL := 999;
+	HMI_CHIP_TEMP_MAX: REAL := -999;
+	HMI_CHIP_TEMP_MIN: REAL := 999;
+
+	// customer passwords
+	TECHNICIAN_PASSWORD: STRING[10] := '4747';
+	ENGINEER_PASSWORD: STRING[10] := '4881';
+	//owner password
+	ADMIN_PASSWORD: STRING[10] := '7887';
+	
+	OJJO_TECHNICIAN_PASSWORD: STRING[10] := '2626';
+	OJJO_ENGINEER_PASSWORD: STRING[10] := '1600';
+	OJJO_ADMIN_PASSWORD: STRING[10] := '2332';
+
+	POWERDOWN_DATE_TIME: ifmDevice.stDATE_TIME;
+	
+	LAST_PLC_VERSION: STRING(20);
+	
+	OWNER_ENGINEER_PASSWORD: STRING[10] := '8036';
+	
+	MACHINE_SERIAL_NUMBER_FROM_PLC : INT := 16666;
+
+	NVM_FORMAT_VERSION: UINT := 2;
+	
+	//PLACEHOLDER: ARRAY[0..7979] OF BYTE;
+END_VAR

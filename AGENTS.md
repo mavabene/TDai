@@ -119,11 +119,21 @@ leave provisional numerical assumptions looking like accepted calibration data.
 
 ## Workspace and coordination
 
+When the owner says **“Run Update”**, follow [Daily Update](Daily%20Update.md).
+That request authorizes the checkpoint workflow described there, including Git
+commit/push, including the authorized Box copy. Scheduled reminders only
+inspect and remind; they do not run the update automatically.
+
 Inspect repository status before edits. This workspace is connected to the owner's
 TDai repository; [DEVELOPMENT](docs/DEVELOPMENT.md) owns the tracked-file scope and
-Box-copy policy. Use owner-copied workspace files as the source; do not import or
-overwrite differing Box code while the owner's hold remains in effect. The Box
-copy is intended to retain latest versions, with historical revisions in Git.
+Box-copy and authorized mainline-project import policy. Import saved PLC/HMI
+projects from the authorized development root as part of Run Update, excluding
+letter-suffixed alternates; ask about unexpected naming or conflicting copies.
+Keep libraries unchanged unless the owner identifies an update. Do not import
+Box code back into the workspace. The owner lifted the Box hold
+on October 29, 2026; update the Box copy without another user confirmation. The Box
+copy replaces matching versions and retains prior versions when a new version is
+added; do not delete older Box versions. Git also preserves committed history.
 Do not force-push, bulk-clean, or reorganize source history merely because the
 coworker examples used those workflows.
 

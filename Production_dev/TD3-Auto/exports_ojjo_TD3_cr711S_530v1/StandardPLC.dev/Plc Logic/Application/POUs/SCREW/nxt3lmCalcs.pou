@@ -1,0 +1,41 @@
+
+(********************** Declaration ****************************)
+FUNCTION nxt3lmCalcs : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	// Offset of the screw drive path in Y on the EW screws.  Move the machine this much before driving these screws.
+		// This is for the Skysol product, with workpoint is above where laser hits TCH center cross.
+		// Y_OFFSET_EW_SCREW: REAL := 17.5;
+		// X_OFFSET_EW_SCREW: REAL := 1.2;
+
+		// This is for the CO Bar product, with workpoint is where laser hits TCH center cross.
+		Y_OFFSET_EW_SCREW: REAL := 0;
+		X_OFFSET_EW_SCREW: REAL := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* NXT has a 3 legged motor truss that requires additional axes to be engaged in screw drive to get proper
+	truss geometry.  This function should be run once when entering screw drive mode, as everything required is
+	known at that point. *)
+	
+// These are calculated to get correct Y motion for the EW screws, which moves the rotator center in line with the
+//	screw drive path.  This is required because the actual truss workpoint is well above where the laser is targeted.
+//	This is an approximation that assumes that the boom swing moves only in Y, with no X pollution.  This works best
+//	around where the boom swing is parallel to the row laser, i.e. when the machine is tracked pointing close to NS!
+BOOM_SWING_DELTA := ATAN_DEG(Y_OFFSET_EW_SCREW / (BS_PIVOT_TO_YAW_PIVOT + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR));
+NXT_3LM_BOOM_SWING_LEFT := BOOM_SWING_AT_WP - BOOM_SWING_DELTA;
+NXT_3LM_BOOM_SWING_RIGHT := BOOM_SWING_AT_WP + BOOM_SWING_DELTA;
+
+NXT_3LM_YAW_LEFT := YAW_AT_WP - BOOM_SWING_DELTA;
+NXT_3LM_YAW_RIGHT := YAW_AT_WP + BOOM_SWING_DELTA;
+
+NXT_3LM_X_SLIDE_LEFT := X_SLIDE_AT_WP + X_OFFSET_EW_SCREW;
+NXT_3LM_X_SLIDE_RIGHT := X_SLIDE_AT_WP + X_OFFSET_EW_SCREW;
+
+// We know how far the machine moves off in Y, and when the base roll is non-zero, this will pollute Z.  This is a
+//	simple approximation that should work relatively well, since the X and Y pollution caused by base roll and pitch is
+//	relatively small with since these base angles are less than 10 degrees and the amount of Z motion is small.
+NXT_3LM_Z_SLIDE_LEFT := Z_SLIDE_AT_WP - Y_OFFSET_EW_SCREW * SIN_DEG(BASE_ROLL.POSITION_ENGR);
+NXT_3LM_Z_SLIDE_RIGHT := Z_SLIDE_AT_WP + Y_OFFSET_EW_SCREW * SIN_DEG(BASE_ROLL.POSITION_ENGR);

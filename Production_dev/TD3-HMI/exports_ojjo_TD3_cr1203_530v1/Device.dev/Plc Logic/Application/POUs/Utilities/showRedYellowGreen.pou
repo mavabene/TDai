@@ -1,0 +1,22 @@
+
+(********************** Declaration ****************************)
+FUNCTION showRedYellowGreen : BOOL
+VAR_INPUT
+	VALUE: REAL;
+	RED_HIGH: REAL;
+	RED_LOW: REAL;
+	YELLOW_HIGH: REAL;
+	YELLOW_LOW: REAL;
+	pCOLOR: POINTER TO DWORD;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF VALUE > RED_HIGH OR VALUE < RED_LOW THEN
+	pCOLOR^ := colorRed(16#FF);
+ELSIF VALUE > YELLOW_HIGH OR VALUE < YELLOW_LOW THEN
+	pCOLOR^ := colorYellow(16#FF);
+ELSE
+	pCOLOR^ := colorGreen(16#ff);
+END_IF

@@ -1,0 +1,47 @@
+
+(********************** Declaration ****************************)
+
+
+FUNCTION ROTATE_TRUSS_OFFSET : Vector3D
+(*
+   	from operator at rear of machine coordinate frame is:
+		positive x toward operator, 
+		positive y to the right, 
+		postive up, 
+		yaw ccw from above is positive,
+		pitch nose up is positive,
+		roll to left is positive
+	 Rotate the endpoint of a North–South, level Boom Swing Arm:
+      BS Pivot = [0, 0, 0]
+      Yaw Pivot   = [L, 0, 0]   (aligned N–S along negative Y)
+    Returns rotated endpoint in the original/world frame.
+*)
+
+VAR_INPUT
+    z_offset: LREAL ;
+    pitch_deg  : LREAL;    // truss pitch from pnezd file (direction agnostic, as is desired from this function)
+
+END_VAR
+VAR
+    OFFSET_TO_DESIRED_TRUSS_FEATURE : Vector3D;
+	ROTATION : Rotation3D ;
+	i : USINT ;
+END_VAR
+(********************** Implementation ****************************)
+OFFSET_TO_DESIRED_TRUSS_FEATURE[rot.pX] := 0.0;
+OFFSET_TO_DESIRED_TRUSS_FEATURE[rot.py] := 0.0;
+OFFSET_TO_DESIRED_TRUSS_FEATURE[rot.pZ] := z_offset;
+
+ROTATION[rot.YAW_DEG] := 0.0;
+ROTATION[rot.PITCH_DEG] := - pitch_deg; 
+ROTATION[rot.ROLL_DEG] := 0.0;
+
+ROTATE_TRUSS_OFFSET := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT(
+    OFFSET_TO_DESIRED_TRUSS_FEATURE,
+    ROTATION,
+	TRUE // Left hand rule system
+);
+
+// FOR i := 1 TO 3 DO
+// 	ROTATE_TRUSS_OFFSET[i] := roundLReal(ROTATE_TRUSS_OFFSET[i], 3);
+// END_FOR

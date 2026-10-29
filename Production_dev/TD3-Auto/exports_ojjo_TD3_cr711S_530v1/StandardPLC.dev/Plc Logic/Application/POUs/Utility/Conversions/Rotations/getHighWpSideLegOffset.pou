@@ -1,0 +1,61 @@
+
+(********************** Declaration ****************************)
+(* return side leg vector for high WP (eg ET2 motor side leg wp or high standard wp
+	this vector is in TRUSS FRAME  *)
+
+FUNCTION getHighWpSideLegOffset : Vector3D // how much further would the z slide need to go to make it to the wp. in mm 
+VAR_INPUT
+	Z_OFFSET_TO_WP: REAL; // gps offset to wp (pNEZd must already be set already for ET2), mm
+	AVAILABLE_Z_MOVEMENT: REAL;
+END_VAR
+VAR
+	TRUSS_FRAME_Z_OFFSET_TO_WP: LREAL ; // mm
+	i : USINT;
+	ROTATION: Rotation3D := [0,0,0];
+	LHR: BOOL := TRUE;
+	Z_SLIDE_AVAILABLE_MOVE_MM: REAL; // mm
+	Z_SLIDE_MARGIN_MM: REAL := 10; // mm
+	OFFSET_MARGIN_TO_IGNORE: REAL := 40; // mm if we are close enough don't bother
+END_VAR
+
+(********************** Implementation ****************************)
+(* 	
+	- determine how much further would the z slide need to go to make it to the wp. 
+	  This tells us what proportion of the whole triangle to use to calculate side leg length.
+	- start with z offset and compare with z slide pos.  we will consider the zslide max to be 166 for this purpose
+	  current gps z-offset gives us vertical distance, we have to convert it to z slide (pitched along axis) distance
+	  cos(pitch) * Z_OFFSET_TO_WP
+	- multiply that proportion by side 
+	  tan(20deg) = side leg length / z offset
+
+ *)
+
+
+// correct z-slide length remaining by pitch
+// - get z deficit to target from expected position
+TRUSS_FRAME_Z_OFFSET_TO_WP := getTrussFrameZoffsetToTarget(Z_OFFSET_TO_WP, 0, AVAILABLE_Z_MOVEMENT);
+
+// if close don't bother with extra movements in screw drive
+IF (TRUSS_FRAME_Z_OFFSET_TO_WP < OFFSET_MARGIN_TO_IGNORE ) THEN 
+	getHighWpSideLegOffset := ZERO_VECTOR;
+ELSE
+	// get side leg offset for current z position on truss.  this is the abs(y) delta from pin
+	getHighWpSideLegOffset[rot.pY] := TAN_DEG(SCREW_PARAMETERS_CURRENT.TRUSS_SIDE_LEG_ANGLE) * TRUSS_FRAME_Z_OFFSET_TO_WP;
+	// get z distance from pin 
+	getHighWpSideLegOffset[rot.pZ] := TRUSS_FRAME_Z_OFFSET_TO_WP;
+	
+END_IF
+
+// set side leg reduction distance for leg binning  TODO put this somewhere more appropriate
+// convert mm to cm
+IF ABS(SCREW_PARAMETERS_CURRENT.TRUSS_SIDE_LEG_ANGLE) = 90 THEN
+	RETURN;
+ELSE
+	HIGH_WP_SIDE_LEG_AXIS_REDUCTION := 
+		TO_REAL(
+					(TRUSS_FRAME_Z_OFFSET_TO_WP / 10)
+					/ 
+					(COS_DEG(SCREW_PARAMETERS_CURRENT.TRUSS_SIDE_LEG_ANGLE) * COS_DEG(SCREW_PARAMETERS_CURRENT.NS_PITCH))
+				);
+END_IF
+

@@ -1,0 +1,179 @@
+
+(********************** Declaration ****************************)
+(* This is the top level program for executing the machine operation mode.  This should handle:
+
+	1) Inputs that can affect machine operation mode.
+	2) Errors that can affect machine operation mode.
+	3) Outputs that alert about the mode.
+	4) Call lower level state logic that actually implements the state machine for each mode.
+*)
+FUNCTION_BLOCK machineState
+VAR_INPUT
+	INIT: BOOL;
+	VISUALIZATION: BOOL;
+END_VAR
+VAR
+	
+	// Debug only.
+	//remoteDisplay_01: remoteDisplay;
+	trackStateMachine_01: trackStateMachine;
+	rwpStateMachine_01: rwpStateMachine;
+	screwStateMachine_01: screwStateMachine;
+
+	checkEstop_01: checkEstop;
+	checkMachineWarning_01: checkWarnings;
+	checkAutoInhibit_01: checkAutoInhibit;
+	
+	MACHINE_WARNING: BOOL := FALSE;
+	
+	(* Some warnings beep the audible alarm, mask these here. *)
+	WARNING_HORN_MASK: DWORD;
+	
+	(* Used for blinking the machine state light on the light tower. *)
+	TIMELOW: TIME := T#1s;
+	TIMEHIGH: TIME := T#0S;
+	GPS_IN_RANGE_INTERVAL: TIME := T#100MS;
+	MS_OUTPUT: BOOL;
+	BLINK_TRAVEL_ALARM: BLINK;
+	BLINK_HORN: BLINK;
+
+	HORN_TOF: TOF;
+
+	ioInit_01: hardwareInit;
+	productInit_01: productInit;
+	machineInit_01: machineInit;
+	operatorState_01: operatorState;
+	handleRemoteDisplay_01: handleRemoteDisplay;
+	
+	canInit_01: canInit;
+	canStatus_01: canStatus;
+
+	YELLOW_LIGHT_DIAG: ifmTypes.DIAG_INFO;
+	YELLOW_LIGHT_CMD: BOOL;
+	YELLOW_LIGHT_ERROR: BOOL;
+	YELLOW_LIGHT_ACTIVATED: BOOL;
+	YELLOW_LIGHT_PREPARED: BOOL;
+
+	HORN_BUTTON_DIAG: ifmTypes.DIAG_INFO;
+	LIGHT_1_BUTTON_DIAG: ifmTypes.DIAG_INFO;
+	LIGHT_2_BUTTON_DIAG: ifmTypes.DIAG_INFO;
+
+	BTMP: BOOL;
+	BLINK_MODE: BLINK; // Blue light
+	BLINK_CONFIRM: BLINK;
+	BLINK_NO_TOUCH: BLINK; // Green light
+	BLINK_MANUAL: BLINK; // Green light
+	BLINK_NO_REMOTE: BLINK; // Red light
+	
+	LAST_PROXIMITY_SENSOR_CYCLE_WARNING: BOOL;  // used to check if a condition occurred across two cycles (expect condition to happen momentarily, but not sustained)
+	LAST_PROXIMITY_SENSOR_INSTALL_STATUS: BOOL;
+END_VAR
+(********************** Implementation ****************************)
+IF NOT SIMULATION THEN
+	DEBUG_MSG_SIM := 'Running normally';
+	MSTIME := SysTimeGetMs();
+ELSE
+	DEBUG_MSG_SIM := 'Simulation';
+	SIMULATED_TIME_US := SIMULATED_TIME_US + 50000;
+	MSTIME := SIMULATED_TIME_US / 1000;
+END_IF
+
+TIME_SECONDS := MSTIME / 1000;
+TIME_SECONDS_FLOAT := TO_REAL(MSTIME) / 1000.0;
+OLD_CYCLE_TIME := TIME_SECONDS_FLOAT - CYCLE_TIME_START;
+
+checkEstop_01(VISUALIZATION := VISUALIZATION);
+
+IF pNVM4^.LOAD_UNLOAD THEN
+	// The load/unload setting can only go from false to true.  To get this unset, you need to uncheck the
+	//	box on the HMI and the reboot the system.
+	LOAD_UNLOAD_ONLY := TRUE;
+END_IF
+OperatorState_01(TIME_NOW_MS := MSTIME);
+checkAutoInhibit_01();
+
+// Handle cycle time tracking if we've been moved into Manual.
+IF NOT AUTOMATIC AND CYCLE_STEP <> eCycleSteps.CYCLE_STEP_MANUAL THEN
+	setCycletimeData(eCycleSteps.CYCLE_STEP_MANUAL, TO_UINT(MACHINE_MODE), 0, -1, -1);
+END_IF
+
+machineInit_01(INIT := INIT);
+axesInit(INIT);
+ioInit_01(INIT := INIT);
+productInit_01(INIT := INIT);
+// setProximitySensorStatus();
+
+IF MACHINE_NO_TOUCH THEN
+	DEBUG_MSG_NOTOUCH := 'Mode switching...';
+ELSE
+	DEBUG_MSG_NOTOUCH := 'Ready!';
+END_IF
+
+(* Call the state diagram for the underlying state here.  This needs to call every scan, because the lower
+	level can use the isRequested() functions that are only set for one scan! *)
+IF isNewModeEnabled() THEN
+	resetMachineStates(); // default all modes to xx_STATE_ENTRY
+END_IF
+
+CASE MACHINE_MODE OF
+	IDLE_MODE:
+		IF HMI_BOOLS_VALUES[PROXIMITY_SENSOR_INSTALLED] AND NOT PROXIMITY_SENSOR_PRESENCE_CONFIRMED THEN
+			machineState_01.checkProximitySensorStatus();	
+		END_IF
+	TRACK_MODE:
+		(* TRACK_MODE_FUNCTION(); *)
+		DEBUG_MODE := 'TRACK MODE';
+		DEBUG_SUBSTATE := '???';
+		trackStateMachine_01(RMT := ADR(REMOTE));
+		TIMELOW := T#100ms;
+		TIMEHIGH := T#100ms;
+	RWP_MODE:
+		(* RWP_MODE_FUNCTION(); *)
+		IF TRACK_BACK_REQUIRED AND OPERATOR_LEVEL < eOperatorLevel.OJJO_ENGINEER THEN
+			// Somebody has bypassed track mode without meeting the track back requirement, simply Estop the machine
+			//	because they are trying to break something by moving the machine kinematics while engaged with the truss.
+			gotoErrorState(REASON := 'Move the machine away from the truss!  ALERT SUPERVISOR!!!');
+		END_IF
+		DEBUG_MODE := 'RWP MODE';
+		DEBUG_SUBSTATE := '???';
+		rwpStateMachine_01(RMT := ADR(REMOTE));
+		TIMEHIGH := T#250ms;
+		TIMELOW := T#250ms;
+	SCREW_MODE:
+		screwStateMachine_01(RMT := ADR(REMOTE));
+		DEBUG_MODE := 'SCREW MODE';
+		TIMELOW := T#0s;
+		TIMEHIGH := T#2s;
+	FWP_MODE:
+		DEBUG_MODE := 'FWP MODE';
+		DEBUG_SUBSTATE := '???';
+	SETUP_MODE:
+		DEBUG_MODE := 'SETUP MODE';
+		DEBUG_SUBSTATE := '???';
+		TIMELOW := T#50ms;
+		TIMEHIGH := T#950ms;
+	ERROR_MODE:
+		errorStateMachine(RMT := ADR(REMOTE));
+		DEBUG_MODE := 'ERROR MODE';
+		DEBUG_SUBSTATE := '???';
+ELSE
+	SoftwareError('OPERATOR_STATE: invalid state in execution.');
+END_CASE
+IN_PROGRESS_CYCLE_TIME := TO_UINT((MSTIME - CYCLE_START_TIME)/1000);
+checkMachineWarning_01(MW => MACHINE_WARNING);
+updateRemoteDisplay();
+handleRemoteDisplay_01();
+handleLightStack();
+handleEngineRev();
+handleAudibleAlarms();
+handleMachineLights();
+IF pNVM4^.HMI_BOOLS[PROXIMITY_SENSOR_INSTALLED] THEN
+	handleProximitySensor();
+END_IF
+
+(* Monitor CanBus. *)
+IF INIT THEN
+	canInit_01();
+END_IF
+
+canStatus_01();

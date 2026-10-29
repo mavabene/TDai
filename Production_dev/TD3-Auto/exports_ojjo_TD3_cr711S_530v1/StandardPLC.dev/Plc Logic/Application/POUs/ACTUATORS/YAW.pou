@@ -1,0 +1,297 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK YAW
+VAR_INPUT
+	INIT: BOOL;
+	pYAW: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	TARGET_POS: REAL;
+	OUTPUT_MAX: REAL;
+	
+	CLOSED_LOOP: BOOL := FALSE;
+	PROFILER: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+
+	VEL: REAL;
+	ACCEL: REAL;
+	
+	//GPS
+	// max pos change / cycle to give desired max velocity: deg/cycle = 1 (deg/sec) * 0.020 sec / cycle
+	GPS_LOOP_MAX_DELTA_P_PER_CYCLE: REAL := 0.02; // deg/cycle or deg/20 ms
+	TARGET_LAST: REAL := 0; // initially set to very unlikely number to id first pass
+	GPS_TARGET_INIT : BOOL := TRUE;
+	GPS_VEL: REAL := 0.8; // slower to prevent disturbing antennas
+	GPS_ACCEL: REAL := 0.6;
+	
+	
+	
+	INITIATE_GPS_AUTO_MOVE: BOOL := FALSE;
+	GPS_FINE_TUNE_SLOWDOWN_FACTOR: REAL := 0.5;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the yaw axis based on the top-level state of the machine.  Some details:
+	1) Yaw positive direction is to the left from operator perspective at rear, or CW from above
+	2) Yaw encoder is 8192 counts, so ~0.04 degrees per count.
+	3) The rollover is handled in the motion library.
+*)
+
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+PROFILER := FALSE;
+
+// This is the one and only place that the A/B encoder values should be referenced!
+IF pNVM4^.HMI_SINTS[YAW_ENCODER_TYPE] = 1 THEN
+	// Siko WV5800
+	TRUNION_ENCODER_STATUS := YAW_ENCODER_B.CANopenState;
+	TRUNION_POS_RAW := TRUNION_POS_RAW_B;
+ELSE
+	// Default to IFM RM7012
+	TRUNION_ENCODER_STATUS := YAW_ENCODER_A.CANopenState;;
+	TRUNION_POS_RAW := TRUNION_POS_RAW_A;
+END_IF
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pYAW^.SETPOINT.POSITION_ENGR);
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	VALID := (TRUNION_ENCODER_STATUS = 5);
+	POSITION_RAW := TO_DINT(TRUNION_POS_RAW);
+END_IF
+Sampled(ADR(pYAW^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pYAW);
+	RETURN;
+END_IF
+
+IF AUTOMATIC AND
+	(
+		(
+			MACHINE_MODE = RWP_MODE AND
+			(
+				RWP_STATE = RWP_STATE_LOCATE_WP
+				OR
+				((RWP_STATE = RWP_STATE_SQUARE_YAW OR RWP_STATE = RWP_STATE_WAIT_LEVEL) AND GPSaxisReadyToTarget(GPS_HEADING)) // set tighter band for slow moving yaw
+			)
+		) 
+		OR
+		(
+			MACHINE_MODE = SCREW_MODE AND
+			(
+				SCREW_STATE = SCREW_STATE_INITIAL_ROTATE OR
+				SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR
+				SCREW_STATE = SCREW_STATE_MAST_TO_TARGET OR
+				SCREW_STATE = SCREW_STATE_FWP OR
+				SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP OR
+				SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS
+			)
+		)
+	)
+	THEN
+	pYAW^.LOOP_PID.SETTLED_BAND := 0.1;
+ELSE
+	pYAW^.LOOP_PID.SETTLED_BAND := 0.2;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	pYAW^.OUTPUT.MAGNITUDE := 0;
+	pYAW^.OUTPUT.POSITIVE := FALSE;
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+// GPS autotarget moves for heading and/or y
+ELSIF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND GPS_AXES[GPS_HEADING].AUTOTARGET_ON AND AUTOMATIC AND AUTOMATIC_ALLOWED AND 
+		(
+			(
+				(MACHINE_MODE = RWP_MODE) AND ( (RWP_STATE = RWP_STATE_WAIT_LEVEL) OR 
+												(RWP_STATE = RWP_STATE_GPS_FAST_TARGET) OR
+												(RWP_STATE = RWP_STATE_GPS_FINE_TARGET) OR
+												(RWP_STATE = RWP_STATE_GPS_MANUAL_CYCLE)) 
+			)
+			OR
+			(	 MACHINE_MODE = SCREW_MODE AND 
+				( 	(SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP) OR 
+					(SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS) OR 
+					((SCREW_STATE = SCREW_STATE_INITIAL_ROTATE) AND (WP_HEIGHT_LATCH = WP_HIGH)) OR
+					(SCREW_STATE = SCREW_STATE_NXT_TL_ADJUST AND NOT isNXTmotorThirdLeg_perLatch())
+				) 
+			)
+		)
+	 THEN	
+	
+	IF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE AND GPS_AUTOTARGET_ACTUATE THEN // only set reference first time
+		TARGET_LAST := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR; // set feedback profiler first step reference
+	END_IF
+	
+	// execute movement
+	// set parameters for move
+	IF GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE THEN
+		GPS_VEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_VELOCITY_FACTOR] * YAW_VEL;
+		GPS_ACCEL := 0.8 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * YAW_ACCEL;
+		TARGET_POS := GPS_AXES[GPS_HEADING].LOCKED_TARGET_POSITION; // outrigger bounces antenna - use locked target before outrigger contacts ground 
+	// yaw and boom swing bounce antennas a lot, so go slow
+	ELSIF GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE THEN
+		IF ((MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_INITIAL_ROTATE)) THEN
+			GPS_VEL := YAW_VEL;
+			GPS_ACCEL := YAW_ACCEL;
+		ELSE
+			GPS_VEL := 0.3 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_VELOCITY_FACTOR] * YAW_VEL; // close so go super slow to minimize antenna bounce
+			GPS_ACCEL := 0.1 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * YAW_ACCEL;
+		END_IF
+		IF (MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP) THEN
+			TARGET_POS := YAW_AT_WP;
+		ELSE
+			TARGET_POS := GPS_AXES[GPS_HEADING].FILTERED_TARGET_POSITION;
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE OR 
+			(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS) THEN // very slow to minimize antennas bounce and instability
+		GPS_VEL := 0.4 * GPS_TEST_VEL_FACTOR; 
+		GPS_ACCEL := 0.2 * GPS_TEST_ACCEL_FACTOR; 
+	TARGET_POS := GPS_AXES[GPS_HEADING].FILTERED_TARGET_POSITION;
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINISH_MOVE THEN 
+		TARGET_POS := AXES[GPS_AXES[GPS_HEADING].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR;
+	END_IF
+	 // limit target position to what is possible
+	TARGET_POS := MIN(MAX (TARGET_POS, GPS_AXES[GPS_HEADING].AXIS_RANGE_MIN), GPS_AXES[GPS_HEADING].AXIS_RANGE_MAX);
+	(*
+	IF isRWPModeStateChange() THEN
+		TARGET_POS := GPS_AXES[GPS_HEADING].TARGET_POSITION; // don't wait for filter
+	END_IF *)
+	IF GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE OR GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE THEN
+		IF isPauseRequested() THEN
+			TrapezoidStop(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.CONFIG , pYAW^.FEEDBACK);
+		ELSIF GPS_AUTOTARGET_ACTUATE THEN // AND NOT GPS_YAW_AND_Y_SET THEN 
+			TrapezoidStart(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.FEEDBACK,
+				TARGET_POS, GPS_VEL, GPS_ACCEL);
+		END_IF
+		CLOSED_LOOP := TRUE;
+		PROFILER := TRUE;
+	ELSIF (GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE) OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) THEN
+		IF isPauseRequested() OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) OR (NOT GPS_READY) THEN
+			setOutput(ADR(pYAW^.OUTPUT), 0, FALSE);
+		ELSE
+			setVelAccel(TARGET_POS, pYAW^.FEEDBACK.POSITION_ENGR,
+				//GPS_AXES[GPS_HEADING].TARGET_LIMIT / 10, 0.2 * GPS_AXES[GPS_HEADING].TARGET_LIMIT / 10, GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL));
+				//2.0, 0.1, GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL)); // let ddt create vel profile
+				1.0, 0.05, GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL)); // let ddt create vel profile
+			TARGET_POS := ddt(TARGET_POS, TARGET_LAST, GPS_VEL);
+			TARGET_LAST := TARGET_POS;
+			SetpointInit(ADR(pYAW^.SETPOINT), pYAW^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+			CLOSED_LOOP := TRUE;	
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_NO_MOVE THEN
+		setOutput(ADR(pYAW^.OUTPUT), 0, FALSE);
+	END_IF
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	((MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL) OR
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL AND NOT GPSaxisReadyToTarget(GPS_HEADING))) THEN
+	(* When we track from position to position, reorient the yaw square to the frame. *)
+	IF isTrackModeStateChange() OR isRWPModeStateChange() OR isContinueRequested() THEN
+		TrapezoidStart(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.FEEDBACK,
+			0, YAW_VEL, YAW_ACCEL);
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.CONFIG , pYAW^.FEEDBACK);
+	END_IF
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF (NOT AUTOMATIC AND MACHINE_MODE = RWP_MODE) OR
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_SQUARE_YAW) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP AND GPS_CALIBRATE)
+	 THEN // AND WP_HEIGHT_LATCH = WP_HIGH)THEN
+	(* TODO: get this exactly right with the two workpoint modes. *)
+	(* Allow the operator to manually adjust the yaw. *)
+	(* Lever reverse mapped to axis! *)
+	IF nearHardStop(pYAW^, JS := REMOTE.RJ_LR, JS_POS_IS_OUTPUT_POS := FALSE) THEN
+		OUTPUT_MAX := protectHardStop(pYAW^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pYAW^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	
+	JOYSTICK_01(JS := REMOTE.RJ_LR, JS_POS_IS_OUTPUT_POS := FALSE,
+	FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+	MAG => pYAW^.OUTPUT.MAGNITUDE, POSITIVE => pYAW^.OUTPUT.POSITIVE);
+
+ELSIF AUTOMATIC AND
+	(
+		((MACHINE_MODE = RWP_MODE) AND (RWP_STATE = RWP_STATE_LOCATE_WP)) OR
+		((MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_FWP))
+	)
+	THEN
+	(* We've told the machine now where the laser is with respect to the machine frame.  Now, in locate WP
+		state, we want to keep the target plate square to the laser as the boom swing is moved.  Boom swing is
+		positive to the operator's right, yaw is positive to operator's left. *)
+	TARGET_POS := YAW_SQUARE_TO_LASER + AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR;
+	setVelAccel(TARGET_POS, pYAW^.FEEDBACK.POSITION_ENGR,
+		4, 0.25, YAW_VEL, YAW_ACCEL, ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pYAW^.SETPOINT), pYAW^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND (isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) AND
+	(
+		MACHINE_MODE = SCREW_MODE AND
+		(
+			(SCREW_STATE = SCREW_STATE_INITIAL_ROTATE AND NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) OR
+			SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR
+			(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET AND NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS)
+		)
+	)
+	THEN
+	TARGET_POS := YAW_AT_WP;
+	// deprecated:
+	// When installing the NXT three legged motor, we are moving the X slide in screw drive on EW screws.  So when doing
+	//	the initial rotate, we need to return to the loading position, and when we move into the screw drive state, we need
+	//	to compensate for the boom swing moving to get Y in the right position.
+// 	IF SCREW_STATE = SCREW_STATE_INITIAL_ROTATE OR SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL THEN
+// 		TARGET_POS := YAW_AT_WP;
+// 	ELSE
+// 		// EW screws of the NXT 3rd leg motor.  The workpoint for these trusses is above the torque tube.
+// 		//	To compensate, we move the rotator left/right to get it aligned with the screw path.  When this
+// 		//	motion happens, a machine with track base not flat in roll will pollute this.  Compensate here.
+// 		IF SCREW_SIDE_LATCH = eScrewSide.SCREW_LEFT THEN
+// 			TARGET_POS := NXT_3LM_YAW_LEFT;
+// 		ELSE
+// 			TARGET_POS := NXT_3LM_YAW_RIGHT;
+// 		END_IF
+// 	END_IF
+	
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		TrapezoidStart(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.FEEDBACK,
+			TARGET_POS, YAW_VEL, YAW_ACCEL);
+	ELSIF isPauseRequested() THEN
+		(* Stop what we are doing. *)
+		TrapezoidStop(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US, pYAW^.CONFIG, pYAW^.FEEDBACK);
+	END_IF
+
+	(* Prepare to run the control loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSE
+	(* Don't run yaw in most cases.  Set outputs to 0. *)
+	setOutput(ADR(pYAW^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF PROFILER THEN
+		TrapezoidRun(ADR(pYAW^.PROFILER), ADR(pYAW^.SETPOINT), TIME_US);
+	END_IF
+	IF CLOSED_LOOP THEN
+		(* Leave the integrator on all the time when the profiler is not being used. *)
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pYAW^.LOOP_PID), pOUTPUT := ADR(pYAW^.OUTPUT), SP := pYAW^.SETPOINT, FB:= pYAW^.FEEDBACK, CFG := pYAW^.CONFIG,
+			I_ENABLED := (pYAW^.PROFILER.STATE = HOLD) OR NOT PROFILER);
+	ELSE
+		pYAW^.SETPOINT.POSITION_ENGR := pYAW^.FEEDBACK.POSITION_ENGR;
+		pYAW^.SETPOINT.POSITION_RAW := pYAW^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pYAW);
+END_IF

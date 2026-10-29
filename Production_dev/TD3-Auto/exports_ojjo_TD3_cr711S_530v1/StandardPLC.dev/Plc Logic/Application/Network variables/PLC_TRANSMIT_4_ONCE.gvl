@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+//{attribute 'qualified_only'}
+(* Transmit these values once and only once on powerup. *)
+VAR_GLOBAL
+	(* Flag to let the HMI know it has valid data. *)
+	HMI_RECEIVED_PLC_DATA_4: BOOL := FALSE;
+
+	IFM_GET_INFO: ARRAY [1..9] OF ifmSysInfo.SYS_INFO;
+END_VAR

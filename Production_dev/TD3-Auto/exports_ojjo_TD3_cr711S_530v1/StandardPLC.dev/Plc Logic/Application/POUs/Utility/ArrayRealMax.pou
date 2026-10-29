@@ -1,0 +1,22 @@
+
+(********************** Declaration ****************************)
+FUNCTION ArrayRealMax : REAL
+VAR_INPUT
+END_VAR
+VAR_IN_OUT
+    arData : ARRAY[*] OF REAL;
+END_VAR
+VAR
+	MX: REAL;
+	I: DINT;
+END_VAR
+
+(********************** Implementation ****************************)
+MX := -9999999;
+FOR I := LOWER_BOUND(arData, 1) TO UPPER_BOUND(arData, 1) DO // Calculates the length of the current array
+	IF arData[I] > MX THEN
+		MX := arData[I];
+	END_IF
+END_FOR
+
+ArrayRealMax := MX;

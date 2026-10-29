@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)
+
+TYPE sPersistent_template :
+STRUCT
+	NVMx_NEEDS_INIT: UDINT := 999;
+	NVMx_FORMAT_VERSION: UDINT := 1;
+	NVMx_FORMAT_PLACEHOLDER_1: UDINT := 0;
+	NVMx_FORMAT_PLACEHOLDER_2: UDINT := 0;
+	
+	NVMx_PADDING: UDINT := 16#DEADBEEF;
+
+END_STRUCT
+END_TYPE
+
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)

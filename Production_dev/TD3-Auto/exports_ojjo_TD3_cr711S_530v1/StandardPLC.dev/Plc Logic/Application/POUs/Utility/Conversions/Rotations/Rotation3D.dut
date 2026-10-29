@@ -1,0 +1,7 @@
+
+(********************** Declaration ****************************)
+TYPE Rotation3D : ARRAY [4 .. 6] OF REAL;
+
+END_TYPE
+
+// rotation angles for 3D transformations

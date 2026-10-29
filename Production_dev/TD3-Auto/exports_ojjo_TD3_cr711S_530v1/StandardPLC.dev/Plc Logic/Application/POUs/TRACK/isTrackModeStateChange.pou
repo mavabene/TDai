@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION isTrackModeStateChange : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+isTrackModeStateChange := TRACK_MODE_STATE_CHANGE;

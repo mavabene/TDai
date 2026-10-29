@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+(* The north-south facing screw on the NXT 3LM moved the cross on the target plate in the embedment
+	direction when the mast pitches to the screw angle.  This must be accounted for when the embedment
+	calculation is being done on these screws. *)
+FUNCTION calcNXTmotorThirdLegNsDeltaEmbed : REAL
+VAR_INPUT
+END_VAR
+VAR
+	DELTA_EMBEDMENT: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+(* From Charles' hand sketch of the issue here:
+	https://ojjocom-my.sharepoint.com/:x:/g/personal/calmy_ojjo_com/ETBnDsb1O8tGhebpvNy1F0YBC-RnSb-k3UlKdOhioTfBtw?e=5W7T23
+	
+	delta_embedment = Zoffset * ( (1/cos(alpha) ) - 1 ) + ( Xppr * tan(alpha) )
+	
+	where:
+		- Zoffset is the offset between the pitch pivot and the horizontal line on teh target plate
+		- alpha is the angle off plumb of the screw, which is 90 degrees minus the machine's setting of 50 degrees
+		- Xppr is the perpendicular distance between the pitch pivot and the drill rod
+*)
+
+DELTA_EMBEDMENT := (PITCH_PIVOT_TO_DRILL_ROD * TAN_DEG(SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE));
+
+calcNXTmotorThirdLegNsDeltaEmbed := DELTA_EMBEDMENT;

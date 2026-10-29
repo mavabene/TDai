@@ -1,0 +1,30 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+TYPE eDataCollection :
+(
+	// Screw drive completion
+	NO_SCREW_DRIVEN := 1,
+	NEW_SCREW_DRIVE := 2,
+	SCREW_DRIVE_ENDED_NORMALLY := 3,
+	SCREW_DRIVE_ENDED_BY_GOING_MANUAL := 4,
+	SCREW_DRIVE_ENDED_BY_MODE_CHANGE := 5,
+	SCREW_DRIVE_ENDED_BY_ESTOP := 6,
+	eDataCollection_RESERVED_07 := 7,
+	eDataCollection_RESERVED_08 := 8,
+	eDataCollection_RESERVED_09 := 9,
+	// Track Assist record type
+	NO_TA_COLLECTION := 10,
+	TA_COLLECT_TRACK_TO_RWP := 11,
+	TA_COLLECT_RWP_TO_SCREW := 12,
+	AB_COLLECT_CRIMP := 13,
+	TA_COLLECT_SEND_DATA := 14,
+	eDataCollection_RESERVED_15 := 15,
+	// Track Assist 
+	TA_WASNT_USED := 16,
+	TA_USED_PARTIALLY := 17,
+	TA_USED_TO_END_OF_TRACK := 18,
+	TA_AUTO_ADVANCE_USED := 19,
+	eDataCollection_RESERVED_20 := 20
+) 	USINT;
+END_TYPE

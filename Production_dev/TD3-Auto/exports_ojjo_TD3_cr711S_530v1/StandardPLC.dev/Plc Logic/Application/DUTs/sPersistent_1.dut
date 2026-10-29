@@ -1,0 +1,136 @@
+
+(********************** Declaration ****************************)
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)
+
+TYPE sPersistent_1 :
+STRUCT
+	(* The normal drill here is to simply add elements to the structure, and never subtract them.  If this is being done,
+		the format version need not change.  When we run out of space and reformat, this version will have to be handled on
+		powerup to be able to upgrade old software to new and then to reformat the NVM while keeping the old data. *)
+	NVM1_NEEDS_INIT: UDINT := 1000;
+	NVM1_FORMAT_VERSION: UDINT := 1;
+	NVM1_FORMAT_PLACEHOLDER_1: UDINT := 0;
+	NVM1_FORMAT_PLACEHOLDER_2: UDINT := 0;
+	
+	Z_SLIDE_ENCODER_AT_ZERO: UDINT := 200;
+	X_SLIDE_ENCODER_AT_ZERO: UDINT := 222;
+	MAST_SLIDE_ENCODER_AT_REF: UDINT := 15000;
+	MAST_SLIDE_ENCODER_AT_ZERO: UDINT := 0;
+// 	Z_SLIDE_CALIBRATION_OFFSET: REAL := 0.0;  // not used anywhere, so deprecated sPersistent_1_AVAIL_02
+	sPersistent_1_AVAIL_02: REAL := 0.0;
+	YAW_ENCODER_AT_ZERO: UDINT := 8192; // TO_UDINT(-426); // 8192 is ifm Rx7012 max counts
+	LOWER_CROWD_ENCODER_AT_REF: UDINT := 33478084;
+	LOWER_CROWD_ENCODER_AT_ZERO: UDINT := 33410065;
+	(* cm: measured from bottom of mast foot to bottom of lower crowd lower bearing block *)
+	LOWER_CROWD_MAST_TO_SLIDE_OFFSET: REAL := 3.0;
+	UPPER_CROWD_ENCODER_AT_ZERO: UDINT	:= 33528753;
+	BOOM_SWING_ENCODER_AT_ZERO: UDINT := 33500000;
+
+	(* ---------- Job Specific Parameters ---------- *)
+
+	(* These embedments are vertical, must be extended when installed at an angle. *)
+	SCREW_LENGTHS_CM: ARRAY [1..SCREW_LENGTHS_COUNT] OF REAL := [200.0, 150.0, 100.0];
+	STANDARD_EMBEDMENT_CM: ARRAY [1..SCREW_LENGTHS_COUNT] OF REAL := [139.7, 111.8, 80.0];
+
+	(* This is the distance (in cm) before end of screw drive where the mandrel starts retracting in hard soil. *)
+	UC_END_RETRACT_HARD: REAL := 7.5;
+
+	(* Degrees from vertical that the screw will be driven at. *)
+	ROTATOR_SCREW_POS: REAL := 20.0;
+
+	(* cm from the SCREW_END_POS where we want to stop the lower crowd, in centimeters. *)
+	SCREW_STOP_THRESHOLD: REAL := 0.1;
+
+	(* USED ONLY IN OLD CONTROL LOOP!!  Control parameters for lower crowd when driving a screw, all in cm/s.
+		We try to drive the lower crowd at LOWER_CROWD_DRIVE_VEL, and we are happy if it stays
+		above that minus the lower threshhold and below that plus the upper threshhold.  If
+		the velocity goes outside of this window, we adjust the control effort. *)
+	sPersistent_1_AVAIL_04: REAL := 2.6;
+// 	LOWER_CROWD_DRIVE_VEL: REAL := 2.6;  // deprecated - we only use new control loop now
+
+	(* Machine statistics section. *)
+	RUNTIME_HOURS: REAL;
+	TOTAL_TRUSSES: DINT;
+
+	(* cm: mast slide and lower crowd locate together to center the target on the rotator. COR: Center of Rotator *)
+// 	MAST_SLIDE_COR_POS: REAL := 195; // hardcoded now
+	sPersistent_1_AVAIL_01: REAL;
+	LOWER_CROWD_COR_POS: REAL := 160; // TD2: 181;
+
+	(* Target plate: distance in Z from screw reference surface to target crosshair. *)
+	CHUCK_TO_TARGET: REAL := -15.5;
+	(* Distance from bottom of crimp zone to workpoint. *)
+	ATOL_TO_WP: REAL := 45.08 + 2.54; // NXT: 31.27;
+	
+	(* This is from load position to tip on ground at a 20 degree angle. *)
+	SCREW_TIP_TO_GROUND: REAL := 15.0;
+// 	SCREW_TIP_TO_START: REAL := 15.0;
+	sPersistent_1_AVAIL_05: REAL := 15.0;
+	
+	HAMMER_ENABLED: BOOL := FALSE;
+	HAMMER_CONTROL_SOURCE: INT := 0;
+	HAMMER_ON_PRESSURE: REAL := 860;
+	HAMMER_OFF_PRESSURE: REAL := 825;
+	
+	AIR_COMPRESSOR_POWERED: BOOL := FALSE;
+	(* Distance below the ground where the air compressor will turn on. *)
+	AIR_ON_DISTANCE: REAL := 50.0;
+	(* Distance into the drill retract that the air compressor turns off. *)
+	AIR_OFF_DISTANCE: REAL := 75.0;
+	
+	(* This is the position of the upper crowd when the bottom of the drill steel is at the same height as
+		the bottom of the chuck. *)
+	UPPER_CROWD_DRILL_STEEL: REAL := 206.8;
+	DRILL_BIT_LENGTH: REAL := 10.0;
+	DRILL_BIT_THREAD_LENGTH: REAL := 10.0;
+	DRILL_BIT_DRIVE_PROTRUSION: REAL := 15.0;
+	CHUCK_TO_BUSHING: REAL := 51.0;
+	CHUCK_TO_BIT_TIP_TRAVEL: REAL := 5.0;
+	
+	SCREW_NUMBER: UDINT := 1;
+	
+	(* Machine serial number. *)
+	MACHINE_SERIAL: INT := 102;
+
+	(* Loop frequency, Hz. *)
+	DRIVE_LOOP_FREQ: REAL := 50;
+	(* This gives us KVFF millepercent output per centimeter/sec velocity setpoint. *)
+	DRIVE_KVFF: REAL := 40.0;
+	(* This gives us KP millepercent output per centimeter/sec velocity error. *)
+	DRIVE_KP: REAL := 30.0;  // ~5
+	(* KI units: millepercent per (centimeter/sec) * sec = centimeter.  Basically the gain is the output you
+		get if you have a one centimeter per second error for one entire second. *)
+	DRIVE_KI: REAL := 10.00; // ~5
+	(* For use internally only, this is the KI to be used by the loop, it is scaled from 1 second to the loop time. *)
+	DRIVE_KI_INTERNAL: REAL := DRIVE_KI / DRIVE_LOOP_FREQ;
+	DRIVE_ILIMIT: REAL := 50.0;
+	DRIVE_OUTPUT_MAX: REAL := 300.0;
+
+	// Unused now, hardcoded to 10 Hz.
+	DATA_ACQ_FREQ_SELECT: INT := 3;
+	
+	AIR_FLOW_REDUCED: BOOL := FALSE;
+	AIR_FLOW: INT := 50;
+	
+	(* % slope *)
+	TORQUE_TUBE_PITCH: REAL := 0.0;
+
+	OUTRIGGER_ENABLED: BOOL := FALSE;
+	
+	LC_DRIVE_VEL_HI: REAL := 3.0;
+	LC_DRIVE_VEL_LOW: REAL := 3.0;
+	UR_DRIVE_PRESSURE_HI: REAL := 3000;
+	UR_DRIVE_PRESSURE_LOW: REAL := 500;
+
+	(* How far the drill bit sticks out of the screw for loading. *)
+	DRILL_BIT_LOAD_PROTRUSION: REAL := 12.0;
+	
+// 	DRIVE_RAMPUP_DISTANCE: REAL := 5.0; // never changed so hardcoded
+	sPersistent_1_AVAIL_03: REAL := 5.0;
+	
+	(* Leave this in for padding in case there is some +1 or -1 bug I'm missing in the structured text pointer handling. *)
+	NVM1_PADDING: UDINT := 16#DEADBEEF;
+END_STRUCT
+END_TYPE
+
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)

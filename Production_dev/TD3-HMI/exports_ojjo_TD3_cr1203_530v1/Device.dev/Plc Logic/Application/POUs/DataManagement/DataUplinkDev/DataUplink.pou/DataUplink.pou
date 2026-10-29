@@ -1,0 +1,514 @@
+
+(********************** Declaration ****************************)
+PROGRAM DataUplink
+VAR
+    xMqttClientEnable       : BOOL := FALSE;
+    fbReconnectDelay        : TON;
+    tReconnectDelay         : TIME := T#5S;
+    udiConnectErrors        : UDINT;
+    udiReconnectCycles      : UDINT;
+
+    sBrokerHost             : STRING(80) := '192.168.82.104';
+    uiBrokerPort            : UINT := 8883;
+    sClientId               : STRING(255) := 'TD3HMIDataUplink';
+    wsTopicName             : WSTRING(1024) := "hmi/telemetry";
+    wsTelemetryTopicName    : WSTRING(80) := "hmi/telemetry";
+    wsHmiStatusTopicName    : WSTRING(80) := "ojjo/hmi/status";
+    wsHmiInfoTopicName      : WSTRING(80) := "ojjo/hmi/info";
+    wsAppStatusTopicFilter  : WSTRING(1024) := "ojjo/app/status";
+
+    sWillMessage            : STRING(255) := '{$"state$":$"offline$",$"reason$":$"lwt$"}';
+    uiWillMessageSize       : UINT;
+
+    sTLSClientCertCommonName : STRING := 'Ojjo-Client';
+    ciCertInfo              : NBS.CERT_INFO := (
+        psInfo := ADR(sTLSClientCertCommonName),
+        udiSize := 11
+    );
+
+    tlsContext              : NBS.TLSContext := (
+        ePurpose := NBS.PURPOSE.CLIENT_SIDE,
+        sUseCaseName := 'OJJO_MQTT_CLIENT',
+        sTLSVersion := '1.2',
+        ciCertInfo := ciCertInfo,
+        udiVerificationMode := 2
+    );
+
+    mqttClient              : MQTT.MQTTClient;
+    mqttPublish             : MQTT.MQTTPublish;
+    mqttSubscribe           : MQTT.MQTTSubscribe;
+
+    xConnectedToBroker      : BOOL;
+    xConnectBusy            : BOOL;
+    xConnectError           : BOOL;
+    eConnectMqttError       : MQTT.MQTT_ERROR;
+
+    xSubscribeDone          : BOOL;
+    xSubscribeBusy          : BOOL;
+    xSubscribeError         : BOOL;
+    xSubscribeReceived      : BOOL;
+    xSubscribeActive        : BOOL;
+    udiSubscribePayloadSize : UDINT;
+    eSubscribeMqttError     : MQTT.MQTT_ERROR;
+    wsSubscribeLastTopic    : WSTRING(1024);
+    sAppStatusPayload       : STRING(1023);
+
+    xPublishExecute         : BOOL;
+    xPublishBusy            : BOOL;
+    xPublishDone            : BOOL;
+    xPublishError           : BOOL;
+    ePublishMqttError       : MQTT.MQTT_ERROR;
+    ePublishQoS             : MQTT.MQTT_QOS := MQTT.MQTT_QOS.QoS1;
+    xSendRetain             : BOOL;
+    xCurrentPayloadIsControl : BOOL;
+    uiCurrentMessageId      : UINT;
+	
+	xPayloadBuildBusy : BOOL := FALSE;
+
+    eState                  : eMqttUplinkState := MQTT_UPLINK_DISABLED;
+
+    aQueue                  : ARRAY[1..16] OF sMqttTelemetrySlot;
+    uiQueueHead             : UINT := 1;
+    uiQueueTail             : UINT := 1;
+    uiDepthCursor           : UINT := 1;
+    uiFinishedTail          : UINT := 0;
+    uiQueueDepth            : UINT := 0;
+    uiCurrentTail           : UINT := 0;
+
+    aControlQueue           : ARRAY[1..4] OF sMqttTelemetrySlot;
+    uiControlQueueHead      : UINT := 1;
+    uiControlQueueTail      : UINT := 1;
+    uiControlDepthCursor    : UINT := 1;
+    uiControlQueueDepth     : UINT := 0;
+
+    sBuildPayload           : STRING(4095);
+    xBuildFirstDataField    : BOOL;
+    xBuildOk                : BOOL;
+
+    sSendMessage            : STRING(4095);
+    udiPayloadSize          : UDINT;
+
+    stUtcMs                 : SYSTIME;
+    stUsNow                 : SYSTIME;
+    stdUtc                  : SYSTIMEDATE;
+    rtcResult               : RTS_IEC_RESULT;
+
+    sTimestampUtc           : STRING(40);
+    sYear                   : STRING(4);
+    sMonth                  : STRING(2);
+    sDay                    : STRING(2);
+    sHour                   : STRING(2);
+    sMinute                 : STRING(2);
+    sSecond                 : STRING(2);
+    sMicro                  : STRING(6);
+    udiMicro                : UDINT;
+
+    sMachineId              : STRING(20);
+    sMessageSequence        : STRING(20);
+    udiNextMessageSequence  : UDINT := 1;
+    udiCurrentMessageSequence : UDINT;
+    sFirmware               : STRING(80);
+
+    udiBuildErrors          : UDINT;
+    udiRejectedDisabled     : UDINT;
+    udiRejectedQueueFull    : UDINT;
+    udiRejectedControlQueueFull : UDINT;
+
+    xWaitForK410ReadyBeforePublish : BOOL := TRUE;
+    xTelemetryPublishAllowed : BOOL := FALSE;
+    sK410AppState           : STRING(20);
+    sK410LastUpdatedUtc     : STRING(40);
+    stK410LastUpdatedMs     : SYSTIME;
+    stParsedIsoUtcMs        : SYSTIME;
+    xK410LastUpdatedParsed  : BOOL := FALSE;
+    xK410AppStatusFresh     : BOOL := FALSE;
+    xK410ReadyToPublish     : BOOL := FALSE;
+    udiK410AppStatusAgeMs   : UDINT;
+
+    fbHmiStatusHeartbeat    : TON;
+    tHmiStatusHeartbeat     : TIME := T#10M;
+    xBrokerWasConnected     : BOOL := FALSE;
+    xHmiOnlineSinceValid    : BOOL := FALSE;
+    sHmiOnlineSinceUtc      : STRING(40);
+    xHmiStatusPublishPending : BOOL := FALSE;
+    xHmiInfoPublishPending  : BOOL := FALSE;
+    sLastPublishedMachineId : STRING(40);
+    xMachineIdReady         : BOOL := FALSE;
+    uiHmiStatusMessageId    : UINT := 9001;
+    uiHmiInfoMessageId      : UINT := 9002;
+
+    stDataUplinkRunNowUs       : SYSTIME;
+    stDataUplinkRunLastUs      : SYSTIME;
+    xDataUplinkRunLastValid    : BOOL := FALSE;
+    udiDataUplinkRunIntervalUs : UDINT;
+
+    eFakeSequenceState          : eMqttFakeSequenceState := MQTT_FAKE_STATE_IDLE;
+    fbFakeStart                 : Standard.R_TRIG;
+    fbFakeStepDelay             : TON;
+    fbFakeScrewDuration         : TON;
+    fbFakeScrewSampleDelay      : TON;
+    udiFakeScrewSamplesSent     : UDINT;
+    uiFakeGpsSampleCount        : UINT;
+    rFakeCycleElapsedSeconds    : REAL;
+    rFakeScrewStartSeconds      : REAL;
+    rFakeDriveTimeSeconds      : REAL;
+	
+	stFakeAsBuiltScrew : sAsBuiltScrewEvent;
+    stFakeAsBuiltFoundation : sAsBuiltFoundationEvent;
+    aFakeAsBuiltJson : ARRAY[1..5] OF STRING(4095);
+    uiFakeAsBuiltJsonCount : UINT := 0;
+END_VAR
+(********************** Implementation ****************************)
+SysTimeGetUs(pUsTime := stDataUplinkRunNowUs);
+
+IF xDataUplinkRunLastValid THEN
+    IF stDataUplinkRunNowUs >= stDataUplinkRunLastUs THEN
+        udiDataUplinkRunIntervalUs := TO_UDINT(stDataUplinkRunNowUs - stDataUplinkRunLastUs);
+        DATA_UPLINK_RUN_INTERVAL_MS := UDINT_TO_REAL(udiDataUplinkRunIntervalUs) / 1000.0;
+    END_IF
+ELSE
+    xDataUplinkRunLastValid := TRUE;
+    DATA_UPLINK_RUN_INTERVAL_MS := 0.0;
+END_IF
+
+stDataUplinkRunLastUs := stDataUplinkRunNowUs;
+uiWillMessageSize := TO_UINT(Stu.StrLenA(ADR(sWillMessage)));
+
+xWaitForK410ReadyBeforePublish := MQTT_WAIT_FOR_K410_READY_BEFORE_PUBLISH;
+
+IF NOT ENABLE_MQTT_UPLINK THEN
+    xPublishExecute := FALSE;
+    xHmiStatusPublishPending := FALSE;
+    xHmiInfoPublishPending := FALSE;
+
+    IF uiCurrentTail > 0 THEN
+        IF xCurrentPayloadIsControl THEN
+            IF aControlQueue[uiCurrentTail].STATE = MQTT_SLOT_SENDING THEN
+                aControlQueue[uiCurrentTail].STATE := MQTT_SLOT_READY;
+            END_IF
+        ELSE
+            IF aQueue[uiCurrentTail].STATE = MQTT_SLOT_SENDING THEN
+                aQueue[uiCurrentTail].STATE := MQTT_SLOT_READY;
+            END_IF
+        END_IF
+    END_IF
+
+    uiCurrentTail := 0;
+    xCurrentPayloadIsControl := FALSE;
+    eState := MQTT_UPLINK_DISABLED;
+END_IF
+
+CASE eState OF
+    MQTT_UPLINK_DISABLED:
+        xMqttClientEnable := FALSE;
+
+    MQTT_UPLINK_CONNECTING_TO_BROKER,
+    MQTT_UPLINK_READY_FOR_PAYLOAD,
+    MQTT_UPLINK_SENDING_MQTT_PAYLOAD,
+    MQTT_UPLINK_WAITING_FOR_PUBLISH_ACK:
+        xMqttClientEnable := TRUE;
+
+    MQTT_UPLINK_BACKOFF:
+        xMqttClientEnable := FALSE;
+END_CASE
+
+IF NOT ENABLE_MQTT_UPLINK THEN
+    xMqttClientEnable := FALSE;
+    xPublishExecute := FALSE;
+END_IF
+
+mqttClient(
+    xEnable := xMqttClientEnable,
+    uiPort := uiBrokerPort,
+    uiKeepAlive := 10,
+    pbWillMessage := ADR(sWillMessage),
+    uiWillMessageSize := uiWillMessageSize,
+    xWillRetain := TRUE,
+    eWillQoS := MQTT.MQTT_QOS.QoS1,
+    xCleanSession := TRUE,
+    wsWillTopic := wsHmiStatusTopicName,
+    sClientId := sClientId,
+    itfTLSContext := tlsContext,
+    udiTimeOut := 5000000,
+    sHostname := sBrokerHost,
+    xBusy => xConnectBusy,
+    xError => xConnectError,
+    eMQTTError => eConnectMqttError,
+    xConnectedToBroker => xConnectedToBroker);
+
+MQTT_ACTIVE := xConnectedToBroker;
+
+mqttSubscribe(
+    xEnable := xConnectedToBroker,
+    eSubscribeQoS := MQTT.MQTT_QOS.QoS1,
+    pbPayload := ADR(sAppStatusPayload),
+    udiMaxPayloadSize := TO_UDINT(SIZEOF(sAppStatusPayload) - 1),
+    udiTimeout := 1000000,
+    mqttClient := mqttClient,
+    wsTopicFilter := wsAppStatusTopicFilter,
+    xDone => xSubscribeDone,
+    xBusy => xSubscribeBusy,
+    xError => xSubscribeError,
+    eMQTTError => eSubscribeMqttError,
+    xReceived => xSubscribeReceived,
+    udiPayloadSize => udiSubscribePayloadSize,
+    xSubscribeActive => xSubscribeActive,
+    wsLastTopic => wsSubscribeLastTopic);
+
+MQTT_APP_STATUS_SUBSCRIBE_ACTIVE := xSubscribeActive;
+
+IF xSubscribeReceived THEN
+    IF udiSubscribePayloadSize < TO_UDINT(SIZEOF(sAppStatusPayload)) THEN
+        sAppStatusPayload := LEFT(sAppStatusPayload, TO_INT(udiSubscribePayloadSize));
+    ELSE
+        sAppStatusPayload := LEFT(sAppStatusPayload, TO_INT(SIZEOF(sAppStatusPayload) - 1));
+    END_IF
+
+    MQTT_APP_STATUS_RECEIVED := MQTT_APP_STATUS_RECEIVED + 1;
+    ParseAppStatusPayload(sPayload := sAppStatusPayload);
+END_IF
+
+IF xConnectedToBroker THEN
+    UpdateK410StatusFreshness();
+ELSE
+    xK410AppStatusFresh := FALSE;
+    xK410ReadyToPublish := FALSE;
+    MQTT_APP_STATUS_STALE := TRUE;
+    MQTT_K410_READY_TO_PUBLISH := FALSE;
+END_IF
+
+xTelemetryPublishAllowed := xConnectedToBroker AND (NOT xWaitForK410ReadyBeforePublish OR xK410ReadyToPublish);
+MQTT_K410_WAIT_GATE_ACTIVE := xConnectedToBroker AND xWaitForK410ReadyBeforePublish AND NOT xK410ReadyToPublish;
+MQTT_WAIT_FOR_K410_READY_BEFORE_PUBLISH := xWaitForK410ReadyBeforePublish;
+
+IF xConnectedToBroker AND NOT xBrokerWasConnected THEN
+    BuildTimestampUtc();
+    sHmiOnlineSinceUtc := sTimestampUtc;
+    xHmiOnlineSinceValid := TRUE;
+    xHmiStatusPublishPending := TRUE;
+    xHmiInfoPublishPending := TRUE;
+    fbHmiStatusHeartbeat(IN := FALSE, PT := tHmiStatusHeartbeat);
+END_IF
+
+IF xConnectedToBroker THEN
+    fbHmiStatusHeartbeat(IN := NOT xHmiStatusPublishPending, PT := tHmiStatusHeartbeat);
+    IF fbHmiStatusHeartbeat.Q THEN
+        xHmiStatusPublishPending := TRUE;
+        fbHmiStatusHeartbeat(IN := FALSE, PT := tHmiStatusHeartbeat);
+    END_IF
+
+	xMachineIdReady := LEN(MQTT_MACHINE_SERIAL) > 0;
+	
+	IF xMachineIdReady AND (MQTT_MACHINE_SERIAL <> sLastPublishedMachineId) THEN
+		xHmiInfoPublishPending := TRUE;
+	END_IF
+
+    IF xHmiStatusPublishPending THEN
+        IF BuildHmiStatusPayload() THEN
+            xHmiStatusPublishPending := FALSE;
+        END_IF
+    END_IF
+
+    IF xHmiInfoPublishPending AND xMachineIdReady THEN
+		IF BuildHmiInfoPayload() THEN
+			xHmiInfoPublishPending := FALSE;
+			sLastPublishedMachineId := MQTT_MACHINE_SERIAL;
+		END_IF
+    END_IF
+ELSE
+    fbHmiStatusHeartbeat(IN := FALSE, PT := tHmiStatusHeartbeat);
+    xHmiOnlineSinceValid := FALSE;
+END_IF
+
+xBrokerWasConnected := xConnectedToBroker;
+
+RunFakeSequence();
+
+uiQueueDepth := 0;
+uiDepthCursor := uiQueueTail;
+
+WHILE (uiDepthCursor <> uiQueueHead) AND (uiQueueDepth < 16) DO
+    uiQueueDepth := uiQueueDepth + 1;
+
+    IF uiDepthCursor >= 16 THEN
+        uiDepthCursor := 1;
+    ELSE
+        uiDepthCursor := uiDepthCursor + 1;
+    END_IF
+END_WHILE
+
+uiControlQueueDepth := 0;
+uiControlDepthCursor := uiControlQueueTail;
+
+WHILE (uiControlDepthCursor <> uiControlQueueHead) AND (uiControlQueueDepth < 4) DO
+    uiControlQueueDepth := uiControlQueueDepth + 1;
+
+    IF uiControlDepthCursor >= 4 THEN
+        uiControlDepthCursor := 1;
+    ELSE
+        uiControlDepthCursor := uiControlDepthCursor + 1;
+    END_IF
+END_WHILE
+
+MQTT_QUEUE_DEPTH := uiQueueDepth;
+MQTT_CONTROL_QUEUE_DEPTH := uiControlQueueDepth;
+MQTT_UPLINK_STATE_VALUE := TO_INT(eState);
+MQTT_SEQUENCE_NEXT := udiNextMessageSequence;
+
+CASE eState OF
+
+    MQTT_UPLINK_DISABLED:
+        xPublishExecute := FALSE;
+        fbReconnectDelay(IN := FALSE, PT := tReconnectDelay);
+
+        IF ENABLE_MQTT_UPLINK THEN
+            eState := MQTT_UPLINK_CONNECTING_TO_BROKER;
+        END_IF
+
+    MQTT_UPLINK_CONNECTING_TO_BROKER:
+        IF xConnectedToBroker THEN
+            eState := MQTT_UPLINK_READY_FOR_PAYLOAD;
+        ELSIF xConnectError THEN
+            udiConnectErrors := udiConnectErrors + 1;
+            eState := MQTT_UPLINK_BACKOFF;
+        END_IF
+
+    MQTT_UPLINK_READY_FOR_PAYLOAD:
+        IF NOT xConnectedToBroker THEN
+            eState := MQTT_UPLINK_BACKOFF;
+        ELSIF uiControlQueueTail <> uiControlQueueHead THEN
+            IF aControlQueue[uiControlQueueTail].STATE = MQTT_SLOT_READY THEN
+                uiCurrentTail := uiControlQueueTail;
+                xCurrentPayloadIsControl := TRUE;
+                uiCurrentMessageId := aControlQueue[uiControlQueueTail].MESSAGE_ID;
+                sSendMessage := aControlQueue[uiControlQueueTail].PAYLOAD;
+                udiPayloadSize := aControlQueue[uiControlQueueTail].PAYLOAD_SIZE;
+                wsTopicName := aControlQueue[uiControlQueueTail].TOPIC_NAME;
+                xSendRetain := aControlQueue[uiControlQueueTail].RETAIN_MSG;
+                aControlQueue[uiControlQueueTail].STATE := MQTT_SLOT_SENDING;
+                eState := MQTT_UPLINK_SENDING_MQTT_PAYLOAD;
+            ELSIF aControlQueue[uiControlQueueTail].STATE = MQTT_SLOT_EMPTY THEN
+                IF uiControlQueueTail >= 4 THEN
+                    uiControlQueueTail := 1;
+                ELSE
+                    uiControlQueueTail := uiControlQueueTail + 1;
+                END_IF
+            END_IF
+        ELSIF xTelemetryPublishAllowed AND uiQueueTail <> uiQueueHead THEN
+            IF aQueue[uiQueueTail].STATE = MQTT_SLOT_READY THEN
+                uiCurrentTail := uiQueueTail;
+                xCurrentPayloadIsControl := FALSE;
+                uiCurrentMessageId := aQueue[uiQueueTail].MESSAGE_ID;
+                sSendMessage := aQueue[uiQueueTail].PAYLOAD;
+                udiPayloadSize := aQueue[uiQueueTail].PAYLOAD_SIZE;
+                wsTopicName := aQueue[uiQueueTail].TOPIC_NAME;
+                xSendRetain := aQueue[uiQueueTail].RETAIN_MSG;
+                aQueue[uiQueueTail].STATE := MQTT_SLOT_SENDING;
+                eState := MQTT_UPLINK_SENDING_MQTT_PAYLOAD;
+            ELSIF aQueue[uiQueueTail].STATE = MQTT_SLOT_EMPTY THEN
+                IF uiQueueTail >= 16 THEN
+                    uiQueueTail := 1;
+                ELSE
+                    uiQueueTail := uiQueueTail + 1;
+                END_IF
+            END_IF
+        END_IF
+
+    MQTT_UPLINK_SENDING_MQTT_PAYLOAD:
+        xPublishExecute := TRUE;
+        eState := MQTT_UPLINK_WAITING_FOR_PUBLISH_ACK;
+
+    MQTT_UPLINK_WAITING_FOR_PUBLISH_ACK:
+        IF xPublishBusy THEN
+            xPublishExecute := FALSE;
+        END_IF
+
+        IF xPublishDone THEN
+            xPublishExecute := FALSE;
+            uiFinishedTail := uiCurrentTail;
+
+            IF xCurrentPayloadIsControl THEN
+                IF uiControlQueueTail >= 4 THEN
+                    uiControlQueueTail := 1;
+                ELSE
+                    uiControlQueueTail := uiControlQueueTail + 1;
+                END_IF
+
+                IF uiFinishedTail > 0 THEN
+                    IF aControlQueue[uiFinishedTail].MESSAGE_ID = uiHmiStatusMessageId THEN
+                        MQTT_HMI_STATUS_PUBLISH_SENT := MQTT_HMI_STATUS_PUBLISH_SENT + 1;
+                    ELSIF aControlQueue[uiFinishedTail].MESSAGE_ID = uiHmiInfoMessageId THEN
+                        MQTT_HMI_INFO_PUBLISH_SENT := MQTT_HMI_INFO_PUBLISH_SENT + 1;
+                    END_IF
+
+                    aControlQueue[uiFinishedTail].STATE := MQTT_SLOT_EMPTY;
+                    aControlQueue[uiFinishedTail].PAYLOAD := '';
+                    aControlQueue[uiFinishedTail].PAYLOAD_SIZE := 0;
+                    aControlQueue[uiFinishedTail].RETAIN_MSG := FALSE;
+                END_IF
+
+                MQTT_CONTROL_QUEUE_SENT := MQTT_CONTROL_QUEUE_SENT + 1;
+            ELSE
+                IF uiQueueTail >= 16 THEN
+                    uiQueueTail := 1;
+                ELSE
+                    uiQueueTail := uiQueueTail + 1;
+                END_IF
+
+                IF uiFinishedTail > 0 THEN
+                    aQueue[uiFinishedTail].STATE := MQTT_SLOT_EMPTY;
+                    aQueue[uiFinishedTail].PAYLOAD := '';
+                    aQueue[uiFinishedTail].PAYLOAD_SIZE := 0;
+                    aQueue[uiFinishedTail].RETAIN_MSG := FALSE;
+                END_IF
+
+                MQTT_QUEUE_SENT := MQTT_QUEUE_SENT + 1;
+                udiMessagesSent := udiMessagesSent + 1;
+            END_IF
+
+            uiCurrentTail := 0;
+            xCurrentPayloadIsControl := FALSE;
+            eState := MQTT_UPLINK_READY_FOR_PAYLOAD;
+
+        ELSIF xPublishError THEN
+            xPublishExecute := FALSE;
+            udiPublishErrors := udiPublishErrors + 1;
+
+            IF uiCurrentTail > 0 THEN
+                IF xCurrentPayloadIsControl THEN
+                    aControlQueue[uiCurrentTail].STATE := MQTT_SLOT_READY;
+                ELSE
+                    aQueue[uiCurrentTail].STATE := MQTT_SLOT_READY;
+                END_IF
+            END_IF
+
+            uiCurrentTail := 0;
+            xCurrentPayloadIsControl := FALSE;
+            eState := MQTT_UPLINK_BACKOFF;
+        END_IF
+
+    MQTT_UPLINK_BACKOFF:
+        xPublishExecute := FALSE;
+        fbReconnectDelay(IN := TRUE, PT := tReconnectDelay);
+
+        IF fbReconnectDelay.Q THEN
+            fbReconnectDelay(IN := FALSE, PT := tReconnectDelay);
+            udiReconnectCycles := udiReconnectCycles + 1;
+            eState := MQTT_UPLINK_CONNECTING_TO_BROKER;
+        END_IF
+END_CASE
+
+mqttPublish(
+    xExecute := xPublishExecute,
+    udiTimeOut := 5000000,
+    eQoS := ePublishQoS,
+    xReDelivery := FALSE,
+    xRetain := xSendRetain,
+    pbPayload := ADR(sSendMessage),
+    udiPayloadSize := udiPayloadSize,
+    mqttClient := mqttClient,
+    wsTopicName := wsTopicName,
+    xBusy => xPublishBusy,
+    xDone => xPublishDone,
+    xError => xPublishError,
+    eMQTTError => ePublishMqttError);

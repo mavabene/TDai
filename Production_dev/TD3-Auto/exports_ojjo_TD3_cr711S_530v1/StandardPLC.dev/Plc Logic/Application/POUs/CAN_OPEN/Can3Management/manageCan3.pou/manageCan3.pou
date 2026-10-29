@@ -1,0 +1,211 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK manageCan3
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	// ********************************************************************************
+	// *********************** Can3 MANAGEMENT TOP LEVEL ******************************	
+	// ********************************************************************************
+	FIRST_TIME: BOOL := TRUE;
+	CHANNEL: ifmDEVICE.CAN_CHANNEL := ifmDEVICE.CHAN_3;
+	Can_ENABLE3: ifmRCAN.CAN_Enable;
+	Can_RX3: ifmRCAN.CAN_Rx;
+	Can_RX_MASK3: ifmRCAN.CAN_RxMask;
+	Can_TX3: ifmRCAN.CAN_Tx;
+	ENABLE_LHP_UPLINK: BOOL := TRUE;
+	INIT_DIAG: ifmTYPES.DIAG_INFO;
+	
+	// *********************** DEBUGGING ******************************	
+	DEBUG_COUNTER: ULINT := 0;
+	DEBUG_DATA: ARRAY [0..7] OF BYTE;
+	DEBUG_MSG_ID: UDINT := 0;
+	DEBUG_PGN: UDINT := 0;
+	PGN_REQ: UDINT := 0;
+	PGN_SAVE: ARRAY [1..100] OF UDINT;
+	PGN_SAVE_COUNT: ARRAY [1..100] OF UDINT;
+	PGN_SAVE_IDX: UINT := 1;
+	PGN_NEW: BOOL := FALSE;
+
+	PGN_FILTER: boxcarFilter;
+	PGN_READINGS: ARRAY [1..100] OF REAL;
+	PGN_ALL: ARRAY [1..100] OF UDINT;
+	IDX: UINT;
+	
+	// ************************************ Can3 READ TOP LEVEL *******************************************	
+	RX_MSG_ID: UDINT := 0;
+	RX_MSG_ID_LAST: UDINT := 0;
+	RX_PGN: UDINT := 0;
+	RX_PGN_LAST: UDINT := 0;
+	RX_AVAILABLE: UINT;
+	DATA_READ: ARRAY[0..7] OF USINT;
+	RX_NUM: USINT;
+	RX_DIAG: ifmTYPES.DIAG_INFO;
+	RX_FAIL: ULINT := 0;
+	RX_ERROR: BOOL;
+	RX_ATTEMPTS: UDINT := 0;
+
+	// ************************************ Can3 WRITE TOP LEVEL *******************************************	
+	TX_MSG_ID: UDINT := 0;
+	// Default is for PGN request!
+	TX_MSG_BYTES: USINT := 3;
+	TX_DIAG: ifmTYPES.DIAG_INFO;
+
+	TX_FAIL: ULINT := 0;
+	TX_FULL: UDINT := 0;
+	TX_ERROR: BOOL;
+	TX_ATTEMPTS: UDINT := 0;
+	TX_SUCCESS: UDINT := 0;
+	TX_LOOPS: UDINT := 0;
+	TX_NOERRDONE: UDINT := 0;
+
+	TX_PGN_REQUEST: BOOL := FALSE;
+	TX_PGN_NUMBER: UINT := 16#FEEE;
+	DATA_WRITE: ARRAY[0..7] OF USINT;
+
+	// ********************** READ: MONITORED VALUES; PROBABLY MOVED TO XMIT AT SOME POINT **************************	
+	FUEL_VOLUME: UINT;
+	FUEL_LOW_ALERT: INT;
+	FUEL_LEVEL_MM: REAL;
+	FUEL_VOLUME_L: REAL;
+	FUEL_LEVEL_PCT: REAL;
+	OIL_TEMPERATURE: REAL := -123.456;
+	AMBIENT_TEMPERATURE: REAL;
+
+	// *********************** READ: TRACKING FOR DIFFERENT DEVICES ON THE NETWORK *********************************	
+	HUTTE_RX_LAST: DWORD;
+	ENGINE_RX_LAST: DWORD;
+	LHP_GPS_RX_LAST: DWORD;
+	GPS_CAN_RX_LAST: DWORD;
+	
+	OTHER_RX_SUCCESS: ULINT := 0;
+	VALVE_RX_SUCCESS: ULINT := 0;
+
+	// *********************** WRITE: MESSAGE BUFFER AND SEND *********************************	
+	// CanBus statistics
+	OVERFLOWS: LINT := 0;
+	
+	// Buffer control.
+	SIZE: UINT := 25;
+	BUFFER: ARRAY[1..25] OF sCanOpenBuffer;
+	HEAD: UINT := 1;
+	TAIL: UINT := 1;
+	
+	// All times milliseconds here.
+	SYS_TIME: DWORD;
+	XMIT_LAST: DWORD;
+	XMIT_INTERVAL: DWORD := 100;
+	
+	// ******************** WRITE: LHP SPECIFIC *************************************
+	CYCLE_INDEX: UINT := 16#FF;
+	CYCLE_SUBINDEX: USINT := 16#00;
+	SCREW_INDEX: UINT := 16#FF;
+	SCREW_START_1_SUBINDEX: USINT := 16#01;
+	SCREW_START_2_SUBINDEX: USINT := 16#02;
+	SCREW_DONE_1_SUBINDEX: USINT := 16#03;
+	SCREW_DONE_2_SUBINDEX: USINT := 16#04;
+	
+	SCREW_START_CT: USINT := 0;
+	SCREW_DONE_CT: USINT := 0;
+	
+	LHP_SEND_CYCLE: BOOL := FALSE;
+	LHP_SEND_SCREW_START: BOOL := FALSE;
+	LHP_SEND_SCREW_DONE: BOOL := FALSE;
+	
+	// GPS Var's 
+	GPS_VENDOR_LAST: UINT := 0;
+	LAST_TX_25MS: SysTime := 0; 
+	LAST_TX_50MS: SysTime := 0;
+	LAST_TX_100MS: SysTime := 0;
+	RX_AVAILABLE_MAX: UINT := 0;
+	
+	
+	GPS_FIRST_TIME: BOOL := TRUE;
+	StdCan_RX3: ifmRCAN.CAN_Rx;;
+	StdCan_RX_MASK3: ifmRCAN.CAN_RxMask;
+	StdCan_ENABLE3: ifmRCAN.CAN_Enable;
+
+	// debug
+	GPS_RX_NUM: USINT;
+	//RESET_OFFSETS: BOOL := FALSE;
+	EVERY_OTHER_CYCLE: BOOL := TRUE;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+// The Cummins engine controller as well as the Hutte engine monitor are on the Can3 line to the CR711S.  They
+//	must be setup to 250 kBits, as this bus is shared with the remote and the KZ valve.
+
+IF MSTIME < 5000 THEN
+	// Let everything come up before we initialize.
+	RETURN;	
+END_IF
+
+IF FIRST_TIME THEN
+	FIRST_TIME := FALSE;
+	Can_ENABLE3(xENABLE := TRUE, eChannel := CHANNEL, eBaudrate := ifmDevice.CAN_BAUDRATE.KBAUD_250,
+		xERROR => RX_ERROR, eDiagInfo => INIT_DIAG);
+
+	// Send out the address claim message.	
+	// Priority 6, 0xEE00 is address claim, 0xFF is group address.
+	DATA_WRITE[0] := TO_USINT(TO_UINT(pNVM1^.MACHINE_SERIAL) AND 16#FF);
+	DATA_WRITE[1] := TO_USINT(TO_UINT(SHR(pNVM1^.MACHINE_SERIAL, 8)) AND 16#FF); 
+	DATA_WRITE[2] := 0;
+	DATA_WRITE[3] := TO_USINT(3 * 16 + pNVM3^.MACHINE_VERSION);
+	// Below here is nonsense.
+	DATA_WRITE[4] := 16#26;
+	DATA_WRITE[5] := 16#27;
+	DATA_WRITE[6] := 16#28;
+	DATA_WRITE[7] := 16#29;
+	bufferMessage(J1939_ADDRESS, 16#EE, 16#FF, DATA_WRITE, 8, TRUE);
+	
+	// Now, we need to initialize the LHP gear to the idle state with respect to sending cycle time and screw drive messages:
+	//
+	//	1) Cycle time: set the step value to 255.
+	//	2) Screw drive start/stop: set byte 7 to 255.
+	//
+	bufferCycleTime(STEP := 255, DAT := 0, SCREW := 0, SIDE := 0, TRUSS := 0, MS := 0);
+	bufferScrewDriveStart(DATA8 := 255);
+	bufferScrewDriveDone(SUCCESS := 0, DATA8 := 255);
+END_IF
+
+debugCan3();
+readCan3();
+GPSdata();
+writeCan3();
+
+(*
+	This is engine oil temperature directly from the diesel engine controller.  This should be implemented just as a
+		test to confirm we can read this if necessary!
+		
+	PGN: 65262
+		PGN HEX: FEEE
+		PGN Name: Engine Temperature 1
+	SPN: 175
+		SPN HEX: AF
+		SPN position in PGN: 3-4
+		SPN Name: Engine Oil Temperature 1
+
+	Unit and unit conversion:
+		Scale: 2 bytes	0.03125 °C/bit
+		Offset: -273 °C
+		Range: -273 to 1734.96875 °C
+
+Tutorial for requesting engine hours
+
+PGN 59904 (0x00EA00)
+Requests a Parameter Group Number from a single device or all devices in the network
+Data Length: 3 Bytes
+Data Description: Byte 1, 2, 3 = Requested PGN - LSB first
+In order to request a PGN (in this sample we are using Engine Hours = PGN 65253, 0x00FEE5) you need to pass the following data:
+
+Message ID = 0x18EAFFxx, where xx is the requestor's node address (hex). 0x18 indicates a priority = 6, 0xFA indicates the request, 0xFF indicates the responder's node address, in this case 255 to address all devices in the network.
+Data 1, 2, 3 = 0xE5, 0xFE, 0x00, the PGN for Engine Hours
+In case of the PiCAN2 board, you can use the command line:
+
+./cansend can0 18EAFF80#E5FE000000000000
+
+In this example, I used node address 128 = 0x80.
+*)

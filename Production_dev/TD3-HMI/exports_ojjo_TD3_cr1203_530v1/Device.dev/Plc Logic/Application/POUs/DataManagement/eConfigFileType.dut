@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+TYPE eConfigFileType :
+(
+	DrillSpecificSettings := 0,
+	JobSpecificSettings := 1,
+	GeneralSettings := 2,
+	MachineSpecificSettings := 3
+);
+END_TYPE

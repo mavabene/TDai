@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXTmotorTruss_perScrewParams : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+// TRUSS_TYPE_LATCH is set with setScrewParameters, from PNEZD if valid, else with remote switch
+isNXTmotorTruss_perScrewParams :=
+	isNxtProduct_perHMI()
+	AND 
+	SCREW_PARAMETERS_CURRENT.TRUSS_TYPE = TO_USINT(eTrussType.TRUSS_TYPE_CENTER_STRUCTURE);
+// 	(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE);
+ 

@@ -1,0 +1,198 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK TUNE
+VAR_INPUT
+	INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	NEEDS_INIT: BOOL := TRUE;
+	pLOCAL_AXIS: POINTER TO sAxis;
+	M : BOOL := FALSE;
+	(* 0 = manual, 1 = axis cycle, 2 = step and settle *)
+	STATE: DINT := 0;
+	STATE_OLD: DINT := -1;
+	(* Meaning depends on state *)
+	SUBSTATE: DINT := 0;
+	US_TIME: DWORD;
+	US: SysTime;
+	US_TIME_LAST: DWORD := 0;
+	TARGET: REAL := 1;
+	US_START: DWORD := 0;
+
+	STEP_POSITIVE: BOOL := TRUE;
+
+	NEWCMD: BOOL := FALSE;
+END_VAR
+
+(********************** Implementation ****************************)
+US_TIME_LAST := US_TIME;
+SysTimeGetUs(pUsTime := US);
+US_TIME := ULINT_TO_DWORD(US);
+
+IF NEEDS_INIT THEN
+	// First time through, just initialize for the first axis.
+	VIS_NEXT_AXIS := TRUE;
+	changeAxisNew();
+	NEEDS_INIT := FALSE;
+END_IF
+
+IF NOT VIS_TUNE_ENABLED THEN
+	RETURN;
+END_IF
+
+IF VIS_AUTO THEN
+	M := FALSE;
+	VIS_AUTO_DISP := 'AUTO';
+ELSE
+	M := TRUE;
+	VIS_AUTO_DISP := 'MANUAL';
+END_IF
+
+// Come here when the user has pressed the "next axis" button.
+IF VIS_NEXT_AXIS THEN
+	(* Save user entries in case we come back around again. *)
+	ACCELERATION := pAxis^.CONFIG.CYCLE_ACCEL;
+	VELOCITY := pAxis^.CONFIG.CYCLE_VEL;		
+	pAxis^.CONFIG.CYCLE_PLUS := CYCLE_PLUS;
+	pAxis^.CONFIG.CYCLE_MINUS := CYCLE_MINUS;
+	pAxis^.CONFIG.SPEED_PLUS_MAX := VIS_VFF_PLUS;
+	VIS_VFF_PLUS := VIS_VFF_PLUS_LAST;
+	pAxis^.CONFIG.SPEED_MINUS_MAX := VIS_VFF_MINUS;
+	VIS_VFF_MINUS := VIS_VFF_MINUS_LAST;
+	pAxis^.LOOP_PID.INTEGRATOR_MAX := VIS_ISUM_MAX;
+	
+	changeAxisNew();
+END_IF
+
+IF VIS_VFF_PLUS_LAST <> VIS_VFF_PLUS OR VIS_VFF_MINUS_LAST <> VIS_VFF_MINUS THEN
+	ConfigVffInit(ADR(pAxis^.CONFIG), pAxis^.FEEDBACK, VIS_VFF_PLUS, VIS_VFF_MINUS);
+	VIS_VFF_PLUS_LAST := VIS_VFF_PLUS;
+	VIS_VFF_MINUS_LAST := VIS_VFF_MINUS;
+END_IF
+
+IF VIS_ISUM_MAX_LAST <> VIS_ISUM_MAX THEN
+	LoopPIIsumInit(ADR(pAxis^.LOOP_PID), pAxis^.CONFIG, VIS_ISUM_MAX);
+	VIS_ISUM_MAX_LAST := VIS_ISUM_MAX;
+END_IF
+
+IF VIS_FUNCTION THEN
+	MODE := 1;
+	VIS_FUNCTION_DISP := 'STEP/SETTLE';
+ELSE
+	MODE := 0;
+	VIS_FUNCTION_DISP := 'CYCLE';
+END_IF
+
+IF M THEN
+	STATE := 0;
+ELSIF MODE = 0 THEN
+	STATE := 1;
+ELSE
+	STATE := 2;
+END_IF
+
+IF STATE <> STATE_OLD THEN
+	SUBSTATE := 0;
+	STATE_OLD := STATE;
+END_IF
+
+(* On the init pass, don't do anything *)
+IF INIT THEN
+	RETURN;
+END_IF
+
+IF STATE = 1 THEN
+	(* Cycling *)
+	IF SUBSTATE = 0 THEN
+		(* Just give first command *)
+		TARGET := CYCLE_PLUS;
+		NEWCMD := TRUE;
+		SUBSTATE := 1;
+	ELSIF SUBSTATE = 1 THEN
+		(* Waiting for move to settle *)
+		IF pAxis^.LOOP_PID.SETTLED THEN
+			US_START := US_TIME;
+			SUBSTATE := 2;
+		END_IF
+	ELSIF SUBSTATE = 2 THEN
+		IF US_TIME - US_START > CYCLE_DELAY_US THEN
+			SUBSTATE := 1;
+			NEWCMD := TRUE;
+			IF TARGET = CYCLE_PLUS THEN
+				TARGET := CYCLE_MINUS;
+			ELSE
+				TARGET := CYCLE_PLUS;
+			END_IF
+		END_IF
+	END_IF
+
+ELSIF STATE = 2 THEN
+	(* Step and settle comes here. *)
+	IF SUBSTATE = 0 THEN
+		STEP_POSITIVE := NOT STEP_POSITIVE;
+		IF STEP_POSITIVE THEN
+			TARGET := CYCLE_MINUS;
+		ELSE
+			TARGET := CYCLE_PLUS;
+		END_IF
+		NEWCMD := 1;
+		SUBSTATE := 1;
+	ELSIF SUBSTATE = 1 THEN
+		(* Wait for settle. *)
+		IF pAxis^.LOOP_PID.SETTLED THEN
+			SUBSTATE := 2;
+			US_START := US_TIME;
+		END_IF
+	ELSIF SUBSTATE = 2 THEN
+		IF US_TIME - US_START > STEP_DELAY_US THEN
+			SUBSTATE := 1;
+			NEWCMD := TRUE;
+			IF STEP_POSITIVE THEN
+				IF TARGET + STEP_SIZE <= CYCLE_PLUS THEN
+					TARGET := TARGET + STEP_SIZE;
+				ELSE
+					STEP_POSITIVE := FALSE;
+					TARGET := TARGET - STEP_SIZE;
+				END_IF
+			ELSE
+				IF TARGET - STEP_SIZE >= CYCLE_MINUS THEN
+					TARGET := TARGET - STEP_SIZE;
+				ELSE
+					STEP_POSITIVE := TRUE;
+					TARGET := TARGET + STEP_SIZE;
+				END_IF
+			END_IF
+		END_IF
+	END_IF
+END_IF
+
+IF NOT INIT THEN
+	IF M THEN
+		(* Manual *)
+		setOutput(ADR(pAxis^.OUTPUT), 0, FALSE);
+	ELSIF NOT INIT AND pAXIS^.FEEDBACK.VALID THEN
+		(* Issue command if we need it. *)
+		IF NEWCMD THEN
+			NEWCMD := FALSE;
+			TrapezoidStart(ADR(pAXIS^.PROFILER), ADR(pAXIS^.SETPOINT), US_TIME, pAXIS^.FEEDBACK, TARGET, VELOCITY, ACCELERATION);
+		END_IF
+
+		(* Run the profiler when in auto mode *)
+		TrapezoidRun(ADR(pAXIS^.PROFILER), ADR(pAXIS^.SETPOINT), US_TIME);
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pAXIS^.LOOP_PID), pOUTPUT := ADR(pAXIS^.OUTPUT), SP := pAXIS^.SETPOINT, FB:= pAXIS^.FEEDBACK, CFG := pAXIS^.CONFIG, I_ENABLED := (pAXIS^.PROFILER.STATE = HOLD));
+
+	END_IF
+END_IF
+
+VIS_SETPOINT := POS_RAW_TO_ENGR(FB := pAXIS^.FEEDBACK, RAW := pAXIS^.SETPOINT.POSITION_RAW);
+VIS_ACTUAL := pAXIS^.FEEDBACK.POSITION_ENGR;
+VIS_ERROR := VIS_SETPOINT - VIS_ACTUAL;
+
+IF NOT pAXIS^.FEEDBACK.VALID OR MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pAXIS^.OUTPUT), 0, FALSE);
+END_IF
+
+HaweOutput(pAXIS);

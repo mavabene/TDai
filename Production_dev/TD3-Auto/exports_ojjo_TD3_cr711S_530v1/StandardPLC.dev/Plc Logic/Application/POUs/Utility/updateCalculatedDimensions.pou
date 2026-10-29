@@ -1,0 +1,43 @@
+
+(********************** Declaration ****************************)
+// Uses base actuator positions and given dimensions to calculate other dimensions that are convenient to
+//	know.
+FUNCTION updateCalculatedDimensions : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+(* There is a coupled constraint with the lower and upper crowd.  We calculate the effect of this based on the following machine info:
+
+	- Sled lengths: 18.7" (all 3 sleds)
+	- Distance between upper crowd and drifter sled: 5.128"
+	- 253" from foot of mast to top of the drifter sled at maximum location.
+	- Rails end approximately 10" from the top of the mast (not sure if this is relevant).
+*)
+
+(* Take the whole travel range, subtract out the three sleds and the distance between the UC and drifter sled, 
+	then watch the LC and UC positions to see how far we are from the top.  Dimensions below are:
+		- Length of mast rails: 278"
+		- Length of lower crowd housing: 11"
+		- Crowd and drifter sleds, each 18.7", with a 5.125" gap between the UC and drifter slde.
+*)
+DRIFTER_TO_TOP := ((278 + 11) * 2.54) - ((3 * 18.7 + 5.125) * 2.54) - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR -
+	AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR;
+	
+(* Track where the screw tip is with respect to the ground *assuming that the rotator is at 0*.  The idea here is
+	that there are situations where we want to check to see if we are clear to swing the rotator. *)
+DRILL_TIP_BELOW_CHUCK := pNVM1^.UPPER_CROWD_DRILL_STEEL - AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR + (pNVM1^.DRILL_BIT_LENGTH - pNVM1^.DRILL_BIT_THREAD_LENGTH);
+CENTRALIZER_TO_GROUND := CENTRALIZER_TO_GROUND_NOMINAL + AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR - (MAST_SLIDE_LENGTH - AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR);
+CHUCK_TO_GROUND := CENTRALIZER_TO_GROUND + CENTRALIZER_THICKNESS + AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR + CHUCK_TO_LC_REFERENCE;
+DRILL_TIP_TO_GROUND := CHUCK_TO_GROUND - DRILL_TIP_BELOW_CHUCK;
+ROTATOR_CENTER_HEIGHT := ROTATOR_HEIGHT_MINIMUM + AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR;
+
+ROTATOR_CENTER_TO_GROUND := ROTATOR_CENTER_HEIGHT / COS_DEG(AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR);
+DRILL_TIP_BELOW_ROTATOR := ROTATOR_CENTER_HEIGHT - DRILL_TIP_TO_GROUND;
+DRILL_TIP_TO_GROUND_ACTUAL := ROTATOR_CENTER_TO_GROUND - DRILL_TIP_BELOW_ROTATOR;
+DRIVE_BIT_REVEAL := UPPER_CROWD_DRILL_TIP_FLUSH - AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR;
+
+DRIVE_LOWER_CROWD_DELTA := SCREW_START_POS - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+

@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+TYPE eMqttUplinkState :
+(
+    MQTT_UPLINK_DISABLED,
+    MQTT_UPLINK_CONNECTING_TO_BROKER,
+    MQTT_UPLINK_READY_FOR_PAYLOAD,
+    MQTT_UPLINK_SENDING_MQTT_PAYLOAD,
+    MQTT_UPLINK_WAITING_FOR_PUBLISH_ACK,
+    MQTT_UPLINK_BACKOFF
+);
+END_TYPE

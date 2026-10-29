@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eFileTransferState :
+(
+	eFILE_TRANSFER_IDLE := 0,
+	eFILE_TRANSFER_CHECK_SOURCE,
+	eFILE_TRANSFER_PREPARE_TRANSFER,
+	eFILE_TRANSFER_EXECUTE_TRANSFER,
+	eFILE_TRANSFER_VERIFY_DESTINATION,
+	eFILE_TRANSFER_COMPLETE,
+	eFILE_TRANSFER_ERROR
+);
+END_TYPE

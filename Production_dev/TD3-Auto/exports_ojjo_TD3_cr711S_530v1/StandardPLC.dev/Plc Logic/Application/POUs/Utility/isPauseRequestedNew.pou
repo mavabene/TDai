@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+FUNCTION isPauseRequestedNew : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isPauseRequestedNew := (REMOTE.LMB1_RE AND LAST_PAUSED);

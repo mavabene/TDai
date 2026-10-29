@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION canUDint3ToBuffer : UINT
+VAR_INPUT
+	NUMBER: UDINT;
+	pDATA: POINTER TO ARRAY[1..8] OF USINT;
+	START: USINT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// Always insert 24 bits of screw number, LSBs are toward the front of the CanBus packet, so little endian.
+pDATA^[START] := TO_USINT(NUMBER AND 16#FF);
+pDATA^[START + 1] := TO_USINT(SHR(NUMBER, 8) AND 16#FF);
+pDATA^[START + 2] := TO_USINT(SHR(NUMBER, 16) AND 16#FF);

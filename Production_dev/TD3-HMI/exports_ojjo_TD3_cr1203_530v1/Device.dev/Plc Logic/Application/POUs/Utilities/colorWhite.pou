@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+FUNCTION colorWhite : DWORD
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+colorWhite := colorMask(16#FF, 16#FF, 16#FF);

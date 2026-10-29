@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION ROT_WORLD_FRAME : Vector3D
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
