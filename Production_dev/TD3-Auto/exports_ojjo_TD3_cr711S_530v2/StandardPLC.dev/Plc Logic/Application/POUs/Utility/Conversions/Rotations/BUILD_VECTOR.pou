@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION BUILD_VECTOR : Vector3D
+VAR_INPUT
+	X_VAL: REAL;
+	Y_VAL: REAL;
+	Z_VAL: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+BUILD_VECTOR[rot.pX] := X_VAL;
+BUILD_VECTOR[rot.pY] := Y_VAL;
+BUILD_VECTOR[rot.pZ] := Z_VAL;

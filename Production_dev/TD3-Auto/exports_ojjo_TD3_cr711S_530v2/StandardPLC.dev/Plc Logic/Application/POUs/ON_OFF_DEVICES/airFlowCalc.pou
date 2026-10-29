@@ -1,0 +1,80 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK airFlowCalc
+VAR_INPUT
+	UR_PRESSURE_FILTERED: REAL;
+END_VAR
+VAR_OUTPUT
+	AIR_FLOW_OUT: REAL;
+END_VAR
+VAR
+	INDEX: INT;
+	AIR_FLOW_VALUE_LAST: REAL := 0.0;
+	RANGE_FRACTION: REAL;
+	AIR_FLOW_RANGE: REAL;
+
+	LC_PRESSURE_INPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [0, 800, 1100, 1450, 1700];
+END_VAR
+
+(********************** Implementation ****************************)
+// NOTE: LOWER CROWD FUNCTION DOES NOT WORK HERE YET!  MUST BE TESTED IF WE WISH TO USE IT!!
+
+// ************************** HISTORY BUFFS COME HERE **************************************************
+
+	// There was a fair amount of testing on this code in different situations, and we did several jobs using these
+	//	hardcoded recipes.  These values below are historical in case someone wants to go back to old functions using
+	//	the new code.
+	
+	// Gemini Recipe #1 was used in Areas D and E.  It used "reduced air", based on the following:
+	//
+	//	UR_PRESSURE_INPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [0, 800, 1100, 1450, 1850];
+	//	AIR_FLOW_OUTPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [26, 26, 28, 50, 100];
+	//
+	// The lower two values in AIR_FLOW_OUTPUT would be forced to the machine-specific valve deadband value, and the
+	//	third value is (deadband + 2).
+
+	// Previous to Gemini Recipe #1, the following was used.  This was for the first ~700 MW of Gemini, as well as
+	//	YP and ESM.
+	//
+	// Depends on the UR pressure compensator being set to 2700 PSI.
+	//	UR_PRESSURE_INPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [0, 1250, 1350, 1450, 1850];
+	//
+ 
+	// Bumped down the second and third pressure values based on experience at Gemini in soft soil.
+	//	Tables for UR and LC must be the same size!
+	
+IF UR_PRESSURE_FILTERED <= pNVM4^.UR_PRESSURE_INPUT[1] THEN
+	//AIR_FLOW_OUT := pNVM4^.AIR_FLOW_OUTPUT[1];
+	AIR_FLOW_OUT := 0;
+ELSIF UR_PRESSURE_FILTERED >= pNVM4^.UR_PRESSURE_INPUT[FLOW_TABLE_SIZE] THEN
+	AIR_FLOW_OUT := pNVM4^.AIR_FLOW_OUTPUT[FLOW_TABLE_SIZE];
+ELSE
+	FOR INDEX := 1 TO (FLOW_TABLE_SIZE - 1) DO
+		IF
+			(
+				// This prevents the LC code below from running as that is not yet fully tested.
+				TRUE OR
+				(NOT pNVM4^.SOFT_SOIL_ENABLED OR HARD_SOIL_DETECTED)
+			) AND
+			// Hard soil caused us to run the air off the upper rotary.
+			(UR_PRESSURE_FILTERED < pNVM4^.UR_PRESSURE_INPUT[INDEX + 1]) THEN
+	
+			// We're in this step of the table.
+			RANGE_FRACTION := (UR_PRESSURE_FILTERED - pNVM4^.UR_PRESSURE_INPUT[INDEX])/(pNVM4^.UR_PRESSURE_INPUT[INDEX + 1] - pNVM4^.UR_PRESSURE_INPUT[INDEX]);
+			AIR_FLOW_RANGE := RANGE_FRACTION * (pNVM4^.AIR_FLOW_OUTPUT[INDEX + 1] - pNVM4^.AIR_FLOW_OUTPUT[INDEX]);
+			AIR_FLOW_OUT := pNVM4^.AIR_FLOW_OUTPUT[INDEX] + AIR_FLOW_RANGE;
+			EXIT;
+	(*
+		ELSIF (pNVM4^.SOFT_SOIL_ENABLED AND NOT HARD_SOIL_DETECTED) AND
+			(LOWER_CROWD_PRESSURE_FILTERED < LC_PRESSURE_INPUT[INDEX + 1]) THEN
+			// Hard soil caused us to run the air off the upper rotary.
+	
+			// We're in this step of the table.
+			RANGE_FRACTION := (LOWER_CROWD_PRESSURE_FILTERED - LC_PRESSURE_INPUT[INDEX])/(LC_PRESSURE_INPUT[INDEX + 1] - LC_PRESSURE_INPUT[INDEX]);
+			AIR_FLOW_RANGE := RANGE_FRACTION * (pNVM4^.AIR_FLOW_OUTPUT[INDEX + 1] - pNVM4^.AIR_FLOW_OUTPUT[INDEX]);
+			AIR_FLOW_OUT := pNVM4^.AIR_FLOW_OUTPUT[INDEX] + AIR_FLOW_RANGE;
+			EXIT;
+	*)
+		END_IF
+	END_FOR
+END_IF

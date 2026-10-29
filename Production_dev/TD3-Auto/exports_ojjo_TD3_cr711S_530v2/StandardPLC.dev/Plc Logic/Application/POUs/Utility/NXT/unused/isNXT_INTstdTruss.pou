@@ -1,0 +1,20 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_INTstdTruss : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_INTstdTruss :=
+	(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_INT) 
+	AND
+	(getTrussType() <> eTrussType.TRUSS_TYPE_CENTER_STRUCTURE);
+	//(TRUSS_TYPE_LATCH <> eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) ;
+	
+	
+// TODO bring back i	
+// 	AND 
+// 	(SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE = 0);

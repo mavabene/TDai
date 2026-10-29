@@ -1,0 +1,371 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK GpsUpdate
+	(* Range status:
+		0: not in range to auto-target; 
+		1: in range to move to target but not on target, OR autotarget not selected;
+		2: in range to move to target, not on target; 
+		3: within target specification; 
+		*)
+
+VAR_INPUT
+	
+END_VAR
+VAR
+	i: INT := 0;
+	AUTOTARGET_WORD: WORD := 0;
+	
+	// filters
+	GPS_FILTERS_INIT: BOOL := TRUE; // initiate filters
+	GPS_OFFSET_FILTER_INIT: BOOL := TRUE;
+	// confirm gps has fixed solution over 5s at 5 hz
+	GPS_FIXED: boxcarFilter;
+	GPS_RTK_FIXED_DATA_POINTS: ARRAY [1..25] OF REAL := [25(0)];
+	GPS_FIXED_FILTERED: REAL := 0; // transitional filtered output
+	GPS_FIXED_FILTER_VALID: BOOL := FALSE;
+	// use to time when to send data
+	GPS_FIXED_FILTER_COUNTER: USINT := 0; 
+	GPS_FIXED_FILTER_SAMPLE_TIMER: TON;
+	
+	// average out bouncing during tracking - sample ever cycle for 1s
+	GPS_FILTERED_TARGETS: ARRAY [1..NUM_GPS_AXES] OF boxcarFilter; 
+	GPS_TARGET_DATA_POINTS: ARRAY [1..NUM_GPS_AXES] OF ARRAY [1..NUM_GPS_FILTER_SAMPLES] OF REAL 
+							:= [[NUM_GPS_FILTER_SAMPLES(0)],[NUM_GPS_FILTER_SAMPLES(0)],[NUM_GPS_FILTER_SAMPLES(0)],[NUM_GPS_FILTER_SAMPLES(0)]];
+	GPS_TARGET_FILTERED: REAL := 0;
+	GPS_TARGET_FILTER_VALID: BOOL := FALSE;
+	
+	// check for new PNEZD
+	udiPnezdPChangeCount : USINT := 0;
+    sPnezdPCandidate     : STRING(21) := '';
+	GPS_PNEZD_P_LAST: STRING(21); // used to know if we have changed points
+	
+	// confirm continuously on target
+	GPS_ON_TARGET_SUSTAINED: ARRAY [1..NUM_GPS_AXES] OF boxcarFilter;
+	GPS_ON_TARGET_SUSTAINED_DATA_POINTS:ARRAY [1..NUM_GPS_AXES] OF ARRAY [1..NUM_GPS_OFFSET_FILTER_SAMPLES] OF REAL 
+		:= [[NUM_GPS_OFFSET_FILTER_SAMPLES(0)],[NUM_GPS_OFFSET_FILTER_SAMPLES(0)],[NUM_GPS_OFFSET_FILTER_SAMPLES(0)],[NUM_GPS_OFFSET_FILTER_SAMPLES(0)]];
+	GPS_OFFSET_FILTERED: REAL := 0; // transitional filtered output
+	GPS_OFFSET_FILTER_VALID: BOOL := FALSE;
+	
+
+	actuatorFinishUs: SYSTIME;
+	GpsOffsetFinishUs: SYSTIME;
+	GPS_RESPONSE_TEST_XSLIDE_FINISH_POS: REAL := 0;
+	GPS_RESPONSE_TEST_ZSLIDE_FINISH_POS: REAL := 0;
+	GPS_RESPONSE_TEST_XSLIDE_FINISH_OFFSET: REAL := 0;
+	GPS_RESPONSE_TEST_ZSLIDE_FINISH_OFFSET: REAL := 0;
+	GPS_RESPONSE_X_TEST: BOOL := FALSE;
+	GPS_RESPONSE_Z_TEST: BOOL := FALSE;
+	(*
+	GPS_RESPONSE_TEST_XSLIDE_START_POS: REAL := 0;
+	GPS_RESPONSE_TEST_ZSLIDE_START_POS: REAL := 0;
+	GPS_RESPONSE_TEST_XSLIDE_START_OFFSET: REAL := 0;
+	GPS_RESPONSE_TEST_ZSLIDE_START_OFFSET: REAL := 0; *)
+	
+END_VAR
+
+(********************** Implementation ****************************)
+
+// This sets desired actuator positions to target wp, so they can be called at any time by actuators
+(*IF ( MACHINE_MODE = RWP_MODE ) OR ( MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL ) OR
+	( MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_LOAD_SCREW ) THEN *)
+	GpsSetTargets(X_OFFSET_BEGIN := GPS_AXES[GPS_X].OFFSET, Y_OFFSET_BEGIN := GPS_AXES[GPS_Y].OFFSET,
+				  YAW_OFFSET_BEGIN := GPS_AXES[GPS_HEADING].OFFSET, Z_OFFSET_BEGIN := GPS_AXES[GPS_Z].OFFSET );
+//END_IF
+
+GetSimpleHeading(); 
+
+// set status of gps axes - whether in range of being able to reach the target, in indication band for operators, on target, etc.
+FOR i := 1 TO NUM_GPS_AXES DO
+	
+	GPS_AXES[i].REACH := pNVM4^.GPS_AXES_SETTINGS[i, GPS_AXIS_IN_RANGE];
+	GPS_AXES[i].TARGET_LIMIT := pNVM4^.GPS_AXES_SETTINGS[i, GPS_AXIS_ON_TARGET]; // max distance allowed from target
+	
+	// check if on target
+	IF (ABS(GPS_AXES[i].OFFSET) <= GPS_AXES[i].TARGET_LIMIT) THEN
+		GPS_AXES[i].RANGE_STATUS := TO_UINT(GPS_AXIS_ON_TARGET);
+		// antenna movement can intermittently bounce out of range when at the edge, so give some margine
+		
+	// check if target is reachable
+	// we take the settings for indication and give a little extra room up to the max limit we hardcoded for the actuator
+	ELSIF ( GPS_AXES[i].FILTERED_TARGET_POSITION <= MIN(( GPS_AXES[i].AXIS_RANGE_MAX - GPS_FIXED_RANGE_MARGIN[i] ), GPS_ACTUATOR_MIDPOINT[i] + 1.5 * GPS_AXES[i].REACH) 
+		AND GPS_AXES[i].FILTERED_TARGET_POSITION >= MAX(( GPS_AXES[i].AXIS_RANGE_MIN + GPS_FIXED_RANGE_MARGIN[i] ), GPS_ACTUATOR_MIDPOINT[i] - 1.5 * GPS_AXES[i].REACH) ) THEN
+		GPS_AXES[i].RANGE_STATUS := TO_UINT(GPS_AXIS_IN_RANGE);
+		
+	// check if not reachable but not using this axes, so doesn't stop other axes from autotargeting
+	ELSIF NOT GPS_AXES[i].AUTOTARGET_ON THEN
+		GPS_AXES[i].RANGE_STATUS := TO_UINT(GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO);
+		
+	// axis autotarget is being used but is not in range, so autotarget attempt won't be made
+	ELSE
+		GPS_AXES[i].RANGE_STATUS := TO_UINT(GPS_AXIS_NOT_IN_RANGE);
+	END_IF
+
+	AUTOTARGET_WORD := TO_WORD(SHR(pNVM4^.GPS_AUTOTARGET_SELECTION, i)); 
+	GPS_AXES[i].AUTOTARGET_ON := AUTOTARGET_WORD.0; // update whether axis is selected for autotarget
+	
+	// set indicators
+	GPS_INDICATE_AXIS_IN_RANGE[i] := (ABS(GPS_ACTUATOR_MIDPOINT[i] - GPS_AXES[i].TARGET_POSITION) <= GPS_AXES[i].REACH ); // target position is within limits of actuator minus set margins
+END_FOR
+
+// FOR NX TLM
+IF GPS_THIRD_LEG_ADJUST_ON THEN
+	// set indicator - require 7 cm of x adjustment available on either side
+	GPS_INDICATE_AXIS_IN_RANGE[GPS_X] := GPS_INDICATE_AXIS_IN_RANGE[GPS_X] AND
+		(
+			(GPS_AXES[GPS_X].TARGET_POSITION < (GPS_AXES[GPS_X].AXIS_RANGE_MAX - GPS_NX_TLM_X_ADJUST_MARGIN)) AND 
+			(GPS_AXES[GPS_X].TARGET_POSITION > (GPS_AXES[GPS_X].AXIS_RANGE_MIN + GPS_NX_TLM_X_ADJUST_MARGIN))
+		) ;
+
+END_IF
+
+IF GPS_VENDOR_VALUE > 0 THEN
+	
+	// confirm gps fixed
+	GPS_FIXED_FILTER_SAMPLE_TIMER(IN := NOT GPS_FIXED_FILTER_SAMPLE_TIMER.Q, PT := T#200MS); // 5 Hz sampling
+	IF GPS_FILTERS_INIT THEN
+		GPS_FIXED(INIT := TRUE, READING := TO_REAL(GPS_RTK_FIXED), 
+			SAMPLES := GPS_RTK_FIXED_DATA_POINTS, FILTERED => GPS_FIXED_FILTERED, VALID => GPS_FIXED_FILTER_VALID);
+	END_IF
+	IF GPS_FIXED_FILTER_SAMPLE_TIMER.Q THEN
+		GPS_FIXED(INIT := FALSE, READING := TO_REAL(GPS_RTK_FIXED), 
+			SAMPLES := GPS_RTK_FIXED_DATA_POINTS, FILTERED => GPS_FIXED_FILTERED, VALID => GPS_FIXED_FILTER_VALID);
+		
+	END_IF
+	IF GPS_FIXED_FILTERED > 0.9 THEN // allows 2 falses in 25 samples, or 92%  Should this be higher?
+		GPS_AUTOTARGET_STATUS.GPS_STABLE_5S := TRUE;
+	ELSE
+		GPS_AUTOTARGET_STATUS.GPS_STABLE_5S := FALSE;
+	END_IF
+	GPS_READY := GPS_FIXED_FILTER_VALID AND (GPS_HRMS <= GPS_MIN_HRMS) 
+				 AND (GPS_VRMS < GPS_MIN_VRMS) AND GPS_AUTOTARGET_STATUS.GPS_STABLE_5S
+				 AND GPS_RTK_FIXED AND (GPS_RTK_SIGNAL_DELAY < pNVM4^.GPS_GENERAL_SETTINGS[GPS_RADIO_SIGNAL_DELAY_CRITICAL] ); //
+	
+	// target filter - average gps target calcs to reduce effect of bouncing
+	// reset indication when not being calculated
+	IF GPS_FILTERS_INIT = TRUE AND GPS_AXES[1].FILTERED_TARGET_POSITION <> 8686 THEN
+		FOR i := 1 TO NUM_GPS_AXES DO
+			// indicate filter is not running
+			GPS_AXES[i].FILTERED_TARGET_POSITION := 8686;
+		END_FOR
+	ELSIF pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON THEN
+		FOR i := 1 TO NUM_GPS_AXES DO
+			GPS_FILTERED_TARGETS[i](INIT := GPS_FILTERS_INIT, READING := GPS_AXES[i].TARGET_POSITION, 
+				SAMPLES := GPS_TARGET_DATA_POINTS[i], FILTERED => GPS_TARGET_FILTERED, VALID => GPS_TARGET_FILTER_VALID);
+				IF GPS_TARGET_FILTER_VALID THEN
+					GPS_AXES[i].FILTERED_TARGET_POSITION := GPS_TARGET_FILTERED;
+				ELSE
+					GPS_AXES[i].FILTERED_TARGET_POSITION := GPS_AXES[i].TARGET_POSITION;
+				END_IF		
+		END_FOR
+		// turn off init
+		GPS_FILTERS_INIT := FALSE;
+		
+	// reset init when feature is off
+	ELSIF GPS_FILTERS_INIT = FALSE THEN
+		GPS_FILTERS_INIT := TRUE;
+	END_IF
+	
+	// offset filter - to confirm continuously on target 
+	// reset indication when not being calculated
+	IF GPS_OFFSET_FILTER_INIT = TRUE AND GPS_AXES[1].SMOOTHED_OFFSET <> 8686 THEN
+		FOR i := 1 TO NUM_GPS_AXES DO
+			// indicate filter is not running
+			GPS_AXES[i].SMOOTHED_OFFSET := 8686;
+		END_FOR
+	ELSIF (MACHINE_MODE = RWP_MODE) // this requires a slight filter delay forcing positions to fine tune
+		OR (MACHINE_MODE = SCREW_MODE AND isTrussBeingAssembled()) // used to confirm on target before going to crimp
+		THEN
+		FOR i := 1 TO NUM_GPS_AXES DO
+			GPS_ON_TARGET_SUSTAINED[i](INIT := GPS_OFFSET_FILTER_INIT, READING := GPS_AXES[i].OFFSET, 
+				SAMPLES := GPS_ON_TARGET_SUSTAINED_DATA_POINTS[i], FILTERED => GPS_OFFSET_FILTERED, VALID => GPS_OFFSET_FILTER_VALID);
+				IF GPS_OFFSET_FILTER_VALID THEN
+					GPS_AXES[i].SMOOTHED_OFFSET := GPS_OFFSET_FILTERED;
+				ELSE
+					GPS_AXES[i].SMOOTHED_OFFSET := 8686; // indicates not updated
+				END_IF		
+		END_FOR
+		// turn off init
+		GPS_OFFSET_FILTER_INIT := FALSE;
+	
+	// reset init when feature turned off
+	ELSIF GPS_OFFSET_FILTER_INIT = FALSE THEN
+		GPS_OFFSET_FILTER_INIT := TRUE;
+	END_IF 
+END_IF
+
+// check gps response time: todo - modify this process to produce a graph of points along the movement instead of just one point
+IF GPS_RESPONSE_TIME_GET_ENDPOINT_DATA AND NOT GPS_RESPONSE_TIME_RUN_TEST THEN // set up test.  need to mark endpoint because x axis not perfectly aligned with x direction
+	GPS_RESPONSE_TEST_XSLIDE_FINISH_POS := AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR; //cm
+	GPS_RESPONSE_TEST_ZSLIDE_FINISH_POS := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR; //cm
+	GPS_RESPONSE_TEST_XSLIDE_FINISH_OFFSET := GPS_AXES[GPS_X].OFFSET; //mm
+	GPS_RESPONSE_TEST_ZSLIDE_FINISH_OFFSET := GPS_AXES[GPS_Z].OFFSET; //mm
+	GPS_DATA_COLLECTION_RESPONSE_TIME := 888;
+	GPS_RESPONSE_X_TEST := FALSE;
+	GPS_RESPONSE_Z_TEST := FALSE;
+	actuatorFinishUs := 0;
+	GpsOffsetFinishUs := 0;
+ELSIF GPS_RESPONSE_TIME_RUN_TEST THEN
+	
+	IF NOT (GPS_RESPONSE_X_TEST OR GPS_RESPONSE_Z_TEST) THEN
+		IF (GPS_RESPONSE_TEST_ZSLIDE_FINISH_POS - AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR) > 25 THEN //cm
+			GPS_RESPONSE_Z_TEST := TRUE;
+		ELSIF (GPS_RESPONSE_TEST_XSLIDE_FINISH_POS - AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR) > 15 THEN //cm
+			GPS_RESPONSE_X_TEST := TRUE;
+		END_IF
+	END_IF
+	
+	IF GPS_RESPONSE_X_TEST THEN
+		IF ABS(AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR - GPS_RESPONSE_TEST_XSLIDE_FINISH_POS) < 1 AND actuatorFinishUs < 1 THEN // allow 1 cm leeway
+			SysTimeGetUs(pUsTime := actuatorFinishUs);
+			
+		END_IF
+		IF ABS (GPS_AXES[GPS_X].OFFSET - GPS_RESPONSE_TEST_XSLIDE_FINISH_OFFSET) < 10 AND GpsOffsetFinishUs < 1 THEN // allow 1 cm (10 mm) leeway
+			SysTimeGetUs(pUsTime := GpsOffsetFinishUs);
+			
+		END_IF
+	ELSIF GPS_RESPONSE_Z_TEST THEN
+		IF ABS(AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR - GPS_RESPONSE_TEST_ZSLIDE_FINISH_POS) < 1 AND actuatorFinishUs < 1 THEN // allow 1 cm leeway
+			SysTimeGetUs(pUsTime := actuatorFinishUs);
+		END_IF
+		IF ABS (GPS_AXES[GPS_Z].OFFSET - GPS_RESPONSE_TEST_ZSLIDE_FINISH_OFFSET) < 10 AND GpsOffsetFinishUs < 1 THEN // allow 1 cm (10 mm) leeway
+			SysTimeGetUs(pUsTime := GpsOffsetFinishUs);
+		END_IF
+	END_IF
+	
+	IF actuatorFinishUs > 1 AND GpsOffsetFinishUs > 1 THEN
+ 		GPS_DATA_COLLECTION_RESPONSE_TIME := TO_INT (actuatorFinishUs - GpsOffsetFinishUs);
+		GPS_RESPONSE_X_TEST := FALSE;
+		GPS_RESPONSE_Z_TEST := FALSE;
+	END_IF
+	
+END_IF
+
+// reset values if operator turns off gps targeting
+IF NOT pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON THEN
+	GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := FALSE;
+	GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+END_IF
+
+// reset values when NEW POINT SIGHTED 
+
+(* Detect a stable new PNEZD P value.
+   IS_NEW_PNEZD is a one-cycle pulse. *)
+
+IS_NEW_PILE_LOCATION := FALSE;
+IF MACHINE_MODE = TRACK_MODE
+    AND GPS_PNEZD_P <> ''
+    AND GPS_PNEZD_P <> GPS_PNEZD_P_LAST
+THEN
+    (* Require the same changed P value on consecutive scans. *)
+    IF GPS_PNEZD_P = sPnezdPCandidate THEN
+        IF udiPnezdPChangeCount < 5 THEN
+            udiPnezdPChangeCount := udiPnezdPChangeCount + 1;
+        END_IF
+    ELSE
+        sPnezdPCandidate := GPS_PNEZD_P;
+        udiPnezdPChangeCount := 1;
+    END_IF
+
+    IF udiPnezdPChangeCount >= 5 THEN
+        GPS_PNEZD_P_LAST := GPS_PNEZD_P;
+        udiPnezdPChangeCount := 0;
+
+        (* Existing new-point handling *)
+        GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := FALSE;
+        setScrewParameters();
+        WP_HEIGHT_LATCH := WP_NONE;
+        HIGH_WP_SIDE_LEG_AXIS_REDUCTION := 0;
+        IS_NEW_PILE_LOCATION := TRUE;
+        ROW_HEADING_CALC := getRowHeadingNormalizedNE(10);
+    END_IF
+ELSE
+    udiPnezdPChangeCount := 0;
+END_IF
+// replaced 
+// IF (GPS_PNEZD_P <> GPS_PNEZD_P_LAST) AND (MACHINE_MODE = TRACK_MODE) THEN
+// 		GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := FALSE;
+// 	GPS_PNEZD_P_LAST := GPS_PNEZD_P;
+// 	// get pnezD screw parameters
+// 	setScrewParameters();
+// // 	IF pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_3RD_LEG_X_ADJUST THEN
+// // 		IF TD_HEADING_NORTH OR TD_HEADING_SOUTH THEN
+// // 			PNEZD_ADJUST_NORTHING := CalcNxt1ThirdLegAdjustX();
+// // 		ELSE
+// // 			PNEZD_ADJUST_EASTING := CalcNxt1ThirdLegAdjustX();
+// // 		END_IF
+// // 	END_IF
+// 	WP_HEIGHT_LATCH := WP_NONE;
+// 	HIGH_WP_SIDE_LEG_AXIS_REDUCTION := 0;
+// 	IS_NEW_PILE_LOCATION := TRUE;
+// 	ROW_HEADING_CALC := getRowHeadingNormalizedNE(10);
+// ELSE
+// 	IS_NEW_PILE_LOCATION := FALSE;
+// END_IF
+// temp TODO delete:
+ROW_HEADING_CALC := getRowHeadingNormalizedNE(10);
+// GPS_ADJUST_NORTHING := + (15 - AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR) * 10 ; // adjust if x slide track position <> 15, convert cm to mm
+
+// reset upon changing modes to default to no gps move
+IF isAutomaticRequested() OR isManualRequested() OR isBumpRequested() OR isNewModeEnabled() THEN
+	GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+END_IF
+
+// set pre-positioning signal for gps actuators in track mode
+IF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL 
+	AND GPS_READY AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON 
+	THEN
+			IF 	(ABS(GPS_AXES[GPS_HEADING].OFFSET ) <
+					GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_HEADING]) AND
+				(GPS_AXES[GPS_X].OFFSET < 
+					GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_X]) AND
+				(GPS_AXES[GPS_X].OFFSET 
+					> - 0.3 * GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_X]) AND
+				(ABS(GPS_AXES[GPS_Y].OFFSET ) 
+					< GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_Y]) AND 
+				GPS_TRACK_MODE_NORMAL_TRACK_POS 
+			THEN
+				GPS_TRACK_MODE_NORMAL_TRACK_POS := FALSE;
+				GPS_AUTOTARGET_ACTUATE := TRUE;
+				
+		ELSIF ((ABS(GPS_AXES[GPS_X].OFFSET) > 3.0 * GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_X]) OR 
+			  (GPS_AXES[GPS_X].OFFSET < - 1.0 * GPS_TRACK_MODE_PRE_TARGET_DISTANCE_FROM_TARGET[GPS_X])) 
+			  AND (NOT GPS_TRACK_MODE_NORMAL_TRACK_POS)
+			THEN  
+			// one cycle to actuate gps actuators to reposition
+			GPS_AUTOTARGET_ACTUATE := TRUE;
+			GPS_TRACK_MODE_NORMAL_TRACK_POS := TRUE;
+		ELSE
+			GPS_AUTOTARGET_ACTUATE := FALSE; // only actuate for one cycle
+		END_IF
+		// get locked and outrigger compensated targets before putting outrigger down	
+		IF GPS_AXES[GPS_X].OFFSET < 100 AND (ABS(AXES[AXIS_TRACK_LEFT].OUTPUT.MAGNITUDE) < (TRACK_AUTO_MODE_ADVANCE_TRIGGER + 10)) AND (ABS(AXES[AXIS_TRACK_RIGHT].OUTPUT.MAGNITUDE) < (TRACK_AUTO_MODE_ADVANCE_TRIGGER + 10)) THEN
+			GpsLockTargets();
+		END_IF
+		IF GPS_TRACK_MODE_PRE_TARGET_ACTIVE = FALSE THEN
+			GPS_AUTOTARGET_ACTUATE := TRUE;
+			//PNEZD_ADJUST_EASTING := CalcNxt1ThirdLegAdjustX();
+		END_IF
+		GPS_TRACK_MODE_PRE_TARGET_ACTIVE := TRUE;
+ELSE
+	GPS_TRACK_MODE_PRE_TARGET_ACTIVE := FALSE;
+	IF NOT ( MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL ) THEN
+		GPS_TRACK_MODE_NORMAL_TRACK_POS := TRUE;
+	END_IF
+END_IF
+
+// // set 3rd leg prediction
+// IF GPS_TRACK_MODE_PRE_TARGET_ACTIVE AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_3RD_LEG_X_ADJUST 
+// 	OR RUN_3LM_CALCS // temp 3lm test
+// THEN
+// 	IF TD_HEADING_NORTH OR TD_HEADING_SOUTH THEN
+// 		PNEZD_ADJUST_NORTHING := CalcNxt1ThirdLegAdjustX();
+// 		PNEZD_ADJUST_EASTING := 0;
+// 	ELSE
+// 		PNEZD_ADJUST_NORTHING := 0;
+// 		PNEZD_ADJUST_EASTING := CalcNxt1ThirdLegAdjustX();
+// 	END_IF
+// END_IF
+
+// GPS_THIRD_LEG_ADJUST_ON := isNXT_SI3LAdjustNeeded() OR isNXT_INTThirdLegAdjustActive();
+// setGPSpNEZdTargetAdjust();
+setGPSpNEZdTargetAdjust();

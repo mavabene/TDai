@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION canBufferToUint : UINT
+VAR_INPUT
+	DATA: ARRAY [1..8] OF USINT;
+	START: UINT;
+END_VAR
+VAR
+	USI_L, USI_H: USINT;
+END_VAR
+(********************** Implementation ****************************)
+
+USI_L := DATA[START];
+USI_H := DATA[START + 1];
+
+canBufferToUint := SHL(TO_UINT(USI_H), 8) OR USI_L;

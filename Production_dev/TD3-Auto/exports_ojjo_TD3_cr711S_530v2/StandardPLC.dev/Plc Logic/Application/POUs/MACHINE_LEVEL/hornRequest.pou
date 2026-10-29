@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION hornRequest : bool
+VAR_INPUT
+	TIMES: INT;
+	ON_TIME: TIME;
+	OFF_TIME: TIME;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+HORN_REQUEST_TIMES := TIMES;
+HORN_REQUEST_ON := ON_TIME;
+HORN_REQUEST_OFF := OFF_TIME;
+
+HORN_REQUEST_LAST_STATE := FALSE;

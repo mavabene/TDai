@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsAxisOnTarget : BOOL // is axis on target per HMI GPS target setpoints
+VAR_INPUT
+	GPS_AXIS: INT;
+	VEL_AND_OFFSET_SAME_SIGN: BOOL; // velocity sign to correct offset is same sign as offset
+	ACTUATOR_SETTLING_REQUIRED: BOOL;
+	USE_FILTERED_OFFSETS: BOOL;
+	
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+GpsAxisOnTarget := GpsAxisNearTarget(GPS_AXIS, VEL_AND_OFFSET_SAME_SIGN, ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, 1);
+// disregard z being on target for high wp:
+IF GPS_AXIS = GPS_Z THEN
+	IF WP_HEIGHT_LATCH = WP_HIGH AND (AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR > (AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - 4)) THEN
+		GpsAxisOnTarget := TRUE;
+	END_IF
+END_IF
+
+					

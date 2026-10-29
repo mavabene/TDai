@@ -1,0 +1,31 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK axisRange
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	FAILED: BOOL;
+END_VAR
+VAR
+	INDEX: INT;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* Go through all of the axes to determine if any of them have positions out of range. *)
+AXIS_RANGE_CURRENT := 0;
+FOR INDEX := 1 TO NUM_AXES DO
+	IF AXES[INDEX].FEEDBACK.INSTALLED AND NOT AXES[INDEX].FEEDBACK.VALID THEN
+		AXIS_RANGE_CURRENT := AXIS_RANGE_CURRENT OR SHL(1, INDEX - 1);
+	END_IF
+END_FOR
+
+IF TIME_SECONDS > 20 THEN
+	AXIS_RANGE_LATCH := AXIS_RANGE_LATCH OR AXIS_RANGE_CURRENT;
+ELSE
+	FEEDBACK_FAIL_LATCH := 0;
+END_IF
+
+(* THere is a coupled constraint with the lower and upper crowd. *)
+
+FAILED := AXIS_RANGE_CURRENT <> 0;

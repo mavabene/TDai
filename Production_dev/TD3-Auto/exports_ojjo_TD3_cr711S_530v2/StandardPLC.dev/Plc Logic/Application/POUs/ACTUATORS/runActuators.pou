@@ -1,0 +1,154 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK runActuators
+VAR_INPUT
+	INIT: BOOL;
+END_VAR
+VAR
+	US: SysTime;
+	TIME_US: DWORD;
+	POSITION_RAW: DINT;
+
+	drillStallDetect_01: drillStallDetect;
+	softSoilDetect_01: softSoilDetect;
+	lcStallDetect_01: lcStallDetect;
+	complianceCompensation_01: complianceCompensation;
+	
+	Tracks_01: Tracks;
+	PITCH_01: PITCH;
+	YAW_01: YAW;
+	BOOM_SWING_01: BOOM_SWING;
+	ZSLIDE_01: Z_SLIDE;
+	ROTATOR_01: ROTATOR;
+	MAST_SLIDE_01: MAST_SLIDE;
+	UPPER_ROTARY_01: UPPER_ROTARY;
+	UPPER_CROWD_01: UPPER_CROWD;
+	LOWER_CROWD_01: LOWER_CROWD;
+	LOWER_ROTARY_01: LOWER_ROTARY;
+	X_SLIDE_01: X_SLIDE;
+	BOOM_LIFT_01: BOOM_LIFT;
+	JOINT_LIFT_01: JOINT_LIFT;
+	PENDULUM_01: PENDULUM;
+
+	BASE_ROLL_FILTER_SLOW: boxcarFilter;
+	BASE_PITCH_FILTER_SLOW: boxcarFilter;
+	BASE_ROLL_FILTER_FAST: boxcarFilter;
+	BASE_PITCH_FILTER_FAST: boxcarFilter;
+	BASE_PITCH_FILTER_MEDIUM: boxcarFilter;
+
+END_VAR
+
+VAR CONSTANT
+	// We need a buffer for upper rotary pressure readings that handles the longest amount of time that
+	//	for which the user configures the pressure monitoring for stall.
+	BASE_SAMPLE_SIZE_SLOW: INT := TO_INT(CONTROL_FREQ_HZ * 4);
+	BASE_SAMPLE_SIZE_FAST: INT := TO_INT(CONTROL_FREQ_HZ * 0.5);
+	BASE_SAMPLE_SIZE_MEDIUM: INT := TO_INT(CONTROL_FREQ_HZ * 1.0);
+
+END_VAR
+
+VAR
+	BASE_ROLL_READINGS_SLOW: ARRAY [1..BASE_SAMPLE_SIZE_SLOW] OF REAL;
+	BASE_PITCH_READINGS_SLOW: ARRAY [1..BASE_SAMPLE_SIZE_SLOW] OF REAL;
+
+	BASE_ROLL_READINGS_FAST: ARRAY [1..BASE_SAMPLE_SIZE_FAST] OF REAL;
+	BASE_PITCH_READINGS_FAST: ARRAY [1..BASE_SAMPLE_SIZE_FAST] OF REAL;
+	BASE_PITCH_READINGS_MEDIUM: ARRAY [1..BASE_SAMPLE_SIZE_MEDIUM] OF REAL;
+
+
+END_VAR
+(********************** Implementation ****************************)
+(* This is the top level FB for running all of the actuator code.  All sequencing between actuators is handled here.
+
+	This code expects that, for every actuator, we want to do the following things in a consistent fashion...
+
+	- Read the raw feedback sensor
+	- Pass this raw reading to the motor library (FeedbackSampled)
+	- If the system is in manual mode:
+		- Sample the appropriate control => This must be a combination of direction and speed.
+		- Apply this to the open loop output
+	- Else if the system is in automatic mode
+		- Sample the appropriate control(s).  This needs to decompose to one of the following:
+			1) Running a motor to a position usig a velocity profile (e.g. "move rotator to 30 degrees", "run pitch to 0 degrees")
+			2) Have a motor follow another motor (e.g. "spinner to follow lower crowd by ratio of 1 rev per 2 inches")
+		- The motion profiler needs to be run in the proper states.
+	- End if
+	- Run the appropriate loop (either servo, or open loop, or none)
+	- Apply the appropriate output to the PWM
+
+*)
+
+(* Sample all world coordinate frame feedback BEFORE running the axes, which may be dependent on this. *)
+IF NOT SIMULATION THEN
+	SysTimeGetUs(pUsTime := US);
+	TIME_US := ULINT_TO_DWORD(US);
+ELSE
+	TIME_US := SIMULATED_TIME_US;
+END_IF
+
+(* Sample all non-axis related feedback here. *)
+
+Sampled(ADR(BASE_ROLL), BASE_INCLINATION_ROLL_RAW, TIME_US, BASE_INCLINOMETER.CANopenState = 5);
+Sampled(ADR(BASE_PITCH), BASE_INCLINATION_PITCH_RAW, TIME_US, BASE_INCLINOMETER.CANopenState = 5);
+
+BASE_ROLL_FILTER_SLOW(INIT := FALSE, READING := BASE_ROLL.POSITION_ENGR, SAMPLES := BASE_ROLL_READINGS_SLOW,
+		FILTERED => BASE_ROLL_FILTERED_SLOW);
+BASE_PITCH_FILTER_SLOW(INIT := FALSE, READING := BASE_PITCH.POSITION_ENGR, SAMPLES := BASE_PITCH_READINGS_SLOW,
+		FILTERED => BASE_PITCH_FILTERED_SLOW);
+
+BASE_ROLL_FILTER_FAST(INIT := FALSE, READING := BASE_ROLL.POSITION_ENGR, SAMPLES := BASE_ROLL_READINGS_FAST,
+		FILTERED => BASE_ROLL_FILTERED_FAST);
+BASE_PITCH_FILTER_FAST(INIT := FALSE, READING := BASE_PITCH.POSITION_ENGR, SAMPLES := BASE_PITCH_READINGS_FAST,
+		FILTERED => BASE_PITCH_FILTERED_FAST);
+		
+BASE_PITCH_FILTER_MEDIUM(INIT := FALSE, READING := BASE_PITCH.POSITION_ENGR, SAMPLES := BASE_PITCH_READINGS_MEDIUM,
+		FILTERED => BASE_PITCH_FILTERED_MEDIUM);
+
+IF (pNVM3^.MACHINE_VERSION = 1 OR pNVM3^.MACHINE_VERSION = 2) THEN
+	Sampled(ADR(MAST_PITCH), MAST_INCLINATION_X_RAW, TIME_US, MAST_INCLINOMETER.CANopenState = 5);
+ELSE
+	Sampled(ADR(MAST_PITCH), MAST_INCLINATION_Y_RAW, TIME_US, MAST_INCLINOMETER.CANopenState = 5);
+END_IF
+IF pNVM3^.MACHINE_VERSION >= 1 THEN
+	Sampled(ADR(KNUCKLE_ROLL), KNUCKLE_PITCH_RAW, TIME_US, KNUCKLE_INCLINOMETER.CANopenState = 5);
+ELSE
+	Sampled(ADR(KNUCKLE_ROLL), KNUCKLE_ROLL_RAW, TIME_US, KNUCKLE_INCLINOMETER.CANopenState = 5);
+END_IF
+
+(* Run any monitoring code to prepare for the actuator code to run. *)
+readPressureSensors();
+drillStallDetect_01();
+softSoilDetect_01();
+lcStallDetect_01();
+IF SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE THEN
+	complianceCompensation_01();
+END_IF
+
+
+(* Run all of the actuators from here... *)
+TRACKS_01(INIT := INIT, pLEFT_TRACK := ADR(AXES[AXIS_TRACK_LEFT]), pRIGHT_TRACK := ADR(AXES[AXIS_TRACK_RIGHT]), TIME_US := TIME_US);
+BOOM_SWING_01(INIT := INIT, pBOOM_SWING := ADR(AXES[AXIS_BOOM_SWING]), TIME_US := TIME_US);
+PITCH_01(INIT := INIT, pPITCH := ADR(AXES[AXIS_PITCH]), TIME_US := TIME_US);
+YAW_01(INIT := INIT, pYAW := ADR(AXES[AXIS_YAW]), TIME_US := TIME_US);
+X_SLIDE_01(INIT := INIT, pX_SLIDE := ADR(AXES[AXIS_X_SLIDE]), TIME_US := TIME_US);
+ZSLIDE_01(INIT := INIT, pZSLIDE := ADR(AXES[AXIS_Z_SLIDE]), TIME_US := TIME_US);
+ROTATOR_01(INIT := INIT, pROTATOR := ADR(AXES[AXIS_ROTATOR]), TIME_US := TIME_US);
+MAST_SLIDE_01(INIT := INIT, pMAST_SLIDE := ADR(AXES[AXIS_MAST_SLIDE]), TIME_US := TIME_US);
+UPPER_ROTARY_01(INIT := INIT, pUPPER_ROTARY := ADR(AXES[AXIS_UPPER_ROTARY]), TIME_US := TIME_US);
+(* Lower crowd must run before upper, as the upper sometimes depends on the lower. *)
+LOWER_CROWD_01(INIT := INIT, pLOWER_CROWD := ADR(AXES[AXIS_LOWER_CROWD]), TIME_US := TIME_US);
+UPPER_CROWD_01(INIT := INIT, pUPPER_CROWD := ADR(AXES[AXIS_UPPER_CROWD]), TIME_US := TIME_US);
+LOWER_ROTARY_01(INIT := INIT, pLOWER_ROTARY := ADR(AXES[AXIS_LOWER_ROTARY]), pLOWER_CROWD := ADR(AXES[AXIS_LOWER_CROWD]),
+	TIME_US := TIME_US);
+BOOM_LIFT_01(INIT := INIT, pBOOM_LIFT := ADR(AXES[AXIS_BOOM_LIFT]), TIME_US := TIME_US);
+JOINT_LIFT_01(INIT := INIT, pJOINT_LIFT := ADR(AXES[AXIS_JOINT_LIFT]), TIME_US := TIME_US);
+PENDULUM_01(INIT := INIT, pPENDULUM := ADR(AXES[AXIS_PENDULUM]), TIME_US := TIME_US);
+
+(* Now that all feedback is sampled, calculate the orientation of elements that require more than one feedback measurement. *)
+updateCalculatedDimensions();
+
+IF MACHINE_MODE = SCREW_MODE THEN
+	// Update the furthese extent of the drill so far, *after* the lower crowd code has run.  Calculate this in a
+	//	generic place so that it will update properly in the (many) screw drive states that handle the drill!
+	drillUpdateFurthestExtent();
+END_IF

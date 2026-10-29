@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+TYPE sCanOpenBuffer :
+STRUCT
+	// Entire CanBus packet getting buffered here.
+	NODE: USINT;
+	INDEX: UINT;
+	SUB_INDEX: USINT;
+	DATA: ARRAY[0..7] OF USINT;
+	LEN: USINT;
+	// True for extended (29 bit) CAN messages, False for Standard (11 bit) CAN
+	EXTENDED: BOOL; 
+	// Control stuff for transmitting.
+	EXECUTE: BOOL;
+END_STRUCT
+END_TYPE

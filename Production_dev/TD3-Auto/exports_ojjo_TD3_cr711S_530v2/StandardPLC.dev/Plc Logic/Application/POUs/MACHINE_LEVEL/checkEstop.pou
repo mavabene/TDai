@@ -1,0 +1,108 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK checkEstop
+VAR_INPUT
+	VISUALIZATION: BOOL;
+END_VAR
+VAR
+	feedbackFailed_01: feedbackFailed;
+	
+	(* All Estop causes drop engine in Automatic, only some in Manual.  "And" the current Estop with the mask. *)
+	// remote, manual e stop buttons; rotary proximity violation
+	ESTOP_MANUAL_MASK: DWORD := 16#8003;
+	diagInfo: ifmTypes.DIAG_INFO;
+END_VAR
+(********************** Implementation ****************************)
+ESTOP_CURRENT := 0;
+
+(* Monitor the E-stop conditions here before calling into the operator state handling. *)
+IF TIME_SECONDS < BOOTUP_ERROR_DELAY_SEC THEN
+	(* Wait for a few seconds for the remote, the CanBus, etc. to come up.  This is longer on TD3 as the Hutte
+		engine controller is slow coming up. *)
+	IF NOT VISUALIZATION AND REMOTE.AVAILABLE AND REMOTE.E_STOP THEN
+		(* If running from the remote, respect the remote's E-stop. *)
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.BUTTON);
+	END_IF
+	// Run the feedback failed logic, but do not save the result.  This will cause error messages to update
+	//	without shutting the machine down.
+	feedbackFailed_01();
+ELSE
+	feedbackFailed_01(FAILED => FEEDBACK_FAILED);
+	(* valveFailed_01(FAILED => ANY_VALVE_FAILED, LAST_FAILED => VALVE_FAILED_INDEX); *)
+	
+	(* These errors caused Estop either in Automatic or Manual. *)
+	IF NOT VISUALIZATION AND NOT REMOTE.AVAILABLE THEN
+		(* If running from the remote, we hit the E-stop when the remote doesn't communicate. *)
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.REMOTE);
+	END_IF
+	IF NOT VISUALIZATION AND REMOTE.E_STOP THEN
+		(* If running from the remote, respect the remote's E-stop. *)
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.BUTTON);
+	END_IF
+	
+	(* These errors only cause Estop in Auto. *)
+	IF FEEDBACK_FAILED THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.FEEDBACK);
+	END_IF
+	IF (AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR < LOWER_CROWD_DOWN_ESTOP) OR (AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR >= LOWER_CROWD_UP_ESTOP) THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.LOWER_CROWD);
+	END_IF
+	IF (AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR < PITCH_BACK_ESTOP) OR (AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR > PITCH_FWD_ESTOP) THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.PITCH);
+	END_IF
+	(* We let the base pitch go large with the mast down for loading on a truck. *)
+	IF (ABS(BASE_PITCH_FILTERED_SLOW) >= BASE_PITCH_ESTOP AND
+		(AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR < PITCH_FWD_SETUP))
+		THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.BASE_PITCH_NORMAL);
+	(* Even when we are loading we have a base pitch limit! *)
+	ELSIF (ABS(BASE_PITCH_FILTERED_SLOW) >= BASE_PITCH_SETUP_ESTOP) THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.BASE_PITCH_LOADING);
+	END_IF
+	IF (ABS(BASE_ROLL_FILTERED_SLOW) >= BASE_ROLL_ESTOP) THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.BASE_ROLL);
+	END_IF
+	IF AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR <= -5 THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.MAST_SLIDE);
+	END_IF
+	IF DRIFTER_TO_TOP < DRIFTER_TO_TOP_ESTOP THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.DRIFTER_TO_TOP);
+	END_IF
+	IF HYDRAULIC_TEMP > HYDRAULIC_TEMP_ESTOP THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.HYDRAULIC_TEMPERATURE);
+	END_IF
+	IF COMPRESSOR_FAIL THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.COMPRESSOR);
+	END_IF
+	IF  ( isRotaryActive() AND NOT isRotaryMotionAllowed() ) OR 
+		ROTARY_DESIRED_AND_PROXIMITY_VIOLATED
+		THEN
+		ESTOP_CURRENT := ESTOP_CURRENT OR TO_DWORD(eEstopCauseMask.PROXIMITY_ALARM);
+		ROTARY_DESIRED_AND_PROXIMITY_VIOLATED := TRUE;
+	END_IF
+	
+	ESTOP_LATCH := ESTOP_LATCH OR ESTOP_CURRENT;
+	
+END_IF
+
+IF TIME_SECONDS < 20 THEN
+	setEstopPressed(FALSE);
+ELSE
+	IF (AUTOMATIC AND (ESTOP_CURRENT <> 0)) OR (NOT AUTOMATIC AND ((ESTOP_CURRENT AND ESTOP_MANUAL_MASK) <> 0)) THEN
+		setEstopPressed(TRUE);
+	ELSE
+		setEstopPressed(FALSE);
+	END_IF
+END_IF
+
+IF E_STOP_OUT_FORCE.FORCED THEN
+	OUT_E_STOP(uiValue := TO_UINT(E_STOP_OUT_FORCE.DOUT_STATE), eDiagInfo => diagInfo);
+ELSE
+	OUT_E_STOP(uiValue := TO_UINT(NOT getEstopPressed()), eDiagInfo => diagInfo);
+	
+END_IF
+
+IF getEstopPressed() THEN
+	gotoErrorState(REASON := 'Estop is pressed!');
+END_IF
+

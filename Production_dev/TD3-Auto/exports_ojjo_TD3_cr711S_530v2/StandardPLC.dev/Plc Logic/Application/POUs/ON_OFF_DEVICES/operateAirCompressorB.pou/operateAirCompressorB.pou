@@ -1,0 +1,284 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateAirCompressorB
+VAR_INPUT
+	NEEDS_INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	COMPRESSOR_START_TIME: DWORD := 0;
+	BLOWDOWN_START_TIME: DWORD := 0;
+	WARMUP_START_TIME: DWORD := 0;
+	SHUTDOWN_START_TIME: DWORD := 0;
+	
+	T_SENSOR_FAIL: BOOL := FALSE;
+	P_SENSOR_FAIL: BOOL := FALSE;
+	
+	// Minimum speed we can reliably spin the fan, with margin.
+	FAN_COOL_CMD: REAL := 900;
+	// Maximum fan speed, with margin.
+	FAN_HOT_CMD: REAL := 100;
+	
+	FAN_TEMP_SETPOINT: REAL := 87.8;
+	// This is unbalanced; turn on slightly below the setpoint, saturate significantly above the setpoint.
+	FAN_COOL_TEMP: REAL := FAN_TEMP_SETPOINT - 5;
+	FAN_HOT_TEMP: REAL := FAN_TEMP_SETPOINT + 5;
+
+	(*
+	FAN_ERROR: REAL :=
+	FAN_OUTPUT: REAL :=
+	FAN_PGAIN: REAL :=
+	FAN_IGAIN: REAL :=
+	FAN_ISUM: REAL :=
+	*)
+	
+	SHUTDOWN_HI_TEMP: REAL := 118;
+	SHUTDOWN_LOW_TEMP: REAL := -40;
+	SHUTDOWN_PRESSURE: REAL := 175;
+	
+	WARNING_HI_TEMP: REAL := 110;
+	WARNING_PRESSURE: REAL := 160;
+	
+	FAN_DIAG: ifmTypes.DIAG_INFO;
+	FAN_ERROR: BOOL;
+	FAN_ACTIVATED: BOOL;
+	FAN_PREPARED: BOOL;
+	FAN_STATE: BOOL;
+	FAN_CURRENT: UINT;
+
+	SUPPLY_DIAG: ifmTypes.DIAG_INFO;
+	SUPPLY_CMD: UINT;
+	SUPPLY_ERROR: BOOL;
+	SUPPLY_ACTIVATED: BOOL;
+	SUPPLY_PREPARED: BOOL;
+
+END_VAR
+
+(********************** Implementation ****************************)
+(* This is the code for the newer BOSS air compressor, used on the TD-3.1 machines.
+
+	This unit has the following interface:
+	
+	- We are monitoring the compressor internals (wet air pressure, temperature, and blowdown switch.
+	- Run the compressor preservation logic as top priority.  This should shut down hydraulic flow to the compressor.
+		Note that *** the forcing function from the HMI does NOT override the safety stuff! ***
+	- States are:
+		1) Shutdown
+		2) Warmup
+		3) Run loaded
+		4) Routine shutdown
+		
+	- Logic is running in all states to handle emergency shutdown.  These conditions are:
+		- Temperature > 118C (245F)
+		- Temperature < -40C
+		- Pressure > 175 PSI
+
+	@TODO:
+		- Add I gain to existing P gain control.
+*)
+
+IF NEEDS_INIT THEN
+	(* Start with the compressor off. *)
+	COMPRESSOR_STATE := COMPRESSOR_OFF;
+	COMPRESSOR_TURNED_ON := FALSE;
+	RETURN;
+END_IF
+
+// ************* ALWAYS SAMPLE INPUTS FIRST, AND GENERATE THE EMERGENCY SHUTDOWN CONDITION *************
+
+// Wet air pressure (IFM PX3224 pressure transducer):
+//	- 4-20 mAmp is raw output
+//	- 0-200 PSI is scaled output
+IN_AIR_COMPRESSOR_WET_PRESSURE(uiValueAnalogue => AIR_COMPRESSOR_WET_PRESSURE_RAW);
+AIR_COMPRESSOR_WET_PRESSURE := sensorRawToEngr(RAW := AIR_COMPRESSOR_WET_PRESSURE_RAW,
+	INPUT_OFFSET := 4000,
+	ENGR_PER_RAW := (200.0 - 0.0) / (20000.0 - 4000.0),
+	ENGR_AT_RAW_ZERO := 0);
+
+IF _4_20maSensorFail(AIR_COMPRESSOR_WET_PRESSURE_RAW) THEN
+	P_SENSOR_FAIL := TRUE;
+ELSE
+	P_SENSOR_FAIL := FALSE;
+	IF AIR_COMPRESSOR_WET_PRESSURE > pNVM4^.AIR_COMPRESSOR_PRESSURE_MAX THEN
+		pNVM4^.AIR_COMPRESSOR_PRESSURE_MAX := AIR_COMPRESSOR_WET_PRESSURE;
+	END_IF
+END_IF
+
+// Compressor internal temperature (IFM TA2313 temperature transducer):
+//	- 4-20 mAmp is raw output
+//	- 0 to 300 F, or -17.8 to 148.9 C scaled output
+IN_AIR_COMPRESSOR_TEMP(uiValueAnalogue => AIR_COMPRESSOR_TEMP_RAW);
+AIR_COMPRESSOR_TEMP := sensorRawToEngr(RAW := AIR_COMPRESSOR_TEMP_RAW,
+	INPUT_OFFSET := 4000,
+	ENGR_PER_RAW := (148.9 - (-17.8)) / (20000.0 - 4000.0),
+	ENGR_AT_RAW_ZERO := -17.8);
+
+IF _4_20maSensorFail(AIR_COMPRESSOR_TEMP_RAW) THEN
+	T_SENSOR_FAIL := TRUE;
+ELSE
+	T_SENSOR_FAIL := FALSE;
+	IF AIR_COMPRESSOR_TEMP > pNVM4^.AIR_COMPRESSOR_TEMP_MAX THEN
+		pNVM4^.AIR_COMPRESSOR_TEMP_MAX := AIR_COMPRESSOR_TEMP;
+	END_IF
+END_IF
+
+
+IF (
+	AIR_COMPRESSOR_TEMP > SHUTDOWN_HI_TEMP OR
+	AIR_COMPRESSOR_TEMP < SHUTDOWN_LOW_TEMP OR
+	AIR_COMPRESSOR_WET_PRESSURE > SHUTDOWN_PRESSURE OR
+	T_SENSOR_FAIL OR
+	P_SENSOR_FAIL
+	) THEN
+	COMPRESSOR_FAIL := TRUE;
+ELSE
+	COMPRESSOR_FAIL := FALSE;
+END_IF
+
+IF (AIR_COMPRESSOR_TEMP > WARNING_HI_TEMP OR AIR_COMPRESSOR_WET_PRESSURE > WARNING_PRESSURE) THEN
+	COMPRESSOR_WARNING := TRUE;
+ELSE
+	COMPRESSOR_WARNING := FALSE;
+END_IF
+
+IF COMPRESSOR_STATE = COMPRESSOR_OFF THEN
+	AIR_COMPRESSOR_BLOWDOWN_TIMER := TIME_SECONDS - BLOWDOWN_START_TIME;
+	IF TIME_SECONDS < 180 THEN
+		// To power down the Hutte engine controls, and power it back up to allow engine start takes 30 seconds.
+		AIR_COMPRESSOR_BLOWDOWN_TIMER := AIR_COMPRESSOR_BLOWDOWN_TIMER + TO_DWORD(POWEROFF_TIME) + TO_DWORD(AIR_STARTUP_DELAY);
+	END_IF
+ELSE
+	AIR_COMPRESSOR_BLOWDOWN_TIMER := 0;
+END_IF
+
+IF COMPRESSOR_STATE = COMPRESSOR_WARMUP THEN
+	AIR_COMPRESSOR_WARMUP_TIMER := TIME_SECONDS - WARMUP_START_TIME;
+ELSE
+	AIR_COMPRESSOR_WARMUP_TIMER := 0;
+END_IF
+
+// State logic here.
+IF COMPRESSOR_FAIL THEN
+	IF COMPRESSOR_STATE <> COMPRESSOR_EMERGENCY THEN
+		setCompressorState(COMPRESSOR_EMERGENCY);
+	END_IF
+ELSIF COMPRESSOR_STATE = COMPRESSOR_EMERGENCY THEN
+	// Wait for warning to clear before going out of emergency.
+	IF NOT COMPRESSOR_WARNING THEN
+		setCompressorState(COMPRESSOR_OFF);
+	END_IF
+ELSIF COMPRESSOR_STATE = COMPRESSOR_OFF AND (AIR_COMPRESSOR_BLOWDOWN_TIMER <= 120) THEN
+	// No matter what else is happening, if we are in the blowdown state we will not let anything else happen before
+	//	this timer runs out.
+	;
+ELSIF COMPRESSOR_STATE = COMPRESSOR_OFF AND (NOT pNVM1^.AIR_COMPRESSOR_POWERED OR SET_OPERATOR_BREAK) THEN
+	// Compressor off, and compressor doesn't want to turn on.
+	;
+ELSIF (COMPRESSOR_STATE <> COMPRESSOR_OFF AND COMPRESSOR_STATE <> COMPRESSOR_SHUTDOWN) AND 
+	(NOT pNVM1^.AIR_COMPRESSOR_POWERED OR SET_OPERATOR_BREAK) THEN
+	// Compressor ON, and user has just said they want to turn it off.
+	setCompressorState(COMPRESSOR_SHUTDOWN);
+ELSIF COMPRESSOR_STATE = COMPRESSOR_OFF AND pNVM1^.AIR_COMPRESSOR_POWERED THEN
+	// The machine wants to use the compressor, but it is not turned on.  Check to see if we may turn it on.
+	IF NOT COMPRESSOR_FAIL AND AIR_COMPRESSOR_BLOWDOWN AND AIR_COMPRESSOR_WET_PRESSURE < 5 AND
+		(AIR_COMPRESSOR_BLOWDOWN_TIMER > 120) THEN
+		setCompressorState(COMPRESSOR_WARMUP);
+	ELSE
+		// Fuck off, you can't blow up the air compresor.
+		;
+	END_IF
+ELSIF COMPRESSOR_STATE = COMPRESSOR_WARMUP THEN
+	IF (AIR_COMPRESSOR_WARMUP_TIMER > 30 AND AIR_COMPRESSOR_TEMP > 38) THEN
+		setCompressorState(COMPRESSOR_RUN_LOADED);
+	ELSIF (TIME_SECONDS - WARMUP_START_TIME > 300) THEN
+		// Emergency shutdown.
+		setCompressorState(COMPRESSOR_OFF);
+	END_IF
+ELSIF COMPRESSOR_STATE = COMPRESSOR_RUN_LOADED THEN
+	// Not doing anything here except monitoring.
+	;
+ELSIF COMPRESSOR_STATE = COMPRESSOR_SHUTDOWN THEN
+	IF AIR_COMPRESSOR_WET_PRESSURE < 62 THEN
+		setCompressorState(COMPRESSOR_OFF);
+	ELSIF TIME_SECONDS - SHUTDOWN_START_TIME > 300 THEN
+		setCompressorState(COMPRESSOR_OFF);
+	END_IF
+END_IF
+
+// Now set the outputs based on the state.
+CASE COMPRESSOR_STATE OF
+	COMPRESSOR_OFF:
+		// Blowdown valve is OPEN when output is OFF.  So when electrical system powers off,
+		//	blowdown valve opens to relieve pressure.
+		OUT_AIR_COMPRESSOR_UNLOAD(uiValue := 0);
+	COMPRESSOR_WARMUP:
+		// Blowdown valve open leaves screw unloaded to let the screw spin up to speed.
+		OUT_AIR_COMPRESSOR_UNLOAD(uiValue := 0);
+	COMPRESSOR_RUN_LOADED:
+		// Close the blowdown valve to load the compressor the entire time.
+		OUT_AIR_COMPRESSOR_UNLOAD(uiValue := 1);
+	COMPRESSOR_SHUTDOWN:
+		// Shutting down, open the blowdown valve to unload the compressor.
+		OUT_AIR_COMPRESSOR_UNLOAD(uiValue := 0);
+END_CASE
+
+// Alert the high level logic that the compressor is available.
+IF COMPRESSOR_STATE = COMPRESSOR_RUN_LOADED THEN
+	COMPRESSOR_TURNED_ON := TRUE;
+ELSE
+	COMPRESSOR_TURNED_ON := FALSE;
+END_IF
+
+IF COMPRESSOR_FAIL THEN
+	// Do not allow unaware technician to blow up the air compressor.
+	SUPPLY_CMD := 0;
+ELSIF AIR_COMPRESSOR_SUPPLY_FORCE.FORCED THEN
+	SUPPLY_CMD := TO_UINT(AIR_COMPRESSOR_SUPPLY_FORCE.DOUT_STATE);
+ELSIF COMPRESSOR_STATE <> COMPRESSOR_OFF THEN
+	SUPPLY_CMD := 1;
+ELSE
+	SUPPLY_CMD := 0;
+END_IF
+
+// This is the hydraulic flow to the compressor.
+OUT_AIR_COMPRESSOR_SUPPLY(
+	//uiChannel := AIR_COMPRESSOR_SUPPLY_POINT,
+	uiValue := SUPPLY_CMD, xError => SUPPLY_ERROR, eDiagInfo => SUPPLY_DIAG, xPrepared => SUPPLY_PREPARED,
+	xOutState => SUPPLY_ACTIVATED);
+
+// Now handle the air compressor fans.  This is outside the state logic as we want this to run even if the compressor
+//	is off to cool the fluid.
+IF AIR_COMPRESSOR_FAN_FORCE.FORCED THEN
+	IF AIR_COMPRESSOR_FAN_FORCE.DOUT_STATE = TRUE THEN
+		AIR_COMPRESSOR_FAN_PCT := 100.0;
+	ELSE
+		AIR_COMPRESSOR_FAN_PCT := 0.0;
+	END_IF
+ELSE
+	// Turn the fan off under a low limit, fully on above a high limit, then attempt to control temperature with the
+	//	fan between those two limits.  This should run in all states, not just "run loaded".
+	IF AIR_COMPRESSOR_TEMP <= FAN_COOL_TEMP THEN
+		AIR_COMPRESSOR_FAN_PCT := 0.0;
+	ELSIF AIR_COMPRESSOR_TEMP >= FAN_HOT_TEMP THEN
+		AIR_COMPRESSOR_FAN_PCT := 100.0;
+	ELSE
+		AIR_COMPRESSOR_FAN_PCT := 100.0 * (AIR_COMPRESSOR_TEMP - FAN_COOL_TEMP) / (FAN_HOT_TEMP - FAN_COOL_TEMP);
+	END_IF
+	
+END_IF
+AIR_COMPRESSOR_FAN_CMD := TO_UINT(FAN_COOL_CMD + (FAN_HOT_CMD - FAN_COOL_CMD) * (AIR_COMPRESSOR_FAN_PCT / 100.0));
+
+IF PWM_FAN.xPrepared THEN
+	PWM_FAN(xResetError := 0,
+		uiChannel := AIR_COMPRESSOR_FAN_POINT,
+		eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO,
+		uiFrequency := 100,
+		uiValue := AIR_COMPRESSOR_FAN_CMD,
+		xError => FAN_ERROR,
+		eDiagInfo => FAN_DIAG,
+		xPrepared => FAN_PREPARED,
+		uiOutCurrent => FAN_CURRENT,
+		xOutState => FAN_STATE
+	);
+END_IF

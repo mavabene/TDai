@@ -1,0 +1,28 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsTdToWorld : REAL
+VAR_INPUT
+	X_TD_WP: REAL := 0; // offsets from WP given by gps, + is forward of operator 
+	Y_TD_WP: REAL := 0; // + is to the right of operator (facing forward at rear [mast end] of TD)
+	YAW_BEGIN: REAL := 0; // heading offset to rotate by as given by gps, + is moving mast to the right (CCW) of operator
+END_VAR
+VAR_OUTPUT
+	X_WORLD_WP: REAL :=0; // final x from WP after yaw move to align yaw arm with North-South, + forward of operator 
+	Y_WORLD_WP: REAL :=0; // final y from WP after yaw move, + to operators right
+END_VAR
+
+(********************** Implementation ****************************)
+(* 
+take gps offsets that are given in reference to wp and:
+ a) translate them to yaw pivot
+ b) rotate them by yaw offset
+ c) translate back to wp in new reference frame
+ 
+ This gives us the angle we need to rotate yaw arm by and the new y and x offsets to the target point after rotating the arm
+*)
+
+// X_TD_WP  - 135;  translate origin from wp to yaw pivot
+// Y_TD_WP; doesn't change for translation along x
+RotateGpsTdToWorldNS( X_TD := X_TD_WP -  YAW_PIVOT_TO_DRILL_ROD + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR, Y_TD := Y_TD_WP, YAW_BEGIN := YAW_BEGIN, X_WORLD => X_WORLD_WP, Y_WORLD => Y_WORLD_WP);
+X_WORLD_WP := X_WORLD_WP +  YAW_PIVOT_TO_DRILL_ROD + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR; // translate origin from wp to yaw pivot
+// Y_WORLD_WP doesn't change for translation along x

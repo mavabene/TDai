@@ -1,0 +1,125 @@
+
+(********************** Declaration ****************************)
+PROGRAM KAR_TECH_REMOTE
+VAR_INPUT
+	init: BOOL;
+END_VAR
+VAR
+	REMOTE_LAST_RX: DWORD := 0;
+END_VAR
+(********************** Implementation ****************************)
+
+(* CodeSys 3.5 helpfully provides mapping for J1939 so no explicit packet handling required here, just
+	pull from the J1939 driver supplied variables. *)
+
+// Always keep the Estop enabled, and always track the monitoring information.
+REMOTE_INTERVAL := MSTIME - REMOTE_LAST_RX;
+IF REMOTE.HEARTBEAT <> toggle THEN
+	REMOTE_LAST_RX := MSTIME;
+	REMOTE_UPDATES := REMOTE_UPDATES + 1;
+END_IF
+
+REMOTE.HEARTBEAT := toggle;
+REMOTE.RF_CAN := rf_CANlink;
+IF VendorID = eRemote.TELERADIO THEN
+	// Teleradio remote Estop is normally closed.
+	REMOTE.E_STOP := NOT DI1;
+ELSE
+	// Kartech remote Estop is normally open.
+	REMOTE.E_STOP := DI1;
+END_IF
+
+IF VendorID = eRemote.TELERADIO THEN
+	// Teleratio comes here.
+	BatteryVoltage := BV / 1000.0;
+ELSIF VendorID = eRemote.AUTEC THEN
+	// This is a simple percentage energy remaining, not a voltage.
+	BatteryVoltage := BV;
+ELSE
+	// Kartech comes here.
+	BatteryVoltage := BV / 20.0;
+END_IF
+REMOTE.BATTERY_VOLTAGE := BatteryVoltage;
+REMOTE.LOW_VOLTAGE := low_voltage;
+
+IF SET_DISABLE_REMOTE THEN
+	REMOTE.RTCB2_UP := 0;
+	REMOTE.RTCB2_DN := 0;
+	REMOTE.T3P1_UP := 0;
+	REMOTE.T3P1_DN := 0;
+	REMOTE.T3P2_UP := 0;
+	REMOTE.T3P2_DN	:= 0;
+	REMOTE.T3P3_UP := 0;
+	
+	REMOTE.T3P3_DN := 0;
+	REMOTE.RMB2 := 0;
+	REMOTE.RMB1 := 0;
+	REMOTE.LMB1 := 0;
+	// REMOTE. := DI13;
+	REMOTE.RTCB1_UP := 0;
+	REMOTE.RTCB1_DN := 0;
+	REMOTE.T3P4_UP := 0;
+	
+	REMOTE.T3P4_DN := 0;
+	//REMOTE. := DI18;
+	//REMOTE. := DI19;
+	//REMOTE. := DI20;
+	
+	REMOTE.LJ_FB := 0;
+	REMOTE.LJ_LR := 0;
+	REMOTE.V1_FB := 0;
+	REMOTE.V2_FB := 0;
+	REMOTE.V3_FB := 0;
+	REMOTE.V4_FB := 0;
+	REMOTE.RJ_FB := 0;
+	REMOTE.RJ_LR := 0;
+ELSE
+	REMOTE.RTCB2_UP := DI2;
+	REMOTE.RTCB2_DN := DI3;
+	REMOTE.T3P1_UP := DI4;
+	REMOTE.T3P1_DN := DI5;
+	REMOTE.T3P2_UP := DI6;
+	REMOTE.T3P2_DN	:= DI7;
+	REMOTE.T3P3_UP := DI8;
+	
+	REMOTE.T3P3_DN := DI9;
+	REMOTE.RMB2 := DI10;
+	REMOTE.RMB1 := DI11;
+	REMOTE.LMB1 := DI12;
+	// REMOTE. := DI13;
+	REMOTE.RTCB1_UP := DI14;
+	REMOTE.RTCB1_DN := DI15;
+	REMOTE.T3P4_UP := DI16;
+	
+	REMOTE.T3P4_DN := DI17;
+	//REMOTE. := DI18;
+	//REMOTE. := DI19;
+	//REMOTE. := DI20;
+	
+	IF AI1 = 0
+		AND AI2 = 0
+		AND AI3 = 0
+		AND AI4 = 0
+		AND AI5 = 0
+		AND AI6 = 0
+		AND AI7 = 0
+		AND AI8 = 0 THEN
+		REMOTE.LJ_FB := 0;
+		REMOTE.LJ_LR := 0;
+		REMOTE.V1_FB := 0;
+		REMOTE.V2_FB := 0;
+		REMOTE.V3_FB := 0;
+		REMOTE.V4_FB := 0;
+		REMOTE.RJ_FB := 0;
+		REMOTE.RJ_LR := 0;
+	ELSE
+		REMOTE.LJ_FB := scaleAnalogInput(AI1, aiInput1Err);
+		REMOTE.LJ_LR := scaleAnalogInput(AI2, aiInput2Err);
+		REMOTE.V1_FB := scaleAnalogInput(AI3, aiInput3Err);
+		REMOTE.V2_FB := scaleAnalogInput(AI4, aiInput4Err);
+		REMOTE.V3_FB := scaleAnalogInput(AI5, aiInput5Err);
+		REMOTE.V4_FB := scaleAnalogInput(AI6, aiInput6Err);
+		REMOTE.RJ_FB := scaleAnalogInput(AI7, aiInput7Err);
+		REMOTE.RJ_LR := scaleAnalogInput(AI8, aiInput8Err);
+	END_IF
+END_IF

@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION taperSpeedCalc : REAL // implement a root tapering of speed as target approached
+VAR_INPUT
+	CURRENT_OFFSET: REAL; // offset from target
+	START_OFFSET: REAL; // offset at which to start tapering
+	VEL: REAL; // Max velocity of actuator
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF CURRENT_OFFSET > START_OFFSET THEN
+	CURRENT_OFFSET := START_OFFSET;
+END_IF
+taperSpeedCalc := SQRT(ABS(CURRENT_OFFSET/START_OFFSET))*VEL;

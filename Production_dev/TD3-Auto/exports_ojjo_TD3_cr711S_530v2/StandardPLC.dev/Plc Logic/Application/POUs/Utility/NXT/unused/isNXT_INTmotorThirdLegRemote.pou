@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_INTmotorThirdLegRemote : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_INTmotorThirdLegRemote :=
+		isNXT_INTmotorTruss_perRemote() 
+	AND
+		getScrewSide() = eScrewSide.SCREW_CENTER;
+	//(SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER) ;

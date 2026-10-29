@@ -1,0 +1,57 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK DataSmoothing
+// take in a data point and x number of points to average, and return a running average of the last x entries
+
+VAR_INPUT
+	CURRENT_DATA_POINT: REAL;
+	NUM_POINTS_TO_AVERAGE: UINT; //(limit 255, @ 50hz = 5.1 seconds)
+	RANGE_MIN: REAL;
+	RANGE_MAX: REAL;
+END_VAR
+VAR_OUTPUT
+	SMOOTHED_DATA_OUTPUT: REAL;
+END_VAR
+VAR
+	DATA_POINTS: ARRAY [1..255] OF REAL := [255(0)];
+	NUM_OF_COLLECTED_ENTRIES: UINT;
+	ENTRY_INDEX: UINT := 1;
+	DATA_ARRAY_FULL: BOOL := FALSE;
+	DATA_SUM: REAL := 0;
+	AVG_INDEX: UINT := 1;
+	LAST_SMOOTHED_DATA_OUTPUT: REAL := 0;
+	LAST_DATA_POINT: REAL :=0;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF CURRENT_DATA_POINT > RANGE_MAX OR CURRENT_DATA_POINT < RANGE_MIN THEN
+	CURRENT_DATA_POINT := ( SMOOTHED_DATA_OUTPUT - LAST_SMOOTHED_DATA_OUTPUT ) + LAST_DATA_POINT;
+END_IF
+
+
+// store sample
+DATA_POINTS[ENTRY_INDEX] := CURRENT_DATA_POINT;
+LAST_SMOOTHED_DATA_OUTPUT := SMOOTHED_DATA_OUTPUT;
+LAST_DATA_POINT := CURRENT_DATA_POINT;
+
+// average collected data
+DATA_SUM := 0; // clear history
+FOR AVG_INDEX := 1 TO NUM_POINTS_TO_AVERAGE DO
+	DATA_SUM := DATA_SUM + DATA_POINTS[AVG_INDEX];
+END_FOR
+
+IF DATA_ARRAY_FULL THEN
+	SMOOTHED_DATA_OUTPUT := DATA_SUM / NUM_POINTS_TO_AVERAGE;
+ELSE 
+	SMOOTHED_DATA_OUTPUT := DATA_SUM / ENTRY_INDEX;
+END_IF
+
+// update entry number
+// control how many entries to average (correlates to delay time of averaging)
+IF ENTRY_INDEX < NUM_POINTS_TO_AVERAGE THEN
+	ENTRY_INDEX := ENTRY_INDEX +1;
+ELSE
+	ENTRY_INDEX := 1;
+	DATA_ARRAY_FULL := TRUE;
+END_IF

@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eXyzTrueMotionStates :
+(
+	IDLE := 0,
+	POSITION_X := 1,
+	POSITION_Y := 2,
+	POSITION_Z := 3
+);
+END_TYPE

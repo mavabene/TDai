@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+
+
+FUNCTION isNXT_SImotorTruss_perRemote : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_SImotorTruss_perRemote :=
+	(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_SI) AND
+	(getTrussType() = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE);
+	//(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE);

@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION SIN_DEG: REAL
+VAR_INPUT
+	DEGREES: REAL;
+END_VAR
+VAR
+	RADIANS: REAL;
+END_VAR
+(********************** Implementation ****************************)
+//RADIANS := (3.14159 * DEGREES / 180.0);
+RADIANS := (Pi * DEGREES / 180.0);
+SIN_DEG := SIN(RADIANS);
+

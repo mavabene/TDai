@@ -1,0 +1,421 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK Z_SLIDE
+VAR_INPUT
+	INIT: BOOL;
+	pZSLIDE: POINTER TO sAxis;
+	TIME_US: DWORD;
+	VALID: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	PROFILER: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	PIVOT_LENGTH: REAL;
+	ADJUST: REAL;
+	TARGET_POS: REAL;
+	ERROR: REAL;
+	VEL: REAL;
+	ACCEL: REAL;
+
+	GROUND_GAP: REAL;
+	DELTA: REAL;
+	ANGLE: REAL;
+	
+	// GPS
+	INITIATE_GPS_AUTO_MOVE: BOOL := FALSE;
+	GPS_FEEDBACK_AUTOTARGET_INIT: BOOL := TRUE;
+	TARGET_LAST: REAL := 0; // 
+	GPS_VEL: REAL := 0;
+	GPS_ACCEL: REAL := 0;
+	
+	
+	
+	//FWP_SWITCH_FROM_LC_TO_ZSLIDE: BOOL := FALSE;
+END_VAR
+(********************** Implementation ****************************)
+
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pZSLIDE^.SETPOINT.POSITION_ENGR);
+ELSE
+	IF Z_SLIDE_CYLINDER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		POSITION_RAW := 15000 - Z_SLIDE_ENCODER_RAW;
+	END_IF
+END_IF
+Sampled(ADR(pZSLIDE^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pZSLIDE);
+	RETURN;
+END_IF
+
+CLOSED_LOOP := FALSE;
+PROFILER := FALSE;
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pZSLIDE^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF MACHINE_MODE = TRACK_MODE AND
+	(TRACK_STATE = TRACK_STATE_CLEAR_GROUND OR TRACK_STATE = TRACK_STATE_CROWDS_DOWN) THEN
+	(* We want to use the mandrel tip as a plumb bob to help the operator spot the X position. *)
+	IF isTrackModeStateChange() THEN
+		(* If we are clearing the ground, we only want the Z slide to travel UP, to respect the track back requirement for
+			crowds down.  Otherwise, go to the tracking position. *)
+		IF TRACK_STATE = TRACK_STATE_CLEAR_GROUND THEN
+			IF TRACK_BACK_REQUIRED THEN
+				IF (Z_SLIDE_TRACK_POS > (pZSLIDE^.FEEDBACK.POSITION_ENGR + Z_SLIDE_TRACK_CLEARANCE)) AND ((DRIFTER_TO_TOP - DRIFTER_TO_TOP_ESTOP - LOWER_CROWD_LONG_SCREW_DRIFTER_MARGIN) > LOWER_CROWD_TRACK_CLEARANCE) THEN
+					(* Track position is enough above current position. *)
+					TARGET_POS := Z_SLIDE_TRACK_POS;
+				ELSE // need to clear truss cap because lower crowd doesn't have enough room
+					(* No matter the Z slide track position, we want to go to clear the TCH. *)
+// 					TARGET_POS := pZSLIDE^.FEEDBACK.POSITION_ENGR + Z_SLIDE_TRACK_CLEARANCE;
+					TARGET_POS := MAX(Z_SLIDE_TRACK_POS, pZSLIDE^.FEEDBACK.POSITION_ENGR + LOWER_CROWD_TRACK_CLEARANCE);
+					// prevent z slide maxing out in high wp situation
+					TARGET_POS := MIN(pZSLIDE^.CONFIG.COMMAND_LIMIT_MAX, TARGET_POS);
+				END_IF
+			ELSE
+				(* We aren't requiring track back, so this will send the Z slide either down or slightly up. *)
+				TARGET_POS := Z_SLIDE_TRACK_POS;
+			END_IF
+		ELSE
+			(* Just send Zslide to tracking position. *)
+			TARGET_POS := Z_SLIDE_TRACK_POS;
+		END_IF
+		TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+			TARGET_POS, Z_SLIDE_VEL, Z_SLIDE_ACCEL);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+// nxt motors and high wp require re positioning here:
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED 
+	AND 
+		(isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH) OR 
+		((SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) AND isNXTmotorSideLeg_perRemote() AND (SCREW_SIDE_LATCH = SCREW_LEFT))) 
+	AND
+	MACHINE_MODE = SCREW_MODE 
+	AND
+		(
+				(SCREW_STATE = SCREW_STATE_PREPARE_TO_LOAD) 
+			OR // AND isMotorThirdLeg()) OR //	isNxt3lm3lScrew()) OR
+				(SCREW_STATE = SCREW_STATE_INITIAL_ROTATE AND 
+					((NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) 
+					OR isNXTmotorThirdLeg_perLatch())
+				)
+			OR
+				(SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) 
+			OR
+				(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET AND (isNXTmotorThirdLeg_perLatch() OR (NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS)))
+			OR ((SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE) AND isNXTmotorThirdLeg_perLatch())
+		)
+	THEN
+		// When installing the NXT three legged motor, we are moving the z slide in screw drive.  So when doing the initial rotate
+		//	state, we need to return to the loading position, and when we move into the screw drive state, we need to extend to
+		//	help us reach the far-away ground.
+		IF (SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) AND isNXTmotorTruss_perScrewParams() AND (SCREW_SIDE_LATCH = SCREW_LEFT) THEN
+			// don't waste time going to high side leg wp just to bring it back down
+			TARGET_POS := Z_SLIDE_AT_WP - TO_REAL(NXT_MOTOR_SIDE_LEG_WP_OFFSET[rot.pZ])/10 - HIGH_WP_SIDE_LEG_ADJUST[rot.pZ] + 10; 
+		ELSIF SCREW_STATE = SCREW_STATE_INITIAL_ROTATE OR SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR SCREW_STATE = SCREW_STATE_PREPARE_TO_LOAD or ((SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE) AND isNXTmotorThirdLeg_perLatch()) THEN
+			TARGET_POS := Z_SLIDE_AT_WP;
+		ELSE
+			// @TODO: this is hardcoded, should be based on machine geometry instead!!
+			IF SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER THEN
+				// This is the NS leg of the NXT 3rd leg motor.  Extend out.  Hardcoded 1.2m extension should be removed.
+				
+				ANGLE := SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE;
+				
+				GROUND_GAP := (PITCH_PIVOT_HEIGHT / COS_DEG(ANGLE)) - PITCH_PIVOT_HEIGHT +
+					((PITCH_PIVOT_TO_DRILL_ROD - 50) * SIN_DEG(ANGLE));
+	
+				DELTA := GROUND_GAP / COS_DEG(ANGLE);
+				IF DELTA > 120 THEN
+					DELTA := 120;
+				END_IF
+				TARGET_POS := Z_SLIDE_AT_WP - DELTA; // + 10;
+	
+				IF TARGET_POS < pZSLIDE^.CONFIG.COMMAND_LIMIT_MIN THEN
+					TARGET_POS := pZSLIDE^.CONFIG.COMMAND_LIMIT_MIN;
+				END_IF
+			ELSE
+				// EW screws of the NXT 3rd leg motor.  The workpoint for these trusses is above the torque tube.
+				//	To compensate, we move the rotator left/right to get it aligned with the screw path.  When this
+				//	motion happens, a machine with track base not flat in roll will pollute this.  Compensate here.
+				IF SCREW_SIDE_LATCH = eScrewSide.SCREW_LEFT AND MACHINE_MODE = SCREW_MODE AND 
+				SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+					TARGET_POS := Z_SLIDE_AT_WP;//NXT_3LM_Z_SLIDE_LEFT;
+				ELSE
+					TARGET_POS := Z_SLIDE_AT_WP;//NXT_3LM_Z_SLIDE_RIGHT;
+				END_IF
+			END_IF
+		END_IF
+		
+		IF isScrewModeStateChange() OR isContinueRequested() THEN
+			IF isNXTmotorThirdLeg_perLatch() THEN
+				VEL := Z_SLIDE_VEL;
+			ELSE
+				VEL := Z_SLIDE_VEL * 0.67;
+			END_IF
+			TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+				TARGET_POS, VEL, Z_SLIDE_ACCEL);
+			
+		ELSIF isPauseRequested() THEN
+			(* Stop what we are doing. *)
+			TrapezoidStop(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.CONFIG ,pZSLIDE^.FEEDBACK);
+		END_IF
+	
+		(* Prepare to run the control loop. *)
+		PROFILER := TRUE;
+		CLOSED_LOOP := TRUE;
+
+// GPS autotarget moves
+ELSIF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND // OR GPS_TRACK_MODE_PRE_TARGET_ACTIVE) AND // removed to prevent hoses from being tracked on
+		GPS_AXES[GPS_Z].AUTOTARGET_ON AND AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		(
+			(
+				(MACHINE_MODE = RWP_MODE) AND ( (RWP_STATE = RWP_STATE_WAIT_LEVEL) OR 
+												(RWP_STATE = RWP_STATE_GPS_FAST_TARGET) OR
+												(RWP_STATE = RWP_STATE_GPS_FINE_TARGET) OR
+												(RWP_STATE = RWP_STATE_GPS_MANUAL_CYCLE)) 
+			)
+			OR
+			(	 MACHINE_MODE = SCREW_MODE AND 
+				(
+					(SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP) OR
+					((SCREW_STATE = SCREW_STATE_NXT_TL_ADJUST) AND (WP_HEIGHT_LATCH = WP_HIGH)) OR
+					((SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS) AND HMI_BOOLS_VALUES[FWP_Z_AUTOTARGET]) OR
+					((SCREW_STATE = SCREW_STATE_INITIAL_ROTATE) AND isScrewModeGpsAdjustNeeded())
+// 					OR 
+// 					(SCREW_STATE = SCREW_STATE_NXT_TL_ADJUST) 
+				)
+			)
+		)
+	THEN
+	// determine when to initiate move and move type
+	IF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE AND GPS_AUTOTARGET_ACTUATE THEN // only set reference first time
+		TARGET_LAST := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR;
+	END_IF
+	// execute movement
+	// set parameters for move
+	IF GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE THEN
+		GPS_VEL := Z_SLIDE_VEL;
+		GPS_ACCEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * Z_SLIDE_ACCEL;
+		TARGET_POS := GPS_AXES[GPS_Z].LOCKED_TARGET_POSITION; 
+		IF ABS(TARGET_POS - AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR) < 15 THEN
+			TARGET_POS := AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR; // already moved so don't move
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE THEN
+		IF ((MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_INITIAL_ROTATE)) THEN
+			GPS_VEL := Z_SLIDE_VEL;
+			GPS_ACCEL := Z_SLIDE_ACCEL;
+		ELSE
+			GPS_VEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_VELOCITY_FACTOR] * Z_SLIDE_VEL;
+			GPS_ACCEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * Z_SLIDE_ACCEL;
+		END_IF
+		IF (MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP) THEN
+			IF isNXTmotorSideLeg_perLatch() THEN
+				// err on high side to reduce chance of truss cap hitting a leg
+				TARGET_POS := Z_SLIDE_POS_ENTERING_RETURN_TO_WP + MAX(0, (LOWER_CROWD_POS_ENTERING_RETURN_TO_WP - LOWER_CROWD_AT_WP)) + 1.0;
+			ELSIF HMI_BOOLS_VALUES[FWP_Z_AUTOTARGET] THEN
+				TARGET_POS := Z_SLIDE_AT_WP;
+			ELSE
+				// err on high side to reduce chance of truss cap hitting a leg
+				TARGET_POS := Z_SLIDE_AT_WP + MAX(0, (LOWER_CROWD_POS_ENTERING_RETURN_TO_WP - LOWER_CROWD_AT_WP)) + 1.0;	
+			END_IF
+		ELSE
+			TARGET_POS := GPS_AXES[GPS_Z].FILTERED_TARGET_POSITION;
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE THEN // very slow to minimize antennas bounce and instability
+		GPS_VEL := 0.6 * GPS_TEST_VEL_FACTOR; 
+		GPS_ACCEL := 0.3 * GPS_TEST_ACCEL_FACTOR; 
+		TARGET_POS := GPS_AXES[GPS_Z].FILTERED_TARGET_POSITION;
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINISH_MOVE THEN 
+			TARGET_POS := AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR;
+	ELSIF MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL THEN
+		GPS_VEL := Z_SLIDE_VEL;
+		GPS_ACCEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * Z_SLIDE_ACCEL;
+		IF GPS_TRACK_MODE_NORMAL_TRACK_POS THEN
+			TARGET_POS := Z_SLIDE_TRACK_POS;
+		ELSE 
+			TARGET_POS := MAX(66.6, GPS_AXES[GPS_Z].FILTERED_TARGET_POSITION);// don't drag hoses if approaching low wp	
+		END_IF
+	END_IF
+	TARGET_POS := MIN( MAX ( TARGET_POS, GPS_AXES[GPS_Z].AXIS_RANGE_MIN ), GPS_AXES[GPS_Z].AXIS_RANGE_MAX ); // limit target position to what is possible
+	
+	IF (GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE) OR (GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE) OR GPS_TRACK_MODE_PRE_TARGET_ACTIVE THEN
+		IF isPauseRequested() THEN
+			TrapezoidStop(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.CONFIG , pZSLIDE^.FEEDBACK);
+		ELSIF GPS_AUTOTARGET_ACTUATE THEN 
+			TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+				TARGET_POS, GPS_VEL, GPS_ACCEL);
+		END_IF
+		CLOSED_LOOP := TRUE;
+		PROFILER := TRUE;
+	ELSIF (GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE) OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) THEN
+		IF isPauseRequested() OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) OR (NOT GPS_READY) THEN
+			setOutput(ADR(pZSLIDE^.OUTPUT), 0, FALSE);
+		ELSE
+			setVelAccel(TARGET_POS, pZSLIDE^.FEEDBACK.POSITION_ENGR,
+				//2.0 * GPS_AXES[GPS_Z].TARGET_LIMIT, 0.1 * GPS_AXES[GPS_Z].TARGET_LIMIT, GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL));
+				//GPS_AXES[GPS_Z].TARGET_LIMIT, 0.02 * GPS_AXES[GPS_Z].TARGET_LIMIT, 
+				4, 0.1,
+				GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL));
+			TARGET_POS := ddt(TARGET_POS, TARGET_LAST, GPS_VEL);
+			TARGET_LAST := TARGET_POS;
+			SetpointInit(ADR(pZSLIDE^.SETPOINT), pZSLIDE^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+			CLOSED_LOOP := TRUE;
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_NO_MOVE THEN
+		pZSLIDE^.OUTPUT.MAGNITUDE := 0;
+		pZSLIDE^.OUTPUT.POSITIVE := FALSE;
+	END_IF
+	
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND (MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL) THEN	
+	IF isRwpModeStateChange() THEN
+		TARGET_POS := Z_SLIDE_RWP_POS;
+		TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+				TARGET_POS, Z_SLIDE_VEL, Z_SLIDE_ACCEL);
+	END_IF
+	CLOSED_LOOP := TRUE;
+	PROFILER := TRUE;
+ELSIF MACHINE_MODE = RWP_MODE AND
+	(AUTOMATIC AND AUTOMATIC_ALLOWED AND RWP_STATE = RWP_STATE_LOCATE_WP AND WP_HEIGHT_LATCH = WP_LOW) THEN
+	(* This is more complicated.  When using the low workpoint, we want to keep the rotator
+		at a particular height.  The Z-slide simply watches the BR; as the BR offsets
+		from vertical, the Z slide needs to compensate by going up to keep the rotator at the same
+		height. The desired height of the rotator has the Z slide at a position Z_SLIDE_PLUMB_POS
+		when the rotator is level. *)
+
+	(* TODO: low workpoint mode!!! *)
+	(* Calculate the Z adjustment based on BR. *)
+	PIVOT_LENGTH := BR_ROT_PIVOT_MIN + Z_SLIDE_RWP_POS;
+	ADJUST := (PIVOT_LENGTH / COS_DEG(AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR)) - PIVOT_LENGTH;
+	TARGET_POS := Z_SLIDE_RWP_POS + ADJUST;
+
+	ERROR := TARGET_POS - pZSLIDE^.FEEDBACK.POSITION_ENGR;
+
+	(* This has a wrinkle in the desired velocity used. We ratio the velocity to the distance away. *)
+	setVelAccel(TARGET_POS, pZSLIDE^.FEEDBACK.POSITION_ENGR,
+		4, 0.5, Z_SLIDE_VEL, Z_SLIDE_ACCEL, ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pZSLIDE^.SETPOINT), pZSLIDE^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = SCREW_MODE AND (SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP OR SCREW_STATE = SCREW_STATE_FWP) AND
+	pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE
+	THEN
+	// On ATI CS, there is no room around the installed truss for the mast foot.  So we are going to
+	//	move the Zslide up to clear the mast foot, then give the operator lower crowd control in crimp mode.
+	IF SCREW_STATE = SCREW_STATE_FWP THEN
+		//CLOSED_LOOP := FALSE;
+		pZSLIDE^.OUTPUT.MAGNITUDE := 0;
+	ELSE
+		TARGET_POS := MIN(pZSLIDE^.FEEDBACK.POSITION_ENGR + Z_SLIDE_ATI_CS_CLEARANCE, pZSLIDE^.CONFIG.COMMAND_LIMIT_MAX);
+		IF isScrewModeStateChange() OR isContinueRequested() THEN
+			TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+				TARGET_POS, Z_SLIDE_VEL, Z_SLIDE_ACCEL);
+		ELSIF isPauseRequested() THEN
+			TrapezoidStop(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.CONFIG , pZSLIDE^.FEEDBACK);
+		END_IF
+		PROFILER := TRUE;
+		CLOSED_LOOP := TRUE;
+	END_IF
+ELSIF (MACHINE_MODE = RWP_MODE) AND
+	(
+		(RWP_STATE = RWP_STATE_MANUAL) OR
+		(RWP_STATE = RWP_STATE_LOCATE_WP) OR //AND WP_HEIGHT_LATCH = WP_NONE) OR
+		(RWP_STATE = RWP_STATE_SQUARE_YAW)
+	)
+	OR
+		(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP)
+	OR
+		(MACHINE_MODE = SETUP_MODE AND (NOT AUTOMATIC))
+	THEN
+	(* We want manual Z slide control when either of the following is true:
+		1) RWP and:
+			- Manual operation OR
+			- RWP auto, when locating WP
+		2) Screw drive state and crimp mode.
+		3) Setup mode and manual
+	*)
+	// when operator gets LC back to WP change to z slide control
+	
+	IF nearHardStop(pZSLIDE^, JS := REMOTE.V3_FB, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pZSLIDE^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pZSLIDE^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+
+	(* Allow the operator to manually adjust the Zslide. *)
+	JOYSTICK_01(JS := REMOTE.V3_FB, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pZSLIDE^.OUTPUT.MAGNITUDE, POSITIVE => pZSLIDE^.OUTPUT.POSITIVE);
+
+	IF pNVM3^.MACHINE_VERSION >= 1 AND NOT pZSLIDE^.OUTPUT.POSITIVE AND AUTOMATIC THEN
+		// TD3.1 has different Z slide valve, it is very fast on the way down.
+		pZSLIDE^.OUTPUT.MAGNITUDE := pZSLIDE^.OUTPUT.MAGNITUDE / 3;
+	END_IF
+	IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND (RWP_STATE <> RWP_STATE_MANUAL) THEN 
+		pZSLIDE^.OUTPUT.MAGNITUDE := pZSLIDE^.OUTPUT.MAGNITUDE / 3;// near target already, slow down for more precise control
+	END_IF
+	
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		(MACHINE_MODE = SCREW_MODE AND
+		SCREW_SIDE_LATCH <> SCREW_CENTER AND
+		WP_HEIGHT_LATCH = WP_LOW AND
+			(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET OR
+			SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL)
+		)
+	THEN
+	(* When moving "mast" to target, in low workpoint situations we need to also move zslide and
+		boom swing. *)
+	IF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+		(* Getting ready to screw. *)
+		TARGET_POS := Z_SLIDE_SCREW;
+	ELSE
+		(* Return to vertical. *)
+		TARGET_POS := Z_SLIDE_AT_WP;
+	END_IF
+
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		TrapezoidStart(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.FEEDBACK,
+			TARGET_POS, Z_SLIDE_VEL, Z_SLIDE_ACCEL);
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US, pZSLIDE^.CONFIG , pZSLIDE^.FEEDBACK);
+	END_IF
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSE
+	(* Don't run Z slide in most cases.  Set outputs to 0. *)
+	pZSLIDE^.OUTPUT.MAGNITUDE := 0;
+	pZSLIDE^.OUTPUT.POSITIVE := FALSE;
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		IF PROFILER THEN
+			TrapezoidRun(ADR(pZSLIDE^.PROFILER), ADR(pZSLIDE^.SETPOINT), TIME_US);
+		END_IF
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pZSLIDE^.LOOP_PID), pOUTPUT := ADR(pZSLIDE^.OUTPUT),
+			SP := pZSLIDE^.SETPOINT, FB:= pZSLIDE^.FEEDBACK, CFG := pZSLIDE^.CONFIG,
+			I_ENABLED := (pZSLIDE^.PROFILER.STATE = HOLD));
+	ELSE
+		pZSLIDE^.SETPOINT.POSITION_ENGR := pZSLIDE^.FEEDBACK.POSITION_ENGR;
+		pZSLIDE^.SETPOINT.POSITION_RAW := pZSLIDE^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pZSLIDE);
+END_IF

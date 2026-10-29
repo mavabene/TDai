@@ -1,0 +1,422 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK rwpStateMachine
+VAR_INPUT
+	RMT: POINTER TO sKartech3B256KA;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	LEVEL_START_TIME: DWORD;
+	RWP_STATE_LAST: INT := -1;
+	RWP_STATE_CHANGES: INT := 0;
+	FIRST_IN_LEVEL: BOOL := FALSE;
+	RWP_START_TIME: DWORD;
+	
+	LAST_AUTOMATIC: BOOL := FALSE;
+	LAST_MANUAL: BOOL := FALSE;
+	LAST_BUMP: BOOL := FALSE;
+	
+	//GPS
+	GPS_MAX_SQUARE_YAW_DELAY: USINT := 20;  // go to manual if edge case taking too long to autotarget
+	
+	RECORD_DATA_INDEX: INT := 1;
+	RECORD_CYCLE_DATA_INDEX: INT := 1;
+	i: INT := 0;
+	
+	SATISFACTORY_CYCLES: UINT := 0;
+	LAST_CYCLE_FINISH: DWORD;
+	GPS_NEXT_AUTOTARGET_CYCLE: BOOL := FALSE;
+	GPS_RUN_CYCLE: BOOL := FALSE;
+	GPS_SETTLE_DELAY_START: DWORD; // wait for antennas to settle
+	GPS_ANTENNA_SETTLING_TIME: UINT := 1; // in ms - with smooth moves don't seem to need settling time
+	//GPS_TRANSITIION_TO_FINE_ADJUST_RANGE: SINT := 3;
+	TIGHTEN_TARGET: BOOL := FALSE;
+	
+END_VAR
+(********************** Implementation ****************************)
+(* Run the normal monitoring function of the state.  The idea is that this
+	gets called once every scan, near the top.  All of the actuator code gets called
+	below this.  This will allow typical sequences like this:
+
+	1) We confirm that we want to change to a new state.
+	2) The new state starts a motion that takes time to complete.
+	3) The motion completion causes another state change.
+
+	This will result in 1) above being done here.  Then this state logic will exit,
+	and this will let the actuator code run.  That will detect the new state, and will
+	result in 2) above being done there.  Then, the scan will exit.  On the next scan,
+	this code runs again, and the motion will be in progress and we can monitor for
+	completion here.
+
+	State changes should always use the setState function.  A change in state needs to be
+	flagged to the actuator programs that run after, so you don't want to change state without
+	having the corresponding "changed" flag set!
+
+*)
+
+(* Always clear the state changed flag on entry!! *)
+RWP_MODE_STATE_CHANGE := FALSE;
+RWP_MODE_PAUSED_CHANGE := FALSE;
+
+(* Start from the beginning if we come from track mode, or when we go between auto/bump and manual. *)
+IF isNewModeEnabled() OR
+	(LAST_MANUAL AND (isAutomaticRequested() OR isBumpRequested())) OR
+	((LAST_AUTOMATIC OR LAST_BUMP) AND isManualRequested()) THEN
+	RWP_STATE := RWP_STATE_ENTRY;
+	f2MonitorStop();
+END_IF
+
+(* Latch these to make conditional above. *)
+LAST_AUTOMATIC := AUTOMATIC;
+LAST_BUMP := BUMP;
+LAST_MANUAL := MANUAL;
+
+IF RWP_STATE_LAST <> RWP_STATE THEN
+	RWP_STATE_CHANGES := RWP_STATE_CHANGES + 1;
+END_IF
+
+RWP_STATE_LAST := RWP_STATE;
+
+(* We don't want to run state logic when we aren't sure if we are going into this mode! *)
+IF MACHINE_NO_TOUCH THEN
+	RETURN;
+END_IF
+
+CASE RWP_STATE OF
+	RWP_STATE_ENTRY:
+		RWP_START_TIME := MSTIME;
+		setScrewTypeLatch();
+		GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+		IF (AUTOMATIC OR BUMP) AND AUTOMATIC_ALLOWED THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_ENTER_RWP, 0, 0, -1, -1);
+			
+			IF  WP_HEIGHT_LATCH = WP_HIGH THEN
+				GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := GpsTargetInRangeIndicationHighWP() AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON;
+			ELSE
+				GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := (GpsTargetInRangeActual() AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON);
+			END_IF
+			
+			IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND isNXTmotorThirdLeg_perLatch() AND NOT GPS_THIRD_LEG_ADJUST_ON THEN
+				setWaitingStrings('Set 3rd Leg Adjust', 'Set 3rd Leg');
+			ELSE
+				FIRST_IN_LEVEL := TRUE;
+				setRwpModeState(RWP_STATE_SELECT_OPERATION);
+			END_IF
+		ELSE
+			setRwpModeState(RWP_STATE_MANUAL);
+		END_IF
+		LEVEL_START_TIME := TIME_SECONDS;
+	RWP_STATE_MANUAL:
+		(* Actuator FBs detect this state and provide manual controls. *)
+		;
+	RWP_STATE_SELECT_OPERATION:
+		(* No operator confirm. *)
+		(* Removed!  No workpoint height at this point!
+			WP_HEIGHT_LATCH := getWorkpointHeight();
+			IF WP_HEIGHT_LATCH = WP_NONE THEN
+				WP_HEIGHT_LATCH := WP_HIGH;
+			END_IF
+		*)
+				
+		FIRST_IN_LEVEL := TRUE;
+		setRwpModeState(RWP_STATE_WAIT_LEVEL);
+		
+	RWP_STATE_WAIT_LEVEL:
+		// reset trigger every cycle:
+		GPS_AUTOTARGET_ACTUATE := FALSE;	
+		
+		IF FIRST_IN_LEVEL THEN
+			LEVEL_START_TIME := TIME_SECONDS;
+			IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN 
+				GPS_SETTLE_DELAY_START := 0; // starts when all is settled
+				GPS_AUTOTARGET_ACTUATE := TRUE;
+				GPS_TRUSS_CYCLE := GPS_FIRST_COARSE_MOVE;
+				// if track mode is bypassed on startup locked positions have not been set and default to 0
+				IF GPS_AXES[GPS_Z].LOCKED_TARGET_POSITION = 0 AND GPS_AXES[GPS_X].LOCKED_TARGET_POSITION = 0  THEN
+					GpsLockTargets();
+				END_IF
+			END_IF
+			
+			TIGHTEN_TARGET := FALSE;
+			FIRST_IN_LEVEL := FALSE;
+		
+		(* We've just stopped the machine and put down the outrigger, then the operator has selected
+			the workpoint.  A lot of stuff is moving, so wait for it all to settle. We also have to
+			wait for the outrigger to come down fully, because this affects especially pitch, and
+			the outrigger takes some time to extend!  Note that we look for rough settling for most of the
+			mechanisms, and only really need the lower crowd and mast slide to settle, because the boom swing and yaw get adjusted
+			by the operator, and the pitch and rotator continue to level during the LOCATE_WP state! *)
+		
+		//IF (TIME_SECONDS - LEVEL_START_TIME > 3) // wait for outrigger
+		ELSIF (AXES[AXIS_OUTRIGGER].OUTPUT.MAGNITUDE = 0) // instead of waiting a set time hoping outrigger is down we monitor for it stopping
+			AND (SettledWithin(ADR(AXES[AXIS_PITCH].LOOP_PID), 1) = TRUE)
+			AND (SettledWithin(ADR(AXES[AXIS_BOOM_SWING].LOOP_PID), 1) = TRUE)
+			AND (SettledWithin(ADR(AXES[AXIS_ROTATOR].LOOP_PID), 1) = TRUE)
+			AND (SettledWithin(ADR(AXES[AXIS_Z_SLIDE].LOOP_PID), 1) = TRUE)
+			(* Yaw correction only allowed in high WP mode. *)
+			AND (WP_HEIGHT_LATCH = WP_NONE OR (SettledWithin(ADR(AXES[AXIS_YAW].LOOP_PID), 1) = TRUE))
+			AND (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE)
+			AND (AXES[AXIS_MAST_SLIDE].LOOP_PID.SETTLED = TRUE)
+			// AND (AXES[AXIS_BOOM_LIFT].LOOP_PID.SETTLED = TRUE)
+			// AND (AXES[AXIS_JOINT_LIFT].LOOP_PID.SETTLED = TRUE)
+			THEN
+				
+				IF (NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) OR 
+					((SettledWithin(ADR(AXES[AXIS_X_SLIDE].LOOP_PID), 1) = TRUE) AND 
+						(TO_UINT(MSTIME - GPS_SETTLE_DELAY_START) > GPS_DELAY_WAIT_LEVEL_TO_SQUARE_YAW )) THEN 
+						// start timer to wait for antennas to settle
+						IF GPS_SETTLE_DELAY_START = 0 THEN
+							GPS_SETTLE_DELAY_START := MSTIME; // start timer
+						ELSE
+							setCycletimeData(eCycleSteps.CYCLE_STEP_SQUARE_YAW, 0, 0, -1, -1);
+							FIRST_IN_LEVEL := TRUE;
+							IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN
+								setRwpModeState(RWP_STATE_GPS_FAST_TARGET);
+								GpsLockTargets();
+							ELSE
+								setRwpModeState(RWP_STATE_SQUARE_YAW);
+							END_IF
+						END_IF
+						
+				END_IF
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_PITCH].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('Pitch', 'Pitch');
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_BOOM_SWING].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('Boom swing', 'Boom swing');
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_ROTATOR].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('Rotator', 'Rotator');
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_Z_SLIDE].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('Z slide', 'Z slide');
+		ELSIF NOT (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Lower crowd', 'Lower crowd');
+		ELSIF NOT (AXES[AXIS_MAST_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Mast slide', 'Mast slide');
+		ELSIF NOT (AXES[AXIS_BOOM_LIFT].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Boom lift', 'Boom lift');
+		ELSIF NOT (AXES[AXIS_JOINT_LIFT].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Joint lift', 'Joint lift');
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_X_SLIDE].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('X slide', 'X slide');
+		ELSIF NOT (SettledWithin(ADR(AXES[AXIS_YAW].LOOP_PID), 1) = TRUE) THEN
+			setWaitingStrings('Yaw', 'Yaw');
+		ELSIF NOT (AXES[AXIS_OUTRIGGER].OUTPUT.MAGNITUDE = 0) THEN
+			setWaitingStrings('Outrigger', 'Outrigger');
+		END_IF
+		GPS_RWP_CYCLE_TIME := MSTIME - RWP_START_TIME;
+	
+	// slower trapezoid move to GPS actuator targets (for less antenna bouncing)	
+	RWP_STATE_GPS_FAST_TARGET:
+		// momentary - reset every cycle
+		GPS_AUTOTARGET_ACTUATE := FALSE; // reset actuator movement trigger
+		setWaitingStrings('GPS finding target', 'GPS targeting');
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+			LEVEL_START_TIME := TIME_SECONDS; // start timeout for autotarget
+			GPS_TRUSS_CYCLE := GPS_SLOW_TRAPEZOID_MOVE;
+			GPS_AUTOTARGET_ACTUATE := TRUE; 
+			LAST_CYCLE_FINISH := MSTIME;
+			GPS_TIMEOUT_ACTIVATED := FALSE; // used to set finish condition (steady state)
+			// start timing
+			GPS_SETTLE_DELAY_START := MSTIME;
+		
+			// if we want to test targeting a cycle at a time:
+			IF GPS_MANUAL_CYCLE_CONTROL THEN
+				setRwpModeState(RWP_STATE_GPS_MANUAL_CYCLE);
+				FIRST_IN_LEVEL := TRUE;
+			// if we are already near the target just go to fine adjust:
+			ELSIF GpsAutoAxesNearTarget(TRUE, FALSE, pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_FEEDBACK_AUTOTARGET]) THEN
+				setRwpModeState(RWP_STATE_GPS_FINE_TARGET);
+				FIRST_IN_LEVEL := TRUE;
+				GpsLockTargets();
+			END_IF
+			
+		(* Stage timed out for an unexpected reason *)
+		ELSIF (( TIME_SECONDS - LEVEL_START_TIME ) > GPS_MAX_SQUARE_YAW_DELAY ) AND NOT GPS_TIMEOUT_ACTIVATED THEN
+			setWaitingStrings('Operator - set yaw', 'Operator - yaw');
+			GPS_TIMEOUT_ACTIVATED := TRUE;
+			TIGHTEN_TARGET := FALSE;
+		(* actuators have stopped moving - check targeting status and adjust accordingly *)
+		ELSIF  (SettledWithin(ADR(AXES[GPS_AXES[GPS_HEADING].ACTUATOR_AXIS].LOOP_PID), 1) AND
+				SettledWithin(ADR(AXES[GPS_AXES[GPS_X].ACTUATOR_AXIS].LOOP_PID), 1) AND
+				SettledWithin(ADR(AXES[GPS_AXES[GPS_Y].ACTUATOR_AXIS].LOOP_PID), 1) AND
+				SettledWithin(ADR(AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].LOOP_PID), 1) )
+			OR GPS_TIMEOUT_ACTIVATED THEN
+			
+			IF GpsAutoAxesNearTarget(TRUE, FALSE, pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_FEEDBACK_AUTOTARGET]) OR
+				GPS_TIMEOUT_ACTIVATED THEN
+				 
+				FIRST_IN_LEVEL := TRUE;
+				GPS_RWP_CYCLE_TIME := MSTIME - RWP_START_TIME;
+				setRwpModeState(RWP_STATE_GPS_FINE_TARGET);
+			
+			// if not timed out and not close enough to fine target then retry:
+			ELSE 
+			
+				LAST_CYCLE_FINISH := MSTIME;
+				// wait for antennas to stop shaking after actuator trapezoid movements
+				IF TO_UINT((MSTIME - GPS_SETTLE_DELAY_START)) > (GPS_DELAY_BETWEEN_CYCLES) THEN
+					// do another trapezoid move to get closer
+					GPS_AUTOTARGET_ACTUATE := TRUE; 
+					IF RECORD_CYCLE_DATA_INDEX = 10 THEN
+						RECORD_CYCLE_DATA_INDEX := 1;
+					ELSE
+						RECORD_CYCLE_DATA_INDEX := RECORD_CYCLE_DATA_INDEX + 1;
+					END_IF;
+					(* // deprecated - delete if 3rd leg install working:
+					// if installing NXT 3rd leg update positioning calc with updated info
+					IF pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_3RD_LEG_EASTING_ADJUST THEN
+						GPS_ADJUST_EASTING := CalcThirdLegAdjust();
+					END_IF *)
+					
+				END_IF
+			END_IF
+		ELSE
+			// reset settling timer because actuators are still moving
+			GPS_SETTLE_DELAY_START := MSTIME; 
+		END_IF
+	
+		IF NOT (AXES[AXIS_YAW].LOOP_PID.SETTLED) THEN
+			setWaitingStrings('Heading Correction: Yaw', 'Yaw');
+		ELSIF NOT (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED) THEN
+			setWaitingStrings('Y Correction: Boom Swing', 'Boom Swing');
+		ELSIF NOT (AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED) THEN
+			setWaitingStrings('X Correction: X-Slide', 'X-Slide');
+		ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED) THEN
+			setWaitingStrings('Z Correction: Z-Slide', 'Z-Slide');
+		END_IF
+			
+		GPS_RWP_CYCLE_TIME := MSTIME - RWP_START_TIME; // convert ms to s; track time taken to position wp
+			
+	// we are close to target, do a slow move using GPS as feedback to constantly update final target for GPS actuators
+	RWP_STATE_GPS_FINE_TARGET:
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+			GPS_TRUSS_CYCLE := GPS_FINE_SLOW_FEEDBACK_MOVE;
+			//GPS_ADJUST_EASTING := CalcThirdLegAdjust(); // deprecated, if NXT 3rd leg install working, delete this
+			GPS_AUTOTARGET_ACTUATE := TRUE; // initiate reference for feedback move speed control (ddt function)
+// 			IF is3lmEwAdjustNeeded() THEN
+// 				CalcNxt1ThirdLegAdjustX();
+// 			END_IF
+			
+		ELSE
+			// momentary - reset every cycle
+			GPS_AUTOTARGET_ACTUATE := FALSE; // reset actuator movement trigger
+			//GPS_YAW_AND_Y_SET := FALSE;//in case we want to use for fine tuning gps autotarget
+			
+			(* Stage timed out for whatever reason
+				if stage timed out and heading on target move on to let operator adjust other axis in RWP_STATE_LOCATE_WP, 
+				otherwise wait for operator to set yaw and continue *)
+			IF (( TIME_SECONDS - LEVEL_START_TIME) > GPS_MAX_SQUARE_YAW_DELAY ) THEN
+				GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+				TIGHTEN_TARGET := FALSE;
+				setRwpModeState(RWP_STATE_SQUARE_YAW);
+				
+			(* actuators have stopped moving - check targeting status and adjust accordingly *)
+			ELSIF  (SettledWithin(ADR(AXES[GPS_AXES[GPS_HEADING].ACTUATOR_AXIS].LOOP_PID), 1) AND
+					SettledWithin(ADR(AXES[GPS_AXES[GPS_X].ACTUATOR_AXIS].LOOP_PID), 1) AND
+					SettledWithin(ADR(AXES[GPS_AXES[GPS_Y].ACTUATOR_AXIS].LOOP_PID), 1) AND
+					SettledWithin(ADR(AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].LOOP_PID), 1) ) AND
+					(GPS_TRUSS_CYCLE = GPS_FINISH_MOVE)
+				THEN
+				
+				//IF GPS_TRUSS_CYCLE = GPS_FINISH_MOVE THEN
+					GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+					GPS_RWP_CYCLE_TIME := MSTIME - RWP_START_TIME;
+// 					IF GpsAutoAxesNearTarget(TRUE, TRUE, 2.0, 1.2 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR]) THEN
+					IF GpsAutoAxesNearTarget(TRUE, TRUE, GPS_ON_TARGET_RWP) THEN
+						setCycletimeData(eCycleSteps.CYCLE_STEP_LOCATE_WP, 0, 0, -1, -1);
+						setRwpModeState(RWP_STATE_LOCATE_WP);
+						GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+						TIGHTEN_TARGET := FALSE;
+						GpsLockTargets();
+						FIRST_IN_LEVEL := TRUE;
+						IF AUTO_MODE_ADVANCE THEN
+							SetYawSquareToTargetHeading();
+							MODE_CHANGE_REQUEST := TRUE;
+						END_IF
+			
+					ELSE // try again
+						GPS_TRUSS_CYCLE := GPS_FINE_SLOW_FEEDBACK_MOVE;
+						GPS_AUTOTARGET_ACTUATE := TRUE; // initiate reference for feedback move speed control (ddt function)
+					END_IF
+			ELSIF NOT (AXES[AXIS_YAW].LOOP_PID.SETTLED) THEN
+				setWaitingStrings('Heading Correction: Yaw', 'Yaw');
+			ELSIF NOT (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED) THEN
+				setWaitingStrings('Y Correction: Boom Swing', 'Boom Swing');
+			ELSIF NOT (AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED) THEN
+				setWaitingStrings('X Correction: X-Slide', 'X-Slide');
+			ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED) THEN
+				setWaitingStrings('Z Correction: Z-Slide', 'Z-Slide');
+			END_IF
+				
+			GPS_RWP_CYCLE_TIME := MSTIME - RWP_START_TIME; // track time taken to position wp
+			
+			// either not autotargeting this axis or it is in range and stopped or near and very slowly moving toward target 
+			// ensure fine adjust before moving on
+			// tightened up because operators can see light blink and mode advance, otherwise keep refining
+			IF (GpsAutoAxesNearTarget(FALSE, TRUE,
+				0.5 * GPS_ON_TARGET_RWP)
+					AND NOT TIGHTEN_TARGET) 
+				OR
+					GpsAutoAxesNearTarget(FALSE, TRUE, 0.1) 
+				OR
+				 	(GpsAutoAxesNearTarget(FALSE, TRUE, 0.8 * GPS_ON_TARGET_RWP) AND AUTO_MODE_ADVANCE )
+				THEN
+				GPS_TRUSS_CYCLE := GPS_FINISH_MOVE;
+			END_IF
+		END_IF
+	RWP_STATE_GPS_MANUAL_CYCLE:
+		confirmMonitorStart();
+		f2MonitorStart();
+		IF confirmRequested() THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_LOCATE_WP, 0, 0, -1, -1);
+			setRwpModeState(RWP_STATE_LOCATE_WP);
+			FIRST_IN_LEVEL := TRUE;
+		ELSIF isContinueRequested() THEN
+			GPS_TRUSS_CYCLE := GPS_SLOW_TRAPEZOID_MOVE;
+			GPS_AUTOTARGET_ACTUATE := TRUE; 
+		END_IF
+	RWP_STATE_SQUARE_YAW:
+		setWaitingStrings('Operator', 'Operator');
+		GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+		confirmMonitorStart();
+		f2MonitorStart();
+		IF (GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND GpsAxisOnTarget(GPS_HEADING, FALSE, TRUE, FALSE)) OR
+			confirmRequested() THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_LOCATE_WP, 0, 0, -1, -1);
+			FIRST_IN_LEVEL := TRUE;
+			SetYawSquareToTargetHeading();
+			setRwpModeState(RWP_STATE_LOCATE_WP);	
+		ELSIF f2Requested() THEN
+			setRwpModeState(RWP_STATE_GPS_FAST_TARGET);
+			FIRST_IN_LEVEL := TRUE; 
+			TIGHTEN_TARGET := TRUE;
+		END_IF
+	
+	RWP_STATE_LOCATE_WP:
+		(* Now just sit here while the operator adjusts the appropriate stuff to get the laser
+			in the target.  Since we want operator input, flash the green light. *)
+		
+		setWaitingStrings('Operator', 'Operator');
+		confirmMonitorStart();
+		f2MonitorStart();
+		IF FIRST_IN_LEVEL THEN 
+			FIRST_IN_LEVEL := FALSE;
+			SetYawSquareToTargetHeading();
+			// Always start from the idle state!
+			xyzTrueMotion_01.changeState(eXyzTrueMotionStates.IDLE);
+			GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+				setWaitingStrings('Confirm near target and press mode', 'Operator');
+		ELSIF f2Requested() THEN
+			setRwpModeState(RWP_STATE_GPS_FAST_TARGET);
+			FIRST_IN_LEVEL := TRUE;
+			TIGHTEN_TARGET := TRUE;
+		END_IF
+		
+		xyzTrueMotion_01();
+		
+	RWP_STATE_EXIT:
+		;
+END_CASE
+

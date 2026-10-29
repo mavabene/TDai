@@ -1,0 +1,176 @@
+
+(********************** Declaration ****************************)
+PROGRAM PLC_PRG
+VAR
+	COUNT: DINT := 0;
+	DEFAULTS1: sPersistent_1;
+	DEFAULTS2: sPersistent_2;
+	DEFAULTS3: sPersistent_3;
+	DEFAULTS4: sPersistent_4;
+	
+	HORN_TEST: BOOL := FALSE;
+	Init_1: BOOL := TRUE;
+	SOFT_REMOTE: BOOL := FALSE;
+	TUNE_01: TUNE;
+	operateAncillary_01: operateAncillary;
+	HmiReceiveActions: interpretReceiveHmiVars;
+	cycleTimeUs: SYSTIME := 10000;
+	lastExecTimeUs: SYSTIME := 0;
+
+	SystemSupply_01: ifmIOcommon.SystemSupply;
+	SupplySwitch_01: ifmIOcommon.SupplySwitch;
+	tmrOffLowVoltage: TOF;
+
+	POWERUP_DELAY: TON;
+
+	SET_APP0: ifmIOcommon.SetLED;
+	SET_APP1: ifmIOcommon.SetLED;
+	SET_APP2: ifmIOcommon.SetLED;
+	SET_APP3: ifmIOcommon.SetLED;
+
+	SERIAL_ZERO: BOOL := FALSE;
+	
+	INFO_EXECUTE: BOOL := TRUE;
+	INFO_DONE: BOOL := FALSE;
+	INFO_ERROR: BOOL := FALSE;
+	INFO_DIAG: ifmTypes.DIAG_INFO;
+	SYS_INFO_01: ifmSysInfo.GetInfo;
+	INFO: ARRAY [0..ifmSysInfo.GVL._SYS_INFO_ENTRY_COUNT - 1] OF ifmSysInfo.SYS_INFO;
+	
+	GPS_01: GPS;
+	CYCLE_START_TIME: ULINT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+
+// Handle the NVM initialization in case it hasn't been initialized.
+//
+// TODO: this is a very weak protection of settings.  This has been left this way because there are
+//	still rapid changes in the software, which adds new settings.  If we make this checking stricter
+//	(e.g. add a checksum/CRC, simply check the 0xDEADBEEF at the end, both, whatever), it will be
+//	more difficult to upgrade software because each block being checked with be fully ignored when
+//	an additional element is added to it.
+//
+
+// get code cycle time
+CODE_CYCLE_TIME := CYCLE_START_TIME;
+SysTimeGetUs(CYCLE_START_TIME);
+CODE_CYCLE_TIME := CYCLE_START_TIME - CODE_CYCLE_TIME;
+
+IF COUNT = 0 THEN
+	initializeNVM();
+END_IF
+
+// Handle the shutdown of the system on the Hutte machines, they use the VBB30 straight from the battery and
+//	the VBB15 from the ignition switch
+IF COUNT <> 0 THEN
+	//get the voltage on VBB15
+	SystemSupply_01(eChannel:= ifmIOcommon.SYS_VOLTAGE_CHANNEL.VBB15, 
+					eMode := ifmIOcommon.MODE_SYSTEM_SUPPLY.MONITOR,// .MODE_SYSTEM_SUPPLY.SYS_SUPPLY, 
+					eFilter := ifmIOcommon.FILTER_INPUT.FILTER_4, 
+					xError=> , 
+					eDiagInfo=> , 
+					xPrepared=> , 
+					uiOutVoltage=> );
+
+	//delay timer for shutdown TOF
+	tmrOffLowVoltage(IN := SystemSupply_01.uiOutVoltage > 10000, PT := T#3S);
+	
+	// State to HMI to allow orderly shutdown there.
+	SHUTDOWN_IMMINENT := NOT tmrOffLowVoltage.Q;
+	
+	SupplySwitch_01(eMode:=ifmIOcommon.MODE_SUPPLY_SWITCH.SYS_SUPPLY_SWITCH, 
+					xValue:=tmrOffLowVoltage.Q , //TRUE = PLC is running, FALSE = Shutdown
+					xError=> , 
+					eDiagInfo=> , 
+					xPrepared=> );
+END_IF
+
+// Let the HMI know we are still up
+PLC_WATCHDOG := MSTIME; //PLC_WATCHDOG + 1;
+
+// Flash lights as soon as we are running.
+SET_APP0(uiChannel := 0, eColour1 := ifmDevice.LED_COLOUR.RED, eColour2 := ifmDevice.LED_COLOUR.WHITE, eFrequency := ifmDevice.LED_FLASH_FREQ.FRQ_0_5_Hz, xOn := TRUE);
+SET_APP3(uiChannel := 3, eColour1 := ifmDevice.LED_COLOUR.BLUE , eColour2 := ifmDevice.LED_COLOUR.YELLOW , eFrequency := ifmDevice.LED_FLASH_FREQ.FRQ_0_5_Hz, xOn := TRUE);
+
+IF INFO_EXECUTE AND NOT INFO_DONE AND NOT INFO_ERROR THEN
+	SYS_INFO_01(xExecute := INFO_EXECUTE, xDone => INFO_DONE, xError => INFO_ERROR, eDiagInfo => INFO_DIAG);
+	IF INFO_DONE OR INFO_ERROR THEN
+		INFO_EXECUTE := FALSE;
+		INFO := ifmSysInfo.GVL.aSysInfoList;
+		PLC_ifmOS_version := INFO[0].sValue;
+		PLC_ifmBootloader_version := INFO[1].sValue;
+		PLC_SW_related_HW_version := INFO[2].sValue;
+		PLC_HW_related_HW_version := INFO[3].sValue;
+		PLC_serial_number := INFO[7].sValue;
+		PLC_PCB_ERP_number := INFO[10].sValue;
+	END_IF
+END_IF
+
+// Hold after ignition switch is turned on to let 24V system settle.
+POWERUP_DELAY(IN := TRUE, PT := T#1S);
+IF NOT POWERUP_DELAY.Q THEN
+	RETURN;
+END_IF
+
+IF HORN_TEST THEN
+	HORN_TEST := FALSE;
+	hornRequest(3, T#200MS, T#400MS);
+END_IF
+
+// Just tracking the execution time of each cycle.
+cycleTimeUs := cycleTime(pLastUs := ADR(lastExecTimeUs), pCount := ADR(COUNT));
+	
+// Start by monitoring the remote.  This will handle all of the inputs to get ready for the state
+//	changes.
+KAR_TECH_REMOTE(init := Init_1);
+processRemote_01(INIT := Init_1, VISUALIZATION := SOFT_REMOTE);
+
+// Sample the analog inputs before running the state logic.
+ANALOG_INPUTS();
+
+CanMonitor();
+IF GPS_VENDOR_VALUE > 0  OR ET2_TEST <> 0 THEN // if gps installed and being used
+	GPS_01(); // should be before actuators are run so targets and offsets are updated
+ELSE
+	//PNEZD_ADJUST_EASTING := 0;
+	GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS := FALSE;
+	GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+	GPS_AUTOTARGET_ACTUATE := FALSE; 
+	GPS_TRACK_MODE_PRE_TARGET_ACTIVE := FALSE;
+	GPS_TRACK_MODE_NORMAL_TRACK_POS := TRUE;
+	GPS_READY := FALSE;
+	//pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON := FALSE;
+END_IF
+
+
+// Take any recent updates from the HMI.
+HmiReceiveActions(INIT := Init_1);
+
+// Now run the main state logic, then run the individual actuator state logic.  This needs to run after
+//	the remote has been sampled, and everybody needs to make decisions on the very first cycle as much of the
+//	remote logic is edge triggered.
+machineState_01(INIT := Init_1, VISUALIZATION := SOFT_REMOTE);
+runActuators_01(INIT := Init_1);
+
+// Reset flags here that are set by the machine state code to be used with isStateChange... functions
+IF SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR MACHINE_MODE <> SCREW_MODE THEN
+	RETURNING_TO_DRIVE := FALSE;
+END_IF
+
+// Run all of the other non-servo actuators.
+operateAncillary_01();
+
+// Run the servo tuning logic if enabled.  This is not typically running.
+TUNE_01(INIT := Init_1);
+
+// Drive new values to the HMI.
+updateTransmitHmiVars(INIT := Init_1, VISUALIZATION := SOFT_REMOTE);
+
+Init_1 := FALSE;
+
+// get time it takes to run code
+SysTimeGetUs(CODE_RUN_TIME);
+CODE_RUN_TIME := CODE_RUN_TIME - CYCLE_START_TIME;
+CODE_RUN_PERCENT_OF_CYCLE := TO_USINT(100 * CODE_RUN_TIME / CODE_CYCLE_TIME);
+CODE_RUN_MAX := MAX(CODE_RUN_PERCENT_OF_CYCLE, CODE_RUN_MAX);

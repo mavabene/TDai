@@ -1,0 +1,42 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK canStatus
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	CAN_Status0: ifmRCAN.CAN_Status;
+	CAN_Status1: ifmRCAN.CAN_Status;
+	CAN_Status2: ifmRCAN.CAN_Status;
+	CAN_Status3: ifmRCAN.CAN_Status;
+	di: ifmTYPES.DIAG_INFO;
+	baud: ifmDEVICE.CAN_BAUDRATE;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* ***** IF THESE AREN'T WORKING, CHECK THE INITIALIZATION FOR BAUDRATE IN canInit() ****** *)
+CAN_Status0(
+	xEnable:= TRUE, 
+	eChannel:= 0, 
+	udiCountRx=> rxCount0, 
+	usiBusLoad=> CAN0_BUSLOAD);
+CAN_Status1(
+	xEnable:= TRUE, 
+	eChannel:= 1, 
+	eDiagInfo=> di, 
+	eBaudrate=> baud, 
+	udiCountRx=> rxCount1, 
+	usiBusLoad=> CAN1_BUSLOAD);
+CAN_Status2(
+	xEnable:= TRUE, 
+	eChannel:= 2, 
+	udiCountRx=> rxCount2, 
+	usiBusLoad=> CAN2_BUSLOAD);
+CAN_Status3(
+	xEnable:= TRUE, 
+	eChannel:= 3, 
+	udiCountRx=> rxCount3, 
+	usiBusLoad=> CAN3_BUSLOAD);
+	

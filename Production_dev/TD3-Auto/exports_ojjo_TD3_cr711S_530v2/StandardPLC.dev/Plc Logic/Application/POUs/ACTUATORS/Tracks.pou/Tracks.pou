@@ -1,0 +1,188 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK Tracks
+VAR_INPUT
+	INIT: BOOL;
+	MAX_PPCT: INT := 1000;
+	pLEFT_TRACK: POINTER TO sAxis;
+	pRIGHT_TRACK: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	JOYSTICK_RIGHT: joystickToJogOutput;
+	JOYSTICK_LEFT: joystickToJogOutput;
+	JOYSTICK_BOTH: joystickToJogOutput;
+	JOYSTICK_ADJUST: joystickToJogOutput;
+	OUTMAX: REAL;
+	BOTH_MAG: WORD;
+	BOTH_POS: BOOL;
+	LEFT_MAG: WORD;
+	RIGHT_MAG: WORD;
+	LEFT_POS: BOOL;
+	RIGHT_POS: BOOL;
+	ADJUST_MAG: WORD;
+	ADJUST_POS: BOOL;
+	
+	ADJUST_RIGHT: REAL;
+	RAMP: INT;
+	
+	ALLOW_REVERSE_TRACK_ASSIST: BOOL := FALSE;
+	
+	//GPS AutoTrack
+	GPS_LEFT_JS: INT := 0;	
+	GPS_RIGHT_JS: INT := 0;
+	GPS_LEFT_POSITIVE: BOOL := TRUE;	
+	GPS_RIGHT_POSITIVE: BOOL := TRUE;	
+	TRACK_ASSIST: GpsTrackAssist;
+	TRACK_ASSIST_INIT: BOOL := TRUE;
+	LEVER_ACTIVATION_LIMIT: REAL := 20.0;
+	MANUAL_TRACKING_ACTIVATED: BOOL := FALSE;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the tracks based on the top-level state of the machine.  Tracks have no encoders, so as such have no
+	sense of direction. *)
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CLEAR_GROUND THEN
+	TRACK_LEFT_TIME := 0;
+	TRACK_RIGHT_TIME := 0;
+ELSIF MACHINE_MODE <> TRACK_MODE THEN
+	// Reset joystick ramping elements to prevent the situation where tracking that results in an error will
+	//	cause tracking to continue ramping down when track mode is entered after error.
+	JOYSTICK_BOTH(RESET_DYN := TRUE);
+	JOYSTICK_LEFT(RESET_DYN := TRUE);
+	JOYSTICK_RIGHT(RESET_DYN := TRUE);
+END_IF
+
+// set Track Assist reverse flag
+// IF td3_1.MACHINE_MODE <> td3_1.TRACK_MODE OR TRACK_STATE <> td3_1.TRACK_STATE_NORMAL OR GPS_AXES[GPS_X].OFFSET < -2000 THEN
+// 	ALLOW_REVERSE_TRACK_ASSIST := FALSE; // reset flag
+// ELSIF GPS_AXES[GPS_X].OFFSET < 2000 AND GPS_AXES[GPS_X].OFFSET > 1000 THEN
+// 	ALLOW_REVERSE_TRACK_ASSIST := TRUE; // approaching target, allow reverse to correct overshoot
+// END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() OR MACHINE_NO_TOUCH THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	pLEFT_TRACK^.OUTPUT.MAGNITUDE := 0;
+	pLEFT_TRACK^.OUTPUT.POSITIVE := FALSE;
+	pRIGHT_TRACK^.OUTPUT.MAGNITUDE := 0;
+	pRIGHT_TRACK^.OUTPUT.POSITIVE := FALSE;
+ELSIF MACHINE_MODE = RWP_MODE AND isNewModeEnabled() AND SET_HMI_BOOLS[TA_AUTO_MODE_ADVANCE] AND TA_STATUS_FLAG = eDataCollection.TA_USED_TO_END_OF_TRACK THEN 
+	TA_STATUS_FLAG := eDataCollection.TA_AUTO_ADVANCE_USED; // TA auto advanced to rwp
+ELSIF (MACHINE_MODE = TRACK_MODE AND TRACK_STATE <> TRACK_STATE_CLEAR_GROUND) THEN
+	(* Manual control of the tracks, no matter the state of anything else. *)
+	
+	OUTMAX := 1000;
+	RAMP := 8;
+	MANUAL_TRACKING_ACTIVATED := (ABS(REMOTE.LJ_FB) > LEVER_ACTIVATION_LIMIT OR ABS(REMOTE.RJ_FB) > LEVER_ACTIVATION_LIMIT OR ABS(REMOTE.V1_FB) > LEVER_ACTIVATION_LIMIT);
+	
+	IF REMOTE.LJ_LR < (- GPS_TRACK_ASSIST_JOYSTICK_LIMIT) AND REMOTE.RJ_LR > GPS_TRACK_ASSIST_JOYSTICK_LIMIT 
+		AND GPS_READY AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_WP_AUTOTARGET_ON AND pNVM4^.GPS_AUTOTARGET_SELECTION.GPS_TRACK_ASSIST_ON AND 
+		AUTOMATIC AND AUTOMATIC_ALLOWED THEN
+		GPS_TRACK_ASSIST_ACTIVE := TRUE;
+		TA_STATUS_FLAG := eDataCollection.TA_USED_TO_END_OF_TRACK;
+	ELSE
+		IF GPS_TRACK_ASSIST_ACTIVE AND NOT MANUAL_TRACKING_ACTIVATED THEN
+			GPS_TRACK_ASSIST_ACTIVE := FALSE;
+			TRACK_ASSIST_INIT := TRUE; // turn init back on
+		ELSIF MANUAL_TRACKING_ACTIVATED AND NOT GPS_TRACK_ASSIST_ACTIVE AND TA_STATUS_FLAG = eDataCollection.TA_USED_TO_END_OF_TRACK  THEN
+			TA_STATUS_FLAG := eDataCollection.TA_USED_PARTIALLY;
+		END_IF
+	END_IF
+	
+	IF GPS_TRACK_ASSIST_ACTIVE THEN
+		TRACK_ASSIST(INIT := TRACK_ASSIST_INIT, X_OFFSET_BEGIN := -(GPS_AXES[GPS_X].TARGET_POSITION - AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR), Y_OFFSET_BEGIN := GPS_AXES[GPS_Y].OFFSET, YAW_OFFSET_BEGIN := GPS_AXES[GPS_HEADING].OFFSET,
+					LEFT_TRACK_OUTPUT_MAGNITUDE => GPS_LEFT_JS, RIGHT_TRACK_OUTPUT_MAGNITUDE => GPS_RIGHT_JS, 
+					LEFT_TRACK_OUTPUT_POSITIVE => GPS_LEFT_POSITIVE, RIGHT_TRACK_OUTPUT_POSITIVE => GPS_RIGHT_POSITIVE);
+		JOYSTICK_LEFT(JS := GPS_LEFT_JS, JS_POS_IS_OUTPUT_POS := GPS_LEFT_POSITIVE,
+			FILTER := TRUE, STEP := RAMP, OUTMAX := OUTMAX,
+			MAG => LEFT_MAG, POSITIVE => LEFT_POS);
+		JOYSTICK_RIGHT(JS := GPS_RIGHT_JS, JS_POS_IS_OUTPUT_POS := GPS_RIGHT_POSITIVE,
+			FILTER := TRUE, STEP := RAMP, OUTMAX := OUTMAX,
+			MAG => RIGHT_MAG, POSITIVE => RIGHT_POS);
+		TRACK_ASSIST_INIT := FALSE;
+	ELSE
+		JOYSTICK_BOTH(JS := REMOTE.V1_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+			FILTER := TRUE, STEP := RAMP, OUTMAX := OUTMAX,
+			MAG => BOTH_MAG, POSITIVE => BOTH_POS);
+		JOYSTICK_LEFT(JS := REMOTE.LJ_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+			FILTER := TRUE, STEP := RAMP, OUTMAX := OUTMAX,
+			MAG => LEFT_MAG, POSITIVE => LEFT_POS);
+		JOYSTICK_RIGHT(JS := REMOTE.RJ_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+			FILTER := TRUE, STEP := RAMP, OUTMAX := OUTMAX,
+			MAG => RIGHT_MAG, POSITIVE => RIGHT_POS);
+		
+	END_IF
+	
+	IF (MACHINE_MODE = TRACK_MODE AND BOTH_MAG > LEVER_ACTIVATION_LIMIT AND NOT GPS_TRACK_ASSIST_ACTIVE) 
+		// only run if no valve errors, so we don't drive off a truck:
+		AND (AXES[AXIS_TRACK_LEFT].CONFIG.HAWE_VPOC.pDSW^ = 15) 
+		AND (AXES[AXIS_TRACK_RIGHT].CONFIG.HAWE_VPOC.pDSW^ = 15)
+		THEN 
+		(* Run both tracks at hopefully the same speed. *)
+		pLEFT_TRACK^.OUTPUT.POSITIVE := BOTH_POS;
+		pLEFT_TRACK^.OUTPUT.MAGNITUDE := BOTH_MAG;
+		
+		pRIGHT_TRACK^.OUTPUT.MAGNITUDE := pLEFT_TRACK^.OUTPUT.MAGNITUDE;
+		pRIGHT_TRACK^.OUTPUT.POSITIVE := pLEFT_TRACK^.OUTPUT.POSITIVE;
+		
+		(* Now enable the right joystick to fine adjust the right track output. *)
+		JOYSTICK_ADJUST(JS := REMOTE.RJ_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+			FILTER := FALSE, OUTMAX := OUTMAX,
+			MAG => ADJUST_MAG, POSITIVE => ADJUST_POS);
+
+		(* We are adjusting the right track with respect to the left.  There are four cases, the machine can be going
+			positive or negative, and we want the right track to slow down or speed up with respect to the left track.
+			The magnitude of the right track gets larger when the levers are in the same direction, smaller when they
+			are in different directions.  Don't allow the right track magnitude to go below 0, if the operator wants
+			this operation, they need to use the joystick control. *)
+		ADJUST_RIGHT := ((TO_REAL(ADJUST_MAG) / 2) * TO_REAL(BOTH_MAG)) / MAX_PPCT;
+		IF (BOTH_POS AND ADJUST_POS) OR (NOT BOTH_POS AND NOT ADJUST_POS) THEN
+			// Right track wants to go faster, either forward or backward.
+			pRIGHT_TRACK^.OUTPUT.MAGNITUDE := pRIGHT_TRACK^.OUTPUT.MAGNITUDE + TO_WORD(ABS(ADJUST_RIGHT));
+
+			// Limit in all cases the output to the max in this mode.  This can happen when the 
+			IF pRIGHT_TRACK^.OUTPUT.MAGNITUDE > TO_WORD(MAX_PPCT) THEN
+				pRIGHT_TRACK^.OUTPUT.MAGNITUDE := TO_WORD(MAX_PPCT);
+			END_IF
+		ELSE
+			// Right track wants to go slower, either forward or backward.  Limit to 0, as in this modes the operator
+			//	is saying they want both tracks to run the same direction.
+			IF pRIGHT_TRACK^.OUTPUT.MAGNITUDE > TO_WORD(ADJUST_RIGHT) THEN
+				pRIGHT_TRACK^.OUTPUT.MAGNITUDE := pRIGHT_TRACK^.OUTPUT.MAGNITUDE - TO_WORD(ABS(ADJUST_RIGHT));
+			ELSE
+				pRIGHT_TRACK^.OUTPUT.MAGNITUDE := 0;
+			END_IF
+		END_IF
+	ELSE
+		// Prevent someone from running one track without the other.  We allow this when in the transport mode, to facilitate fine
+		//	operations when going on to/off of a truck.
+		IF NOT LOAD_UNLOAD_ONLY THEN
+			limitTurning(pLEFT_MAG := ADR(LEFT_MAG), pRIGHT_MAG := ADR(RIGHT_MAG),
+				pLEFT_POS := ADR(LEFT_POS), pRIGHT_POS := ADR(RIGHT_POS));
+		END_IF
+		
+		pLEFT_TRACK^.OUTPUT.MAGNITUDE := LEFT_MAG;
+		pLEFT_TRACK^.OUTPUT.POSITIVE := LEFT_POS;
+		pRIGHT_TRACK^.OUTPUT.MAGNITUDE := RIGHT_MAG;
+		pRIGHT_TRACK^.OUTPUT.POSITIVE := RIGHT_POS;
+		
+	END_IF
+	IF pLEFT_TRACK^.OUTPUT.MAGNITUDE > 100 THEN
+		TRACK_LEFT_TIME := TRACK_LEFT_TIME + ULINT_TO_INT(PLC_PRG.cycleTimeUs / 1000);
+	END_IF
+	IF pRIGHT_TRACK^.OUTPUT.MAGNITUDE > 100 THEN
+		TRACK_RIGHT_TIME := TRACK_RIGHT_TIME + ULINT_TO_INT(PLC_PRG.cycleTimeUs / 1000);
+	END_IF
+ELSE
+	(* Any other combinations we don't operate the tracks. *)
+	setOutput(ADR(pLEFT_TRACK^.OUTPUT), 0, FALSE);
+	setOutput(ADR(pRIGHT_TRACK^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	HaweOutput(pLEFT_TRACK);
+	HaweOutput(pRIGHT_TRACK);
+END_IF

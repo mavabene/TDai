@@ -1,0 +1,206 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK ROTATOR
+VAR_INPUT
+	INIT: BOOL;
+	pROTATOR: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	POS: REAL;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	VEL: REAL;
+	ACCEL: REAL;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the rotator axis based on the top-level state of the machine.  Rotator from the operator's viewpoint
+	is positive when the BOTTOM of the mast moves to the right. *)
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(POS_RAW_TO_ENGR(pROTATOR^.FEEDBACK, pROTATOR^.SETPOINT.POSITION_RAW));
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	IF MAST_INCLINOMETER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		IF (pNVM3^.MACHINE_VERSION = 1 OR pNVM3^.MACHINE_VERSION = 2) THEN
+			POSITION_RAW := MAST_INCLINATION_Y_RAW;
+		ELSE
+			POSITION_RAW := -MAST_INCLINATION_X_RAW;
+		END_IF
+	END_IF
+END_IF
+Sampled(ADR(pROTATOR^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pROTATOR);
+	RETURN;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pROTATOR^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF MACHINE_MODE = IDLE_MODE THEN
+	(* Rotator cannot be run in this mode.  Set outputs to 0. *)
+	setOutput(ADR(pROTATOR^.OUTPUT), 0, FALSE);
+ELSIF (NOT AUTOMATIC AND (MACHINE_MODE = SCREW_MODE OR MACHINE_MODE = SETUP_MODE)) OR
+	// Adding this for the fucked-off center structure install with really long level to clamp.
+	(
+		AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP AND
+		// We want roll correction only on the motor or center structure...
+		(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+	)
+	THEN
+	(* Manual control of the rotator is enabled. *)
+	IF nearHardStop(pROTATOR^, JS := REMOTE.RJ_LR, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pROTATOR^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pROTATOR^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	
+	// Capture the minimum of the hardstop protection or the additional constraint.
+	IF ABS(AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR) > 75.0 THEN
+		OUTPUT_MAX := MIN(OUTPUT_MAX, 80);
+	ELSIF ABS(AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR) > 65.0 THEN
+		OUTPUT_MAX := MIN(OUTPUT_MAX, 125);
+	ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP THEN
+		// Slow down for the operator when adjusting with a truss cap in the TCH.
+		OUTPUT_MAX := MIN(OUTPUT_MAX, 125);
+	END_IF
+
+	JOYSTICK_01(JS := REMOTE.RJ_LR, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := TRUE, STEP := 10, OUTMAX := OUTPUT_MAX,
+		MAG => pROTATOR^.OUTPUT.MAGNITUDE, POSITIVE => pROTATOR^.OUTPUT.POSITIVE);
+
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		(
+			(MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL) OR
+		(MACHINE_MODE = RWP_MODE) OR
+		(MACHINE_MODE = FWP_MODE) OR
+			(MACHINE_MODE = SCREW_MODE AND 
+				(
+					//SCREW_STATE = SCREW_STATE_ASSEMBLE OR 
+					(SCREW_STATE = SCREW_STATE_FWP AND TRUSS_TYPE_LATCH <> eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) OR
+					(SCREW_STATE = SCREW_STATE_NXT_TL_ADJUST AND isNXTmotorThirdLeg_perLatch()) OR
+					SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS
+				)
+			)
+		)
+		//(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP AND GPS_TRUSS_CYCLE <> GPS_NO_MOVE))
+	THEN
+	IF MACHINE_MODE = TRACK_MODE OR ((MACHINE_MODE = RWP_MODE OR MACHINE_MODE = SCREW_MODE) AND GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) THEN
+		VEL := ROTATOR_VEL / 20;
+		ACCEL := ROTATOR_ACCEL / 20;
+	ELSE
+		VEL := ROTATOR_VEL / 5;
+		ACCEL := ROTATOR_ACCEL / 5;
+	END_IF
+	(* Run lower speed as we're not in a hurry here. *)
+	setVelAccel(0, pROTATOR^.FEEDBACK.POSITION_ENGR,
+		4, 0.5, VEL, ACCEL, ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pROTATOR^.SETPOINT), pROTATOR^.FEEDBACK, 0, VEL, ACCEL);
+
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE THEN
+	(* Here we are following the screw mode automatic state machine.  Top level commentary on the machine
+		behavior should be kept in the ENUM definition. *)
+	CASE SCREW_STATE OF
+		SCREW_STATE_INITIAL_ROTATE:
+			(* If we have just entered this state, send the rotator to the load position. *)
+			IF isScrewModeStateChange() OR isContinueRequested() THEN
+				TrapezoidStart(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.FEEDBACK,
+					ROTATOR_LOAD_POS, ROTATOR_VEL, ROTATOR_ACCEL);
+			ELSIF isPauseRequested() THEN
+				TrapezoidStop(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.CONFIG ,pROTATOR^.FEEDBACK);
+			END_IF
+			CLOSED_LOOP := TRUE;
+		SCREW_STATE_MAST_TO_TARGET:
+			(* Based on the screw side, send the rotator a position based on its type. *)
+			IF isScrewModeStateChange() OR isContinueRequested() THEN
+				POS := SCREW_PARAMETERS_CURRENT.TRUSS_SIDE_LEG_ANGLE;
+				CASE SCREW_SIDE_LATCH OF
+					SCREW_RIGHT:
+						//POS := pNVM1^.ROTATOR_SCREW_POS;
+						;
+					SCREW_CENTER:
+						POS := 0.0;
+					SCREW_LEFT:
+						POS := -POS;
+				END_CASE
+				TrapezoidStart(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.FEEDBACK,
+					POS, ROTATOR_VEL, ROTATOR_ACCEL); 
+			ELSIF isPauseRequested() THEN
+				TrapezoidStop(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.CONFIG ,pROTATOR^.FEEDBACK);
+			END_IF
+			CLOSED_LOOP := TRUE;
+		SCREW_STATE_NXT_TL_ADJUST:
+			(* Based on the screw side, send the rotator a position based on its type. *)
+			
+			IF isScrewModeStateChange() OR isContinueRequested() THEN
+				POS := SCREW_PARAMETERS_CURRENT.TRUSS_SIDE_LEG_ANGLE;
+				CASE SCREW_SIDE_LATCH OF
+					SCREW_RIGHT:
+						//POS := pNVM1^.ROTATOR_SCREW_POS;
+						;
+					SCREW_CENTER:
+						POS := 0.0;
+					SCREW_LEFT:
+						POS := -POS;
+				END_CASE
+				TrapezoidStart(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.FEEDBACK,
+					POS, ROTATOR_VEL, ROTATOR_ACCEL); 
+			ELSIF isPauseRequested() THEN
+				TrapezoidStop(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.CONFIG ,pROTATOR^.FEEDBACK);
+			END_IF
+			CLOSED_LOOP := TRUE;
+			
+		SCREW_STATE_MAST_TO_VERTICAL:
+			(* Send rotator back to vertical. *)
+			IF isScrewModeStateChange() OR isContinueRequested() THEN
+				TrapezoidStart(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.FEEDBACK,
+					ROTATOR_LOAD_POS, ROTATOR_VEL, ROTATOR_ACCEL);
+			ELSIF isPauseRequested() THEN
+				TrapezoidStop(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US, pROTATOR^.CONFIG ,pROTATOR^.FEEDBACK);
+			END_IF
+			CLOSED_LOOP := TRUE;
+	ELSE
+		setOutput(ADR(pROTATOR^.OUTPUT), 0, FALSE);
+	END_CASE
+
+	IF CLOSED_LOOP THEN
+		TrapezoidRun(ADR(pROTATOR^.PROFILER), ADR(pROTATOR^.SETPOINT), TIME_US);
+	END_IF
+ELSE
+	(* Rotator cannot be run in this mode.  Set outputs to 0. *)
+	setOutput(ADR(pROTATOR^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pROTATOR^.LOOP_PID),
+			pOUTPUT := ADR(pROTATOR^.OUTPUT),
+			SP := pROTATOR^.SETPOINT,
+			FB:= pROTATOR^.FEEDBACK,
+			CFG := pROTATOR^.CONFIG,
+			I_ENABLED := (pROTATOR^.PROFILER.STATE = HOLD));
+	ELSE
+		pROTATOR^.SETPOINT.POSITION_ENGR := pROTATOR^.FEEDBACK.POSITION_ENGR;
+		pROTATOR^.SETPOINT.POSITION_RAW := pROTATOR^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pROTATOR);
+END_IF

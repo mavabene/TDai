@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+FUNCTION isScrewModeGpsAdjustNeeded : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isScrewModeGpsAdjustNeeded :=
+		GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS 
+		AND
+		(isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH));

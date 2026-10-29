@@ -1,0 +1,58 @@
+
+(********************** Declaration ****************************)
+(* Take in a point's coordinates, return the coordinates after a 3d rotation 
+Yaw, pitch, roll happen in that order *)
+FUNCTION ROTATION_3D_INTRINSIC_YPR_DEG : Vector3D
+VAR_INPUT
+	Xcoord: REAL;   // original X
+    Ycoord: REAL;   // original Y
+    Zcoord: REAL;   // original Z
+    yaw_deg: REAL;  // yaw   about Z (degrees)
+    pitch_deg: REAL;  // pitch about Y (degrees)
+    roll_deg: REAL;  // roll  about X (degrees)
+	LHR: BOOL;
+END_VAR
+VAR
+	cYAW, sYAW   : REAL;
+    cPITCH, sPITCH   : REAL;
+    cROLL, sROLL   : REAL;
+    ROTATED_POINT : ARRAY [1 .. 3] OF REAL;
+	i: USINT ;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF LHR THEN // invert coordinate system to match right hand rule for math below
+	Zcoord := - Zcoord;
+    pitch_deg := - pitch_deg;
+    roll_deg := - roll_deg;
+END_IF
+
+cYAW := COS_DEG(yaw_deg);    sYAW := SIN_DEG(yaw_deg);
+cPITCH := COS_DEG(pitch_deg);  sPITCH := SIN_DEG(pitch_deg);
+cROLL := COS_DEG(roll_deg);   sROLL := SIN_DEG(roll_deg);
+
+(*
+R = Rz(yaw) * Ry(pitch) * Rx(roll)
+[ x' ]   [  cYAW*cPITCH             cYAW*sPITCH*sROLL - sYAW*cROLL     cYAW*sPITCH*cROLL + sYAW*sROLL ] [ x ]
+[ y' ] = [  sYAW*cPITCH             sYAW*sPITCH*sROLL + cYAW*cROLL     sYAW*sPITCH*cROLL - cYAW*sROLL ] [ y ]
+[ z' ]   [  -sPITCH                 cPITCH*sROLL                      cPITCH*cROLL 
+// *)
+
+ROTATED_POINT[rot.pX] :=  ( cYAW*cPITCH )  * Xcoord
+     +  ( cYAW*sPITCH*sROLL - sYAW*cROLL ) * Ycoord
+     +  ( cYAW*sPITCH*cROLL + sYAW*sROLL ) * Zcoord;
+
+ROTATED_POINT[rot.pY] :=  ( sYaw*cPITCH )  * Xcoord
+     +  ( sYAW*sPITCH*sROLL + cYAW*cROLL ) * Ycoord
+     +  ( sYAW*sPITCH*cROLL - cYAW*sROLL ) * Zcoord;
+
+ROTATED_POINT[rot.pZ] :=  ( -sPITCH ) * Xcoord
+     +  (  cPITCH*sROLL )             * Ycoord
+     +  (  cPITCH*cROLL )             * Zcoord;
+
+IF LHR THEN // invert coordinate system to match left hand rule
+	ROTATED_POINT[rot.pZ] := - ROTATED_POINT[rot.pZ];
+END_IF
+
+ROTATION_3D_INTRINSIC_YPR_DEG := ROTATED_POINT;

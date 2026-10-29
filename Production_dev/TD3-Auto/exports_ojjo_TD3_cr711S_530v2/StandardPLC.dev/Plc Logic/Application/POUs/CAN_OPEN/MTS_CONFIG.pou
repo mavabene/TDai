@@ -1,0 +1,180 @@
+
+(********************** Declaration ****************************)
+PROGRAM MTS_CONFIG
+VAR
+	(* *** SETUP STARTS HERE, SET ONE AND ONLY ONE OF THESE!! DO NOT DO THIS WITH OTHER DEVICES ON THE BUS,
+		THIS USES THE GLOBAL CONFIG COMMANDS AND THE IFM PARTS RESPOND TO THIS!! *)
+	
+		// MTS you want to configure.
+		CONFIGURE_X_SLIDE: BOOL := FALSE;
+		CONFIGURE_Z_SLIDE: BOOL := FALSE;
+		CONFIGURE_MAST_SLIDE: BOOL := FALSE;
+		
+		// Baudrate you want it to run at.
+		CONFIGURED_BAUD: USINT := 250;
+
+		// Connected via...
+		CONNECTED_VIA: ifmDevice.CAN_CHANNEL := ifmDevice.CHAN_2;
+		
+	(* *** TO HERE, SETUP IS COMPLETE!! *** *)
+	
+	CONFIGURED_NODEID: USINT := 16#AD;
+	BITMASK_BAUD: USINT := 0;
+	
+	(*
+		Xslide => 23
+		Z slide => 21
+		Mast slide => 20
+	*)
+	ADDRESS_X_SLIDE: USINT := 23;
+	ADDRESS_Z_SLIDE: USINT := 21;
+	ADDRESS_MAST_SLIDE: USINT := 20;
+	
+	PDO_COB_BASE: UINT := 16#180;
+	
+	CHANNEL: ifmDevice.CAN_CHANNEL;
+	
+	(* Element 1 in this array, defaulted to 16#AD, is written in with the proper address depending on what
+		part you are configuring! *)
+	DATA_WRITE_NODEID: ARRAY[0..7] OF USINT := [16#11, 16#AD, 0, 0, 0, 0, 0, 0];
+	
+	(*
+		0 1000 kbit/s
+		1 800 kbits
+		2 500 kbit/s
+		3 250 kbit/s
+		4 125 kbit/s
+	*)
+
+	(* Element 2 in this array, defaulted to 16#02, is written in with the proper baudrate depending on what
+		part you are configuring! *)
+	DATA_WRITE_BAUD: ARRAY[0..7] OF USINT := [16#13, 0, 16#02, 0, 0, 0, 0, 0];
+	DATA_START: ARRAY[0..7] OF USINT := [1, 0, 0, 0, 0, 0, 0, 0];
+	
+	DATA_LSS_MODE: ARRAY[0..7] OF USINT := [4, 1, 0, 0, 0, 0, 0, 0];
+	DATA_LSS_STORE: ARRAY[0..7] OF USINT := [16#17, 0, 0, 0, 0, 0, 0, 0];
+	
+	CALLS: INT := 0;
+
+	RX_MS_MSGS: INT := 0;
+	RX_MS_AVAILABLE: UINT;
+	RX_MS_DLC: USINT;
+	RX_MS_ERROR: BOOL;
+	RX_MS_DIAG: ifmTypes.DIAG_INFO;
+	RX_MS_DATA: ARRAY[0..7] OF USINT;
+
+	RX_XS_MSGS: INT := 0;
+	RX_XS_AVAILABLE: UINT;
+	RX_XS_DLC: USINT;
+	RX_XS_ERROR: BOOL;
+	RX_XS_DIAG: ifmTypes.DIAG_INFO;
+	RX_XS_DATA: ARRAY[0..7] OF USINT;
+
+	RX_ZS_MSGS: INT := 0;
+	RX_ZS_AVAILABLE: UINT;
+	RX_ZS_DLC: USINT;
+	RX_ZS_ERROR: BOOL;
+	RX_ZS_DIAG: ifmTypes.DIAG_INFO;
+	RX_ZS_DATA: ARRAY[0..7] OF USINT;
+
+	Can_TX0: ifmRCAN.CAN_Tx;
+	Can_MS_RX0: ifmRCAN.CAN_Rx;
+	Can_ZS_RX0: ifmRCAN.CAN_Rx;
+	Can_XS_RX0: ifmRCAN.CAN_Rx;
+	EXTENDED: BOOL := FALSE;
+
+	DIAG: ifmTYPES.DIAG_INFO;
+END_VAR
+VAR_OUTPUT
+	xERROR: BOOL;
+END_VAR
+
+(********************** Implementation ****************************)
+(* Use this to configure the MTS units.  They come setup with NodeID of 127 at 500 kbits/second.
+
+	To setup the part correctly, first set the baudrate, then set the NodeID, then power cycle.
+	
+*)
+
+// Let the devices come up.
+IF MSTIME < 5000 THEN
+	RETURN;
+END_IF
+
+CALLS := CALLS + 1;
+
+IF CONFIGURE_X_SLIDE THEN
+	CONFIGURED_NODEID := ADDRESS_X_SLIDE;
+	CHANNEL := CONNECTED_VIA;
+ELSIF CONFIGURE_Z_SLIDE THEN
+	CONFIGURED_NODEID := ADDRESS_Z_SLIDE;
+	CHANNEL := CONNECTED_VIA;
+ELSIF CONFIGURE_MAST_SLIDE THEN
+	CONFIGURED_NODEID := ADDRESS_MAST_SLIDE;
+	CHANNEL := CONNECTED_VIA;
+ELSE
+	RETURN;
+END_IF
+
+IF CONFIGURE_X_SLIDE OR CONFIGURE_Z_SLIDE OR CONFIGURE_MAST_SLIDE THEN
+	CASE TO_UINT(CONFIGURED_BAUD) OF
+		1000:
+			BITMASK_BAUD := 16#0;
+		800:
+			BITMASK_BAUD := 16#1;
+		500:
+			BITMASK_BAUD := 16#2;
+		250:
+			BITMASK_BAUD := 16#3;
+		125:
+			BITMASK_BAUD := 16#4;
+		ELSE
+			BITMASK_BAUD := 16#3;
+	END_CASE
+	
+	DATA_WRITE_NODEID[1] := CONFIGURED_NODEID;
+	DATA_WRITE_BAUD[2] := BITMASK_BAUD;
+
+	Can_TX0(xEnable := TRUE, xError => xERROR, eDiagInfo => DIAG, eChannel := CHANNEL, udiID := 16#7E5,
+		xExtended := EXTENDED, usiDLC := 8, aData := DATA_LSS_MODE);
+	Can_TX0(xEnable := TRUE, xError => xERROR, eDiagInfo => DIAG, eChannel := CHANNEL, udiID := 16#7E5,
+		xExtended := EXTENDED, usiDLC := 8, aData := DATA_WRITE_NODEID);
+	Can_TX0(xEnable := TRUE, xError => xERROR, eDiagInfo => DIAG, eChannel := CHANNEL, udiID := 16#7E5,
+		xExtended := EXTENDED, usiDLC := 8, aData := DATA_WRITE_BAUD);
+	Can_TX0(xEnable := TRUE, xError => xERROR, eDiagInfo => DIAG, eChannel := CHANNEL, udiID := 16#7E5,
+		xExtended := EXTENDED, usiDLC := 8, aData := DATA_LSS_STORE);
+
+END_IF
+
+(* PDOs are being sent by default, format is:
+
+	COB-ID		Rx/Tx	DLC		D0		D1		D2		D3		D4		D5		D6		D7
+	-----------------------------------------------------------------------------------------
+	0x180		Tx		6		Pos		Pos		Pos		Pos		Speed	Speed	-		-
+	 + Node ID					LSB						MSB		LSB		MSB
+								Byte0	Byte1	Byte2	Byte3	Byte0	Byte1
+
+	Position is 32 bit, velocity is 16.
+*)
+RX_ZS_AVAILABLE := 1;
+RX_MS_AVAILABLE := 1;
+RX_XS_AVAILABLE := 1;
+WHILE TO_BOOL(RX_MS_AVAILABLE OR RX_ZS_AVAILABLE OR RX_XS_AVAILABLE) DO
+	Can_MS_RX0(eChannel := CONNECTED_VIA, xExtended := EXTENDED, aData => RX_MS_DATA, usiDLC => RX_MS_DLC, uiAvailable => RX_MS_AVAILABLE,
+		xEnable := TRUE, xError => RX_MS_ERROR, eDiagInfo => RX_MS_DIAG, udiID := PDO_COB_BASE + TO_UINT(ADDRESS_MAST_SLIDE));
+	IF RX_MS_AVAILABLE <> 0 THEN
+		RX_MS_MSGS := RX_MS_MSGS + 1;
+	END_IF
+
+	Can_ZS_RX0(eChannel := CONNECTED_VIA, xExtended := EXTENDED, aData => RX_ZS_DATA, usiDLC => RX_ZS_DLC, uiAvailable => RX_ZS_AVAILABLE,
+		xEnable := TRUE, xError => RX_ZS_ERROR, eDiagInfo => RX_ZS_DIAG, udiID := PDO_COB_BASE + TO_UINT(ADDRESS_Z_SLIDE));
+	IF RX_ZS_AVAILABLE <> 0 THEN
+		RX_ZS_MSGS := RX_ZS_MSGS + 1;
+	END_IF
+
+	Can_XS_RX0(eChannel := CONNECTED_VIA, xExtended := EXTENDED, aData => RX_XS_DATA, usiDLC => RX_XS_DLC, uiAvailable => RX_XS_AVAILABLE,
+		xEnable := TRUE, xError => RX_XS_ERROR, eDiagInfo => RX_XS_DIAG, udiID := PDO_COB_BASE + TO_UINT(ADDRESS_X_SLIDE));
+	IF RX_XS_AVAILABLE <> 0 THEN
+		RX_XS_MSGS := RX_XS_MSGS + 1;
+	END_IF
+END_WHILE;

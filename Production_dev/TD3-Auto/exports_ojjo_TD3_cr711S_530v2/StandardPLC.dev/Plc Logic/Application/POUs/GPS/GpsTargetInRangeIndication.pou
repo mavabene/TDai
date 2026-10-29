@@ -1,0 +1,20 @@
+
+(********************** Declaration ****************************)
+(*
+	Determine whether gps targeting is in range per range setpoints on HMI.  Actual range is greater.
+*)
+FUNCTION GpsTargetInRangeIndication : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	i: INT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+
+GpsTargetInRangeIndication := GPS_READY;
+FOR i := 1 TO NUM_GPS_AXES DO
+	IF NOT GPS_INDICATE_AXIS_IN_RANGE[i] THEN
+		GpsTargetInRangeIndication := FALSE;
+	END_IF
+END_FOR

@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+// updates diag info for transmit
+FUNCTION updateDIAG : BOOL
+VAR_INPUT
+	INDEX: UINT;
+	pDIAG: POINTER TO ifmIOCommon.OUTPUT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+DIAGS_TRANSMIT[2, INDEX] := TO_INT (pDIAG^.eDiagInfo);
+DIAGS_TRANSMIT[3, INDEX] := TO_INT(pDIAG^.uiValue);
+DIAGS_TRANSMIT[4, INDEX] := BOOL_TO_INT(pDIAG^.xOutState);
+DIAGS_TRANSMIT[5, INDEX] := TO_INT(pDIAG^.uiChannel);

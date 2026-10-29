@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+FUNCTION isRotaryActive : BOOL
+
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isRotaryActive := 
+ABS(VPOC_ACTUAL_LOWER_ROTARY) > 20 OR 
+ABS(VPOC_ACTUAL_UPPER_ROTARY) > 20 OR 
+VPOC_CMD_LOWER_ROTARY <> 0 OR 
+VPOC_CMD_UPPER_ROTARY <> 0 OR 
+AXES[AXIS_LOWER_ROTARY].OUTPUT.MAGNITUDE <> 0 OR 
+AXES[AXIS_UPPER_ROTARY].OUTPUT.MAGNITUDE <> 0 OR 
+VPOC_ACTUAL_LOWER_ROTARY <> 0 OR 
+VPOC_ACTUAL_UPPER_ROTARY <> 0;

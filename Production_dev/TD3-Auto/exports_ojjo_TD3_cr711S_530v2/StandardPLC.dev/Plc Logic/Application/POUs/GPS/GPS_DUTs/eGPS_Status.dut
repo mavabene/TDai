@@ -1,0 +1,30 @@
+
+(********************** Declaration ****************************)
+// dynamic status updated and transmitted to HMI via Transmit_6
+TYPE eGPS_Status :
+(
+	
+	 // 0 - 15 bit mask positions with GPS_AUTOTARGET_STATUS as UINT
+	
+	GPS_AXIS_NOT_IN_RANGE := 5,
+	GPS_AXIS_NOT_IN_RANGE_NOT_IN_AUTO := 6,
+	GPS_AXIS_IN_RANGE := 7,
+	GPS_AXIS_ON_TARGET := 8,
+	GPS_AXIS_SETTLED_WITHIN_TARGET_BAND := 9,
+	ALL_GPS_AXES_IN_RANGE := 10,
+	ALL_GPS_AXES_ON_TARGET := 11,
+	GPS_STABLE_5S := 12, // Gps fixed solution over 5s with 5 checks per second
+	GPS_USED_THIS_TRUSS := 13, // decision per truss whether gps autotargeting being used
+	
+	// GPS move types:
+	GPS_NO_MOVE := 80,
+	GPS_FIRST_COARSE_MOVE := 81,
+	GPS_SLOW_TRAPEZOID_MOVE := 82,
+	GPS_JOYSTICK_MOVE := 84,
+	GPS_FINE_SLOW_FEEDBACK_MOVE := 85,
+	GPS_FINISH_MOVE := 86
+	
+);
+
+END_TYPE
+

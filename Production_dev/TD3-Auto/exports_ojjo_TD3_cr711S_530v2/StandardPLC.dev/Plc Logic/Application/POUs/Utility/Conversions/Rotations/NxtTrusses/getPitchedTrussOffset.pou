@@ -1,0 +1,25 @@
+
+(********************** Declaration ****************************)
+FUNCTION getPitchedTrussOffset : vector3D  // assuming TD driving north
+VAR_INPUT
+	TRUSS_VECTOR: Vector3D; // truss offset to be pitched(rotated)
+	TRUSS_PITCH: LREAL;  // world pitch
+	
+END_VAR
+VAR
+	ROTATION: Rotation3D ;
+	LHR: BOOL := TRUE; 
+END_VAR
+
+(********************** Implementation ****************************)
+// take vector of ideal truss from pin to wp, then rotate it around pin by desired pitch to get vector to target.  
+// Add these offset values to pNEZd to get motor wp target
+
+// build ROTATION array
+ROTATION[rot.YAW_DEG] := 0.0; // raw pitch requested in pnezd
+ROTATION[rot.PITCH_DEG] := TRUSS_PITCH;  // irrelevant to machine position, we are adjust world coordinates
+ROTATION[rot.ROLL_DEG] := 0.0; // ideal
+ROTATION := CONVERT_WORLD_ROTATION_TO_FROM_LHR(ROTATION);
+
+// build vector
+getPitchedTrussOffset := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT(TRUSS_VECTOR, ROTATION, LHR);

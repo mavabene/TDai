@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsAutoAxesOnTarget : BOOL // GPS axes selected for autotarget are on target
+VAR_INPUT
+	ACTUATOR_SETTLING_REQUIRED: BOOL;
+	USE_FILTERED_OFFSETS: BOOL;
+	NEARNESS_FACTOR: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+GpsAutoAxesOnTarget := FALSE;
+
+GpsAutoAxesOnTarget := GpsAutoAxesNearTarget(ACTUATOR_SETTLING_REQUIRED, USE_FILTERED_OFFSETS, NEARNESS_FACTOR); 
+		
+		

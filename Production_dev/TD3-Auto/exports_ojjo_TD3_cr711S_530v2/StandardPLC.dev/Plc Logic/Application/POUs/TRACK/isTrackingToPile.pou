@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION isTrackingToPile : BOOL
+
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+isTrackingToPile := (MACHINE_MODE = TRACK_MODE) AND (TRACK_STATE = TRACK_STATE_NORMAL);

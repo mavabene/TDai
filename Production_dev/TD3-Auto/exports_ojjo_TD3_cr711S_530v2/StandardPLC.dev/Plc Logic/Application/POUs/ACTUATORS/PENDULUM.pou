@@ -1,0 +1,121 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK PENDULUM
+VAR_INPUT
+	INIT: BOOL;
+	pPENDULUM: POINTER TO sAxis;
+	TIME_US: DWORD;END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	TARGET_POS: REAL;
+	OUTPUT_MAX: REAL;
+	
+	CLOSED_LOOP: BOOL := FALSE;
+	PROFILER: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+
+	VEL: REAL;
+	ACCEL: REAL;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the pendulum axis based on the top-level state of the machine.  Some details:
+	1) Currently unused in the code except in manual operation
+	2) forward pitch is engine down and base pitch is (-) TODO: confirm this is correct
+*)
+
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+PROFILER := FALSE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(POS_RAW_TO_ENGR(pPENDULUM^.FEEDBACK, pPENDULUM^.SETPOINT.POSITION_RAW));
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	IF BASE_INCLINOMETER.CANopenState <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		POSITION_RAW := BASE_INCLINATION_PITCH_RAW;
+	END_IF
+END_IF
+Sampled(ADR(pPENDULUM^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	RETURN;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() OR (isNXT_PLUMB_perHMI() AND NOT HMI_BOOLS_VALUES[ET_PLUMB_TRACKS_TO_BASE_PITCH_MATCHED]) THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	pPENDULUM^.OUTPUT.MAGNITUDE := 0;
+	pPENDULUM^.OUTPUT.POSITIVE := FALSE;
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF (* @TODO: remove! *) FALSE AND AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	((MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL) OR
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL)) THEN
+	;
+	(*
+	IF GPS_TRACK_ASSIST_ON THEN // dev self leveling
+		TARGET_POS := 0;
+		VEL := PENDULUM_VEL;
+		ACCEL := PENDULUM_ACCEL;
+		setVelAccel(TARGET_POS, pPENDULUM^.FEEDBACK.POSITION_ENGR,
+			4, 0.5, VEL, ACCEL, ADR(VEL), ADR(ACCEL));
+		SetpointInit(ADR(pPENDULUM^.SETPOINT), pPENDULUM^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+		CLOSED_LOOP := TRUE;
+	END_IF *)
+	
+	(*
+	@TODO: pendulum should level tracks in RWP.
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+	*)
+ELSIF (MACHINE_MODE = TRACK_MODE) THEN
+	(* Allow the operator to manually adjust the pendulum. *)
+
+	// Turn on Y309 to enable oil flow to the pendulum cylinders when operator is handling these manually, or
+	//	when auto pendulum is turned on.
+	IF REMOTE.V4_FB <> 0 THEN
+		// User is operating pendulum manually.
+		OUT_PENDULUM(uiValue := 1);
+	ELSE
+		OUT_PENDULUM(uiValue := 0);
+	END_IF
+
+	IF nearHardStop(pPENDULUM^, JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := FALSE) THEN
+		OUTPUT_MAX := protectHardStop(pPENDULUM^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pPENDULUM^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	
+	JOYSTICK_01(JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pPENDULUM^.OUTPUT.MAGNITUDE, POSITIVE => pPENDULUM^.OUTPUT.POSITIVE);
+ELSE
+	(* Don't run pendulum in most cases.  Set outputs to 0. *)
+	setOutput(ADR(pPENDULUM^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF PROFILER THEN
+		TrapezoidRun(ADR(pPENDULUM^.PROFILER), ADR(pPENDULUM^.SETPOINT), TIME_US);
+	END_IF
+	IF CLOSED_LOOP THEN
+		(* Leave the integrator on all the time when the profiler is not being used. *)
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pPENDULUM^.LOOP_PID), pOUTPUT := ADR(pPENDULUM^.OUTPUT), SP := pPENDULUM^.SETPOINT, FB:= pPENDULUM^.FEEDBACK, CFG := pPENDULUM^.CONFIG,
+			I_ENABLED := (pPENDULUM^.PROFILER.STATE = HOLD));
+	ELSE
+		pPENDULUM^.SETPOINT.POSITION_ENGR := pPENDULUM^.FEEDBACK.POSITION_ENGR;
+		pPENDULUM^.SETPOINT.POSITION_RAW := pPENDULUM^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pPENDULUM);
+END_IF

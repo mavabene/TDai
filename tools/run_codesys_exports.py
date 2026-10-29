@@ -30,7 +30,7 @@ def fingerprint(path):
     return digest.hexdigest()
 
 inputs = [
-    ('Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v1.project',
+    ('Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v2.project',
      'StandardPLC.dev/Plc Logic/Application/Global Variables/Version.gvl'),
     ('Production_dev/TD3-HMI/ojjo_TD3_cr1203_530v1.project',
      'Device.dev/Plc Logic/Application/GlobalVariables/VersionHMI.gvl')

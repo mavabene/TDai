@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+// set all mode states to Entry as default, so states are not left indeterminate between modes.  Entry state machine will only be called if that mode is active, but actuators may see states if mode not captured properly.
+FUNCTION resetMachineStates : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+// setTrackModeState(TRACK_STATE_ENTRY);
+// setRwpModeState(RWP_STATE_ENTRY);
+// setScrewModeState(SCREW_STATE_ENTRY);
+
+TRACK_STATE := TRACK_STATE_ENTRY;
+RWP_STATE := RWP_STATE_ENTRY;
+SCREW_STATE := SCREW_STATE_ENTRY;
+

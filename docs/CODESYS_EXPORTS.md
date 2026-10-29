@@ -75,3 +75,13 @@ on fresh temporary copies. Its commented Git commands are inactive. Its
 `isfolder=true` typo is caught by a broad exception and may affect empty-folder
 handling; it is not a verified full-fidelity export format. Improving that helper
 or adding a native CODESYS export can be separate tooling work if needed.
+
+## Latest SP21 migration extraction — October 29
+
+The runner now selects PLC 530v2 and HMI 530v1. Both were successfully extracted
+with NoUpdates from scratch copies; completion manifest:
+`.export-work/run-tpfiqu/result.json`. Source hashes remained stable.
+Current identities are in [CURRENT_CODE](CURRENT_CODE.md), and the comparison,
+coverage limits, and unresolved migration work are in the
+[SP21 checkpoint](verification/2026-10-29-sp21-checkpoint.md).
+The earlier tables above describe earlier extractions, not these current inputs.

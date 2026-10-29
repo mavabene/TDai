@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXTmotorSideLeg_perRemote : BOOL // no adjust needed for side legs
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXTmotorSideLeg_perRemote :=
+	isNXTmotorTruss_perScrewParams() 
+	AND 
+	(getScrewSide() <> eScrewSide.SCREW_CENTER);

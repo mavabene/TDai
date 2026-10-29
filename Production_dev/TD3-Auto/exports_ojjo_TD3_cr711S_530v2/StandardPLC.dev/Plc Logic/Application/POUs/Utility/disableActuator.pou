@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION disableActuator : BOOL
+VAR_INPUT
+	pAXIS: POINTER TO sAxis;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+setOutput(ADR(pAXIS^.OUTPUT), 0, FALSE);
+HaweOutput(pAXIS);

@@ -1,0 +1,143 @@
+
+(********************** Declaration ****************************)
+(*
+used when deprecating NVM var's to ensure values (eg HMI settings) are preserved during code update
+*)
+
+FUNCTION PreserveSettingsForDeprecatedVars : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	INDEX : USINT := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+(* Clean up anything that results from adding elements to a sPersistent_ structure without rolling the
+	full init value. *)
+IF pNVM4^.SCREW_PITCH_CM <= 0 THEN
+	pNVM4^.SCREW_PITCH_CM := 5.08;
+END_IF
+
+IF ABS(pNVM4^.MAX_ROLL_START) < 1 THEN
+	pNVM4^.MAX_ROLL_START := 8.0;
+END_IF
+IF ABS(pNVM4^.MAX_PITCH_FWD_START) < 1 THEN
+	pNVM4^.MAX_PITCH_FWD_START := 8.0;
+END_IF
+IF ABS(pNVM4^.MAX_PITCH_BACK_START) < 1 THEN
+	pNVM4^.MAX_PITCH_BACK_START := 6.0;
+END_IF
+IF ABS(pNVM4^.MAX_ROLL_CONTINUE) < 1 THEN
+	pNVM4^.MAX_ROLL_CONTINUE := 9.0;
+END_IF
+IF ABS(pNVM4^.MAX_PITCH_FWD_CONTINUE) < 1 THEN
+	pNVM4^.MAX_PITCH_FWD_CONTINUE := 9.0;
+END_IF
+IF ABS(pNVM4^.MAX_PITCH_BACK_CONTINUE) < 1 THEN
+	pNVM4^.MAX_PITCH_BACK_CONTINUE := 7.0;
+END_IF
+IF ABS(pNVM4^.MAX_BS_START) < 1 THEN
+	pNVM4^.MAX_BS_START := 27;
+END_IF
+// Added these without revising the version.  If these somehow had non-zero data in the chip, attempt to fix.
+IF pNVM4^.AIR_COMPRESSOR_PRESSURE_MAX > 250.0 THEN
+	pNVM4^.AIR_COMPRESSOR_PRESSURE_MAX := -999;
+END_IF
+IF pNVM4^.AIR_COMPRESSOR_TEMP_MAX > 300.0 THEN
+	pNVM4^.AIR_COMPRESSOR_TEMP_MAX := -999;
+END_IF
+IF pNVM4^.HAMMER_SPEED = 0 THEN
+	pNVM4^.HAMMER_SPEED := 100;
+END_IF
+IF pNVM4^.HMI_UINTS[MAST_LOADED_TRANSITION_PRESSURE] > 3300 OR pNVM4^.HMI_UINTS[MAST_LOADED_TRANSITION_PRESSURE] < 0 THEN
+	pNVM4^.HMI_UINTS[MAST_LOADED_TRANSITION_PRESSURE] := 2300;
+END_IF
+
+// We changed the meaning of this air flow value in V4.3.6, so we never want this to be zero.	
+IF pNVM1^.AIR_FLOW <= 0 THEN
+	// Default this to some modest amount of air.
+	pNVM1^.AIR_FLOW := 30;
+END_IF
+
+// // this was changed from a BOOL to a SINT in version 4.5.5 to enable automation of this function via pnezD description field
+// IF pNVM4^.HMI_SINTS[AUTO_PRELOAD_SELECTION] < 0 OR pNVM4^.HMI_SINTS[AUTO_PRELOAD_SELECTION] > 2 THEN
+// 	IF pNVM3^.AVAILABLE_1 THEN // Preload compliance on
+// 		pNVM4^.HMI_SINTS[AUTO_PRELOAD_SELECTION] := 2; // Preload compliance on
+// 	ELSE
+// 		pNVM4^.HMI_SINTS[AUTO_PRELOAD_SELECTION] := 0; // Preload compliance off
+// 	END_IF
+// END_IF
+
+// // TODO remove after all TD's updated to correct air compressor type (after install of this software version - 4.6.4)
+// IF pNVM3^.MACHINE_FAMILY >= 3 AND pNVM3^.MACHINE_VERSION >= 1 AND pNVM4^.MACHINE_COMPRESSOR = 0 THEN
+// 	pNVM4^.MACHINE_COMPRESSOR := 1;
+// END_IF
+
+
+IF  pNVM4^.NVM4_FORMAT_VERSION < 2 THEN
+	FOR INDEX := 1 TO 20 DO
+		// Bools
+		IF INDEX > 12 THEN // Bools
+			pNVM4^.HMI_BOOLS[INDEX] := 0;
+		END_IF
+		// Ints
+		IF INDEX <> 20 THEN
+			pNVM4^.HMI_INTS[INDEX] := -1;
+		END_IF
+		// Reals
+		IF INDEX = 11 THEN 
+			pNVM4^.HMI_REALS[INDEX] := 0.0;
+		ELSIF INDEX > 11 THEN 
+			pNVM4^.HMI_REALS[INDEX] := -1;
+		END_IF
+		// Sints
+		IF INDEX > 10 THEN 
+			pNVM4^.HMI_SINTS[INDEX] := -1;
+			
+		// **************************
+		(* AFTER FLEET GETS UPDATED TO 501 AND ABOVE, REMOVE THIS SECTION *)
+		ELSIF INDEX > 4 AND INDEX < 10 THEN // set encoders to default to ifm until we start installing Sikos
+			pNVM4^.HMI_SINTS[INDEX] := 0;
+		// **************************
+		
+		END_IF
+		// Uints
+		IF INDEX > 1 THEN 
+			pNVM4^.HMI_UINTS[INDEX] := 66;
+		END_IF
+		// Vectors
+		IF INDEX > 4 AND INDEX < 11 THEN 
+			pNVM4^.HMI_VECTORS[INDEX] := ZERO_VECTOR;
+		END_IF
+		// Strings
+		IF INDEX > 4 AND  INDEX < 11 THEN 
+			pNVM4^.HMI_STRINGS[INDEX] := 'available';
+		ELSIF INDEX <= 4 THEN
+			pNVM4^.HMI_STRINGS[INDEX] := 'config not loaded';
+		END_IF
+		
+	END_FOR
+	FOR INDEX := 21 TO 40 DO
+		pNVM4^.HMI_REALS[INDEX] := -1;
+	END_FOR
+	pNVM4^.HMI_BOOLS[ALLOW_HARD_SOIL_SOFT_SOIL_OPERATOR_ACCESS] := TRUE;
+	pNVM4^.NVM4_FORMAT_VERSION := 2;
+	// **************** add if nxt si then and if nxt int then <truss values> ****************
+	pNVM4^.HMI_INTS[SETTING_MIGRATION] := 11115; // next is 11115
+END_IF
+
+
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// IF VERSION = 'update'  THEN
+// 
+// 	FOR INDEX := 1 TO 20 DO
+// 		
+// 		pNVM4^.HMI_REALS[INDEX] := -1;
+// 		
+// 	END_FOR
+// 	pNVM4^.HMI_REALS[1] := -1;
+// 	pNVM4^.HMI_REALS[2] := 4;
+// 	pNVM4^.HMI_REALS[3] := 4;
+// 	pNVM4^.HMI_REALS[4] := 100;
+// 	pNVM4^.HMI_REALS[5] := 2;
+// END_IF

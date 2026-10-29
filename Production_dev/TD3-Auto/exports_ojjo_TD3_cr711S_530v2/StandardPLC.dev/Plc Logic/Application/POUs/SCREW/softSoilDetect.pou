@@ -1,0 +1,71 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK softSoilDetect
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR CONSTANT
+	// We need a buffer for upper rotary pressure readings that handles the longest amount of time that
+	//	for which the user configures the pressure monitoring for stall.
+	SS_DETECT_WINDOW: INT := TO_INT(CONTROL_FREQ_HZ * SS_DETECT_WINDOW_MAX);
+END_VAR
+
+VAR
+	SS_DETECT_P: ARRAY[1..SS_DETECT_WINDOW] OF REAL;
+	SS_DETECT_P_HEAD: INT;
+	SS_DETECT_P_FILLED: BOOL := FALSE;
+	// Number of readings on which the UR stall detection is based.
+	SS_DETECT_P_SAMPLES: INT;
+	// Min, max, avg pressure within the current window.
+	
+END_VAR
+
+
+(********************** Implementation ****************************)
+IF pNVM4^.SOFT_SOIL_ENABLED THEN
+	
+	// For testing, just run this routinely in screw drive to see if we have soft soil.
+	IF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_SCREW THEN
+		IF isScrewModeStateChange() THEN
+			// Reset everything, even on returning to drive from assist or whatever.
+			SS_DETECT_P_HEAD := 1;
+			SS_DETECT_P_FILLED := FALSE;
+			SS_DETECT_P_FRACTION := 0;
+			SS_DETECT_P_SAMPLES := TO_INT(pNVM4^.SS_DETECT_TIME * CONTROL_FREQ_HZ);
+		END_IF
+
+		withinFixedBand(
+			DATA := SS_DETECT_P,
+			HEAD := SS_DETECT_P_HEAD,
+			CURRENT := UPPER_ROTARY_PRESSURE,
+			SAMPLES := SS_DETECT_P_SAMPLES,
+			// User specifies band width, we know they want the min to be zero.
+			BAND_CENTER := pNVM4^.SS_DETECT_BAND / 2,
+			BAND_SIZE := pNVM4^.SS_DETECT_BAND / 2,
+			pFILLED := ADR(SS_DETECT_P_FILLED),
+			MN => SS_DETECT_P_MIN,
+			MX => SS_DETECT_P_MAX,
+			AVG => SS_DETECT_P_AVG,
+			FRACTION_IN_BAND => SS_DETECT_P_FRACTION
+			);
+			
+		IF (NOT SS_DETECT_P_FILLED) THEN
+			;
+		ELSIF (SS_DETECT_P_FILLED AND (SS_DETECT_P_FRACTION >= 0.85)) AND NOT DEBUG_HARD_SOIL_DETECTED THEN
+			// The SS variable is not latched, the hard soil variable is.  Once we detect hard soil on the upper rotary, we
+			//	will use the wings for the part of the drive where the bit retracts completely.
+			SS_DETECTED := 1;
+		ELSE
+			SS_DETECTED := 0;
+			HARD_SOIL_DETECTED := TRUE;
+			
+			IF DEBUG_HARD_SOIL_DETECTED THEN
+				DEBUG_HARD_SOIL_DETECTED := FALSE;
+			END_IF
+		END_IF
+	END_IF
+ELSE
+	SS_DETECTED := -1;
+END_IF
+

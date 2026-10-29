@@ -1,0 +1,456 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK LOWER_CROWD
+VAR_INPUT
+	INIT: BOOL;
+	pLOWER_CROWD: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+	ERROR: BOOL;
+END_VAR
+
+VAR
+	FOUND: BOOL;
+	sPOS: ARRAY [1..5] OF DINT;
+	sUS_TIME: ARRAY [1..5] OF DWORD;
+	sVEL: REAL;
+	I: INT;
+	VALID: BOOL;
+	TARGET_POS: REAL;
+	VEL: REAL;
+	ACCEL: REAL;
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	PROFILER: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	OUTPUT_MAX_A: REAL;
+	
+	LEG_BIN: INT;
+	INDEX: INT;
+	VPOS: REAL;
+	OPERATOR_MS_ADJUST: REAL;
+	LC_W_REF_AT_WP: REAL;
+	
+	(* For control and monitor of the screw insertion distance. *)
+	SCREW_END_POS: REAL := 60.0;
+	DRIVE_ACTUAL: REAL;
+	DELTA_EMBEDMENT: REAL;
+
+	(* Top level control loop variables. *)
+	LAST_CHECK_MS: DWORD;
+	SAMPLE_MS: DWORD := 20;
+	
+	MAGNITUDE: WORD;
+	POSITIVE: BOOL; 
+	
+
+	(* For ramping down the velocity at the end of screw drive. *)
+	LOWER_CROWD_RAMP_START: REAL := 0.0;
+	LOWER_CROWD_RAMP_DELTA: REAL := 0.0;
+	
+	RAMPDOWN_DISTANCE: REAL := 0.5; //3.0;
+	RAMPDOWN_START_VEL: REAL := 2.0;
+	RAMPUP_MINIMUM_VEL: REAL := 1.0;
+	
+	// This is the allowed velocity step, in cm/sec/sample.  So if this is 0.02, and the sample rate is 50 Hz, we can change
+	//	the velocity setpoint by 1.0 cm/sec/sec. 
+	DRIVE_VEL_SLEW: REAL := 0.1;
+	VEL_SETPOINT_DESIRED: REAL;
+
+	(* For generating a smoothed velocity for the lower rotary to follow.  The controls sample time is 20 ms, so the time over which the
+		velocity is smoothed is the array upper bound times 20 ms. *)
+	POS_SAMPLES: ARRAY [1..50] OF DINT;
+	TIME_SAMPLES: ARRAY [1..50] OF DWORD;
+	VELOCITY_CALC_N_01: VELOCITY_CALC_N;
+	
+	EMBED_REDUCTION_RTRIG: R_TRIG;
+	EMBED_REDUCTION_CALC: BOOL := FALSE;
+	//FWP_TRUSS_CAP_CLEARED: BOOL := FALSE;
+	
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the lower crowd axis based on the top-level state of the machine.  Lower crowd is positive going up, measured as the
+	distance between the foot of the mast and the bottom of the lower slide block. *)
+ERROR := FALSE;
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+// for LC we are usually using the profiler
+PROFILER := TRUE;
+
+// This is the one and only place that the A/B encoder values should be referenced!
+IF pNVM4^.LOWER_CROWD_ENCODER_TYPE = 1 THEN
+	// Siko WV5800
+	LOWER_CROWD_ENCODER_STATUS := LOWER_CROWD_ENCODER_B.CANopenState;
+	LOWER_CROWD_POS_RAW := LOWER_CROWD_POS_RAW_B;
+	LOWER_CROWD_VEL_RAW := LOWER_CROWD_VEL_RAW_B;
+ELSE
+	// Default to IFM RM7012
+	LOWER_CROWD_ENCODER_STATUS := LOWER_CROWD_ENCODER_A.CANopenState;
+	LOWER_CROWD_POS_RAW := LOWER_CROWD_POS_RAW_A;
+	LOWER_CROWD_VEL_RAW := LOWER_CROWD_VEL_RAW_A;
+END_IF
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pLOWER_CROWD^.SETPOINT.POSITION_ENGR);
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	IF LOWER_CROWD_ENCODER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		POSITION_RAW := TO_DINT(LOWER_CROWD_POS_RAW);
+	END_IF
+END_IF
+Sampled(ADR(pLOWER_CROWD^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pLOWER_CROWD);
+	RETURN;
+END_IF
+
+(* The lower rotary wants to see smoothed velocity output from the lower crowd, so generate that here. *)
+VELOCITY_CALC_N_01(POS := pLOWER_CROWD^.FEEDBACK.POSITION_RAW, US_TIME := TIME_US, POS_SAMPLES := POS_SAMPLES, TIME_SAMPLES := TIME_SAMPLES, VEL => LOWER_CROWD_VEL_SMOOTHED);
+LOWER_CROWD_VEL_SMOOTHED := VEL_RAW_TO_ENGR(pLOWER_CROWD^.FEEDBACK, LOWER_CROWD_VEL_SMOOTHED);
+
+IF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR SCREW_STATE = SCREW_STATE_DRIVE_ASSIST) THEN
+	// Running measure of driven screw motion.
+	DRIVE_ACTUAL := SCREW_START_POS - pLOWER_CROWD^.FEEDBACK.POSITION_ENGR;
+END_IF
+
+IF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND pNVM3^.EMBED_REDUCTION_ENABLED AND NOT (TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) AND
+	(SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR SCREW_STATE = SCREW_STATE_DRIVE_ASSIST OR SCREW_STATE = SCREW_STATE_RETURN_TO_DRIVE) THEN
+	// We want to adjust for the embedment reduction detection only once.
+	EMBED_REDUCTION_RTRIG(CLK := EMBED_REDUCTION_DETECTED, Q => EMBED_REDUCTION_CALC);
+ELSE
+	EMBED_REDUCTION_RTRIG(CLK := 0);
+	EMBED_REDUCTION_CALC := FALSE;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pLOWER_CROWD^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF (MACHINE_MODE = SCREW_MODE AND NOT AUTOMATIC) OR
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_LOCATE_WP AND WP_HEIGHT_LATCH = WP_LOW) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_ASSIST) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_ASSEMBLE) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP AND
+		pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+	THEN
+	(* Allow the operator to manually adjust the lower crowd. *)
+
+	IF MACHINE_MODE = RWP_MODE OR (MACHINE_MODE = SCREW_MODE AND (SCREW_STATE = SCREW_STATE_ASSEMBLE OR SCREW_STATE = SCREW_STATE_FWP)) THEN
+		(* Z adjust in RWP is this lever.  Also the case when in crimp mode. *)
+		VPOS := REMOTE.V3_FB;
+	ELSE
+		(* This is the normal lower crowd lever. *)
+		VPOS := REMOTE.V2_FB;
+	END_IF
+
+	IF nearHardStop(pLOWER_CROWD^, JS := VPOS, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pLOWER_CROWD^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pLOWER_CROWD^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+
+	IF MACHINE_MODE = RWP_MODE OR 
+		(MACHINE_MODE = SCREW_MODE AND 
+			(
+				(SCREW_STATE = SCREW_STATE_ASSEMBLE AND GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) OR
+				(SCREW_STATE = SCREW_STATE_FWP AND pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+			)
+		) 
+	THEN
+		OUTPUT_MAX := MIN(OUTPUT_MAX, pLOWER_CROWD^.CONFIG.MANUAL_OUTPUT_MAX / 3);
+		
+	ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_ASSIST THEN
+		// In drive assist, ratio the lower crowd speed paddle to the maximum speed allowed in screw drive.
+		OUTPUT_MAX := MIN(OUTPUT_MAX, driveOutput(pNVM1^.LC_DRIVE_VEL_HI));
+		
+		// Try to put the lever range with the high velocity setting in automatic the highest lever position.
+		IF OUTPUT_MAX > 1000 THEN
+			OUTPUT_MAX := 1000;
+		END_IF
+	END_IF
+
+	JOYSTICK_01(JS := VPOS, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pLOWER_CROWD^.OUTPUT.MAGNITUDE, POSITIVE => pLOWER_CROWD^.OUTPUT.POSITIVE);
+
+	// Don't let the operator break the hose chain from the remote!
+	IF pLOWER_CROWD^.FEEDBACK.POSITION_ENGR >= LOWER_CROWD_CHAIN_LIMIT AND pLOWER_CROWD^.OUTPUT.POSITIVE THEN
+		// Directional inhibit on the + jog.
+		pLOWER_CROWD^.OUTPUT.MAGNITUDE := 0;
+	ELSIF 	(SCREW_STATE = SCREW_STATE_ASSEMBLE) AND 
+			(AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR < LOWER_CROWD_AT_WP) AND 
+			NOT pLOWER_CROWD^.OUTPUT.POSITIVE THEN
+			OUTPUT_MAX := 0;
+	ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_DRIVE_ASSIST THEN
+		// In ASSIST, calculate what the output would have been in automatic, limited by the rotary pressure.
+		//	Don't let the operator switch to drive assist and game the controls by running faster than what
+		//	the machine is setup for!
+		OUTPUT_MAX_A := driveOutput(velSetpoint());
+		
+		IF pLOWER_CROWD^.OUTPUT.MAGNITUDE > OUTPUT_MAX_A THEN
+			pLOWER_CROWD^.OUTPUT.MAGNITUDE := TO_WORD(OUTPUT_MAX_A);
+		END_IF
+		// only allow Drive Assist up
+		IF NOT pLOWER_CROWD^.OUTPUT.POSITIVE THEN
+			pLOWER_CROWD^.OUTPUT.MAGNITUDE := 0;
+		END_IF
+	END_IF
+
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	((MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CLEAR_GROUND) OR
+	(MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_CROWDS_DOWN) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP) OR
+	(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_LC_CLEAR) 
+	)
+	THEN
+	
+	(* We want to get the lower crowd into position to enter track, RWP, or crimp mode. *)
+	IF isTrackModeStateChange() THEN
+		(* Just send lower crowd to put the target plate half way between high WP and low WP, making it
+			in the middle of the WP range. *)
+
+		IF TRACK_STATE = TRACK_STATE_CLEAR_GROUND THEN
+			IF pLOWER_CROWD^.FEEDBACK.POSITION_ENGR < LOWER_CROWD_TRACK_POS THEN
+				TARGET_POS := LOWER_CROWD_TRACK_POS;
+			ELSE
+				TARGET_POS := pLOWER_CROWD^.FEEDBACK.POSITION_ENGR + LOWER_CROWD_TRACK_CLEARANCE;
+			END_IF
+			// ensure clearance of truss cap if Z slide can not move up much
+// 			IF AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR < Z_SLIDE_TRACK_CLEARANCE THEN
+// 				TARGET_POS := MAX(TARGET_POS, pLOWER_CROWD^.FEEDBACK.POSITION_ENGR + 
+// 					Z_SLIDE_TRACK_CLEARANCE - (AXES[AXIS_Z_SLIDE].CONFIG.COMMAND_LIMIT_MAX - AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR));
+// 			END_IF
+			TARGET_POS := 	MAX(pLOWER_CROWD^.FEEDBACK.POSITION_ENGR,
+						MIN(DRIFTER_TO_TOP - DRIFTER_TO_TOP_ESTOP + pLOWER_CROWD^.FEEDBACK.POSITION_ENGR - LOWER_CROWD_LONG_SCREW_DRIFTER_MARGIN, 			
+						MIN(TARGET_POS, AXES[AXIS_LOWER_CROWD].CONFIG.COMMAND_LIMIT_MAX)));
+		ELSE
+			TARGET_POS := LOWER_CROWD_TRACK_POS;
+		END_IF
+	
+		TrapezoidStart(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.FEEDBACK,
+			TARGET_POS, LOWER_CROWD_VEL, LOWER_CROWD_ACCEL);
+	ELSIF isScrewModeStateChange() THEN
+		IF SCREW_STATE = SCREW_STATE_CLEAR_TRUSS_CAP THEN
+			(* Crimp mode comes here, put the lower crowd back a little above where the workpoint was detected.
+				This is because the assemble might not be perfect, and we don't want hit or pinch anything. *)
+			IF pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE THEN
+				TARGET_POS := LOWER_CROWD_AT_WP + LOWER_CROWD_MOTOR_CRIMP_CLEARANCE;
+			ELSE
+				TARGET_POS := LOWER_CROWD_AT_WP + LOWER_CROWD_BEARING_CRIMP_CLEARANCE;
+			END_IF
+		ELSIF SCREW_STATE = SCREW_STATE_LC_CLEAR THEN
+			TARGET_POS := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR + LOWER_CROWD_TOWER_CLEARANCE;
+		ELSE
+			(* Put the crowd up above the top of the truss cap far enough to give the operator room to assemble it. *)
+			TARGET_POS := LOWER_CROWD_AT_WP + LOWER_CROWD_ASSEMBLE_CLEARANCE;
+		END_IF
+			TrapezoidStart(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.FEEDBACK,
+			TARGET_POS, LOWER_CROWD_VEL, LOWER_CROWD_ACCEL);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP THEN
+	// don't let Truss Cap go down in case leg is too long, so follow only go down after z slide goes up
+	(* This has a wrinkle in the desired velocity used. We ratio the velocity to the distance away. *)
+// 	IF HMI_BOOLS_VALUES[FWP_Z_AUTOTARGET] THEN
+// 		TARGET_POS := LOWER_CROWD_AT_WP;
+// 	ELSE
+		TARGET_POS := MAX(pNVM1^.LOWER_CROWD_COR_POS, LOWER_CROWD_POS_ENTERING_RETURN_TO_WP - (AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR - Z_SLIDE_POS_ENTERING_RETURN_TO_WP));
+	//END_IF
+	setVelAccel(TARGET_POS, pLOWER_CROWD^.FEEDBACK.POSITION_ENGR,
+		4, 0.1, LOWER_CROWD_VEL/6, LOWER_CROWD_ACCEL/6, ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pLOWER_CROWD^.SETPOINT), pLOWER_CROWD^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+	CLOSED_LOOP := TRUE;
+	PROFILER := FALSE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL) THEN
+	(* When we enter the state we know the operator has selected the WP height, so we move the lower
+		crowd immediately to the appropriate spot. *)
+	IF isRwpModeStateChange() THEN
+		IF WP_HEIGHT_LATCH = WP_LOW THEN
+			TARGET_POS := LOWER_CROWD_LOW_TARGET_POS;
+		ELSE
+			TARGET_POS := pNVM1^.LOWER_CROWD_COR_POS;
+		END_IF
+		TrapezoidStart(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.FEEDBACK,
+			TARGET_POS, LOWER_CROWD_VEL, LOWER_CROWD_ACCEL);
+	END_IF
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = IDLE_MODE OR MACHINE_MODE = SETUP_MODE OR MACHINE_MODE = RWP_MODE OR MACHINE_MODE = FWP_MODE THEN
+	(* Don't run lower crowd in this case.  Set outputs to 0. *)
+	setOutput(ADR(pLOWER_CROWD^.OUTPUT), 0, FALSE);
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_PREPARE_TO_LOAD OR
+	SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE OR
+	SCREW_STATE = SCREW_STATE_MAST_TO_TARGET OR
+	SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE)
+	THEN
+	IF SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE AND isScrewModeStateChange() THEN
+		DRIVE_DEPTH_ERROR_DELAYED := SCREW_END_POS - pLOWER_CROWD^.FEEDBACK.POSITION_ENGR;
+	END_IF
+	(* These are just "go to position" operations for the LC, with targets based on state.  This operation respects pause/continue. *)
+	VEL := LOWER_CROWD_VEL;
+	ACCEL := LOWER_CROWD_ACCEL;
+	IF SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE THEN
+		
+		TARGET_POS := SCREW_PARAMETERS_CURRENT.SCREW_LENGTH - CHUCK_TO_LC_REFERENCE - SCREW_TIP_TO_MAST_FOOT;
+		
+		ACCEL := ACCEL / 4;
+		VEL := VEL / 2;
+		// Latch this for the drifter air logic.  This is the position the LC will be in when the machine goes into screw
+		//	drive mode.
+		SCREW_START_POS := TARGET_POS;
+	ELSIF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+		(* The loading position has the screw tip up at the top of the centralizer.  To reduce cycle time, when we move the rotator to the final
+			screw drive angle, we want to also move the lower crowd down so that when the mast slide gets extended the foot of the mast and the screw
+			tip will hit the ground at the same time. *)
+		
+		TARGET_POS := SCREW_PARAMETERS_CURRENT.SCREW_LENGTH - CHUCK_TO_LC_REFERENCE - SCREW_TIP_TO_MAST_FOOT;
+		
+		(* Start and run this slower to allow the centralizer to close. *)
+		ACCEL := ACCEL / 8;
+		VEL := VEL / 4;
+	ELSIF (SCREW_STATE = SCREW_STATE_RETRACT_AFTER_DRIVE) AND (SCREW_SIDE_LATCH = SCREW_LEFT) THEN
+		(* After driving the left screw, go directly to the crimp position. *)
+		TARGET_POS := LOWER_CROWD_AT_WP + LOWER_CROWD_ASSEMBLE_CLEARANCE;
+	ELSE
+		(* Prepare to load screw comes here. We're always moving up here, so go fast.  We know that the mast foot will always be the same
+			position off the ground, so we can position the screw tip relative to that as:
+			
+			- The exposed screw below the chuck is the length of the screw plus the clearance value from the ground.
+			- We know the drill bit protrusion from chuck, so we can figure out where the chuck bottom is.
+			- We know the distance between the chuck bottom and the chuck reference surface.
+			- We know the distance between the chuck and the lower crowd reference surfaces.
+		*)
+			
+		TARGET_POS := SCREW_PARAMETERS_CURRENT.SCREW_LENGTH - CHUCK_TO_LC_REFERENCE - SCREW_INSERT_TO_CENTRALIZER;
+	END_IF
+
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		(* Start lower crowd to target. *)
+		TrapezoidStart(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.FEEDBACK,
+			TARGET_POS, VEL, ACCEL);
+		FWP_TRUSS_CAP_CLEARED := FALSE; // reset for use in entering FWP later
+	ELSIF isPauseRequested() THEN
+		(* Stop what we are doing. *)
+		TrapezoidStop(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.CONFIG ,pLOWER_CROWD^.FEEDBACK);
+	END_IF
+	(* Prepare to run the profiler and the loop. *)
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND MACHINE_MODE = SCREW_MODE AND
+	((SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) OR
+	(SCREW_STATE = SCREW_STATE_CONFIRM_MAST_CLEAR)) THEN
+	(* This requires that the state immediately before (RETRACT) has issued a motion command.
+		We just keep running that here. *)
+	CLOSED_LOOP := TRUE;
+ELSIF MACHINE_MODE = SCREW_MODE AND
+	(
+		SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END OR
+		SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE OR
+		SCREW_STATE = SCREW_STATE_CLEAR_SPOILS
+	) THEN
+	// We want the lower crowd to push down modestly to keep down pressure on the screw and hence keep the
+	//	screw in the chuck.
+	setOutput(ADR(pLOWER_CROWD^.OUTPUT), 10 * TO_WORD(pNVM4^.SS_LC_PRELOAD), FALSE);
+ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_LC_REWIND THEN
+	// We just want the lower crowd to back up to allow the drill to protrude.  LR must follow.
+	IF isScrewModeStateChange() THEN
+		// Drill bit tip is aligned with bottom of screw.  We want to back up the screw so that it puts the wing bit in a
+		//	proper drilling position.
+		IF pNVM3^.DRILL_BIT_WING_POSITION > 0.0 THEN
+			// The bit has wings, just get them out of the screw.  Wing position is measured from the chuck end, not the bit
+			//	tip, so the distance to move up is the bit length minus the wing position (with a tolerance stack allowance added).
+			TARGET_POS := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR +
+				(pNVM1^.DRILL_BIT_LENGTH - pNVM3^.DRILL_BIT_WING_POSITION) + WING_TO_SCREW_MINIMUM;
+		ELSE
+			// No wings on bit, just back up enough to get the bit out of the screw to the normal drilling position.
+			//TARGET_POS := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR + pNVM1^.DRILL_BIT_DRIVE_PROTRUSION;
+			// Don't rewind lower crowd with a wingless bit.
+			TARGET_POS := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;			
+		END_IF
+		// This vel/accel must be the same for UC and LC!!
+		TrapezoidStart(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US, pLOWER_CROWD^.FEEDBACK,
+			TARGET_POS, pNVM1^.LC_DRIVE_VEL_HI, pNVM1^.LC_DRIVE_VEL_HI);
+	END_IF
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND
+	(SCREW_STATE = SCREW_STATE_DRIVE_SCREW)
+	THEN
+ 
+	IF isScrewModeStateChange() AND NOT RETURNING_TO_DRIVE THEN
+		onScrewDriveStart();
+	END_IF
+
+	IF isScrewModeStateChange() THEN
+		(* Return from drive assist comes here and fresh entry to the state comes here. *)
+
+		(* We want to ramp the lower crowd up in speed anytime we enter this state. *)
+		DRIVE_VEL_SETPOINT := 0;
+		LOWER_CROWD_RAMP_START := pLOWER_CROWD^.FEEDBACK.POSITION_ENGR;
+	
+		(* This is a feedforward term, we know that at the low end 1% of output corresponds to about 1 cm/sec velocity. *)
+		
+		(* We want to start running immediately. *)
+		LAST_CHECK_MS := 0;
+		DRIVE_ISUM := 0.0;
+	
+	END_IF
+
+	IF EMBED_REDUCTION_CALC THEN
+		EMBED_REDUCTION_CALC := FALSE;
+		reduceEmbedment();
+	END_IF
+	(* Three things exit us from screw drive:
+		- Controls are handling drive to depth, and we reach the end position.
+		- Operator is handling the drive to depth, and they detect end of travel visually.
+		- We are setup for operator to handle drive to depth, but we are doing an end truss, so the controls takes over.
+	*)
+	IF (pLOWER_CROWD^.FEEDBACK.POSITION_ENGR > SCREW_END_POS) THEN
+
+		(* Sample the maxes outside of the control loop, so we get higher frequency. *)
+		updateMaxPressures();
+		
+		(* ------------- The entire lower crowd control logic for screwing begins here. ------------------ *)
+		IF MSTIME - LAST_CHECK_MS > SAMPLE_MS THEN
+			screwDriveControl();
+		ELSIF isPauseRequested() THEN
+			(* Stop what we are doing. *)
+			setOutput(ADR(pLOWER_CROWD^.OUTPUT), 0, FALSE);
+		END_IF
+		(* ------------- The entire lower crowd control logic for screwing ends here. ------------------ *)
+	ELSE
+		screwDriveExit();
+	END_IF
+	
+	CLOSED_LOOP := FALSE;
+ELSE
+	setOutput(ADR(pLOWER_CROWD^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		IF PROFILER THEN
+			TrapezoidRun(ADR(pLOWER_CROWD^.PROFILER), ADR(pLOWER_CROWD^.SETPOINT), TIME_US);
+		END_IF
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pLOWER_CROWD^.LOOP_PID), pOUTPUT := ADR(pLOWER_CROWD^.OUTPUT),
+			SP := pLOWER_CROWD^.SETPOINT, FB:= pLOWER_CROWD^.FEEDBACK, CFG := pLOWER_CROWD^.CONFIG,
+			I_ENABLED := (pLOWER_CROWD^.PROFILER.STATE = HOLD));
+	ELSE
+		pLOWER_CROWD^.SETPOINT.POSITION_ENGR := pLOWER_CROWD^.FEEDBACK.POSITION_ENGR;
+		pLOWER_CROWD^.SETPOINT.POSITION_RAW := pLOWER_CROWD^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pLOWER_CROWD);
+END_IF

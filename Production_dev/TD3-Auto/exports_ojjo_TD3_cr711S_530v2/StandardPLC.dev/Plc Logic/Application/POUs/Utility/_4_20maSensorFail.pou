@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION _4_20maSensorFail : BOOL
+VAR_INPUT
+	RAW: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF RAW > 20200 OR RAW < 3800 THEN
+	_4_20maSensorFail := TRUE;
+ELSE
+	_4_20maSensorFail := FALSE;
+END_IF

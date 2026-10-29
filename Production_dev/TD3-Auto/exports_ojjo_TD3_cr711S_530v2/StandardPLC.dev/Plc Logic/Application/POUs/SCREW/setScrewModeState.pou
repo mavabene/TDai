@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION setScrewModeState : BOOL
+VAR_INPUT
+	NEW_STATE: eScrewStates;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+setState(TO_WORD(NEW_STATE), ADR(SCREW_STATE), ADR(SCREW_MODE_STATE_CHANGE));
+DEBUG_SUBSTATE := SCREW_STATE_NAMES[NEW_STATE];
+setWaitingStrings('Nothing', 'Nothing');
+
+(* Monitors across states not supported! *)
+confirmMonitorStop();
+f2MonitorStop();

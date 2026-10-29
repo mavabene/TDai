@@ -1,0 +1,32 @@
+
+(********************** Declaration ****************************)
+
+
+FUNCTION getTrussFrameZoffsetToTarget : LREAL 
+VAR_INPUT
+	Z_OFFSET_TO_GPS_REFERENCE: LREAL; // input in truss frame (ie must already be converted by pitch)
+	// for ET2 this is pin to 3L intersection with truss plane = -20.32 cm, for NXT1 it's side leg to 3l wp = 101.6 cm
+	TRUSS_FRAME_OFFSET_FROM_REFERENCE_TO_TARGET: LREAL; //
+	PLANNED_Z_SLIDE_MOVE_MM : REAL; // how far up we plan to move z slide.  zero if we want current result
+END_VAR
+VAR
+	TRUSS_FRAME_Z_OFFSET_TO_REFERENCE: LREAL;
+// 	TRUSS_FRAME_Z_OFFSET_TO_TARGET: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+// avoid /0 error. should not have this input anyway.
+// IF ABS(MAST_PITCH.POSITION_ENGR) = 90 THEN
+// 	RETURN;
+// END_IF
+
+// // convert Z_OFFSET_GPS_TO_REFERENCE to truss frame
+// IF ABS(MAST_PITCH.POSITION_ENGR) > 40 THEN
+// 	RETURN;
+// ELSE
+// 	TRUSS_FRAME_Z_OFFSET_TO_REFERENCE := MAX(0, ((Z_OFFSET_TO_GPS_REFERENCE) / COS_DEG(MAST_PITCH.POSITION_ENGR)) - PLANNED_Z_SLIDE_MOVE_MM);
+// END_IF
+TRUSS_FRAME_Z_OFFSET_TO_REFERENCE := Z_OFFSET_TO_GPS_REFERENCE - PLANNED_Z_SLIDE_MOVE_MM;
+
+// get offset in truss frame to desired target (eg for ET2 truss it's the side leg intersection above the truss)
+getTrussFrameZoffsetToTarget := TRUSS_FRAME_OFFSET_FROM_REFERENCE_TO_TARGET + TRUSS_FRAME_Z_OFFSET_TO_REFERENCE;

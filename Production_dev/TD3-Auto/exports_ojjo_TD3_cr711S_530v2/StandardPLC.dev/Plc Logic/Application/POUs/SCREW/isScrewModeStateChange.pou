@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION isScrewModeStateChange : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+isScrewModeStateChange := SCREW_MODE_STATE_CHANGE;

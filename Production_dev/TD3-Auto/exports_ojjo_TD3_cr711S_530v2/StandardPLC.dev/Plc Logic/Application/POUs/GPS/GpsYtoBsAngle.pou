@@ -1,0 +1,42 @@
+
+(********************** Declaration ****************************)
+// angle to move BS by to align end of BS (yaw pivot) with y of target
+// input offsets and yaw angle as given by gps and td respectively
+
+
+FUNCTION GpsYtoBsAngle : REAL // output in cm
+
+VAR_INPUT // most of these will be available in TD code
+	YAW_ANGLE: REAL; // angle of yaw arm relative to BS per TD
+	HEADING_OFFSET_GPS: REAL; // YAW_BEGIN, or heading offset of wp in world; + is moving mast to the right (CCW) of operator
+	X_TD_WP: REAL := 0; // x offset from WP as given by gps, + is forward of operator 
+	Y_TD_WP: REAL := 0; // + is to the right of operator (facing forward at rear [mast end] of TD)
+	
+END_VAR
+VAR
+	BS_ANGLE_WORLD: REAL; //  Angle in world terms (not offset - ccw is positive)
+	BS_LENGTH: REAL := 135; // length of boom swing arm
+	BS_PIVOT_TO_YAW_PIVOT_Y_WORLD: REAL; // Y delta of BS arm in world frame from bs pivot to yaw pivot
+	BS_PIVOT_TO_TARGET_Y_DELTA: REAL; // distance in Y from BS origin (bs pivot) to target point
+	BS_PIVOT_TO_TARGET_Y_HEADING: REAL; // BS angle from pointing North
+	Y_DELTA_WORLD: REAL; // y delta in world frame (vs TD frame as given by gps)
+	X_DELTA_WORLD: REAL; // not used here except to call function to get Y
+END_VAR
+
+(********************** Implementation ****************************)
+// calculate how much we need to move bs by to align end (yaw pivot) with y of target 
+
+GpsTdToWorld( X_TD_WP := X_TD_WP, Y_TD_WP := Y_TD_WP, YAW_BEGIN := HEADING_OFFSET_GPS, X_WORLD_WP => X_DELTA_WORLD, Y_WORLD_WP => Y_DELTA_WORLD);
+
+BS_ANGLE_WORLD := YAW_ANGLE - HEADING_OFFSET_GPS;
+BS_PIVOT_TO_YAW_PIVOT_Y_WORLD := SIN_DEG(BS_ANGLE_WORLD) * BS_LENGTH;
+BS_PIVOT_TO_TARGET_Y_DELTA := BS_PIVOT_TO_YAW_PIVOT_Y_WORLD + Y_DELTA_WORLD/10; // convert Y mm to cm
+IF ABS(BS_PIVOT_TO_TARGET_Y_DELTA) > BS_LENGTH THEN // should this be something like sin(maxBSangle)*BS_l?
+	BS_PIVOT_TO_TARGET_Y_HEADING := BS_ANGLE_WORLD;
+ELSE
+	BS_PIVOT_TO_TARGET_Y_HEADING := ASIN_DEG( BS_PIVOT_TO_TARGET_Y_DELTA / BS_LENGTH );
+END_IF
+
+GpsYtoBsAngle :=  BS_PIVOT_TO_TARGET_Y_HEADING - BS_ANGLE_WORLD ;
+
+

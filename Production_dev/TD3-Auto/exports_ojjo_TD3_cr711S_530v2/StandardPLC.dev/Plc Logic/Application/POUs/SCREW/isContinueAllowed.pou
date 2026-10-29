@@ -1,0 +1,22 @@
+
+(********************** Declaration ****************************)
+FUNCTION isContinueAllowed : bool
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// Default is disallowed.
+isContinueAllowed := FALSE;
+
+// We limit the conditions under which starting a screw drive is allowed.
+IF ABS(BASE_ROLL_FILTERED_SLOW) > pNVM4^.MAX_ROLL_CONTINUE THEN
+	gotoErrorState('Cannot continue, frame ROLL too large');
+ELSIF BASE_PITCH_FILTERED_SLOW < -pNVM4^.MAX_PITCH_FWD_CONTINUE THEN // base pitch (-) when engine is toward ground and wp up
+	gotoErrorState('Cannot continue, frame PITCH FWD too large');
+ELSIF BASE_PITCH_FILTERED_SLOW > pNVM4^.MAX_PITCH_BACK_CONTINUE THEN
+	gotoErrorState('Cannot continue, frame PITCH BACK too large');
+ELSE
+	isContinueAllowed := TRUE;
+END_IF

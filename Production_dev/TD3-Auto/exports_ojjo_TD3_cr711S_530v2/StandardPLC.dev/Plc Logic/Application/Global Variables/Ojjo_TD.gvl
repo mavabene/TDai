@@ -1,0 +1,214 @@
+
+(********************** Declaration ****************************)
+
+VAR_GLOBAL CONSTANT
+// 	MACHINE_FAMILY: UDINT := 3; // TD3
+	// 20 millisecond cycle task executes all machine control functions.
+	CONTROL_FREQ_HZ: REAL := 50.0;
+	// This is hardcoded in the HMI code as constants can't be transmitted.
+	UR_STALL_WINDOW_MAX: REAL := 2.0;
+	SS_DETECT_WINDOW_MAX: REAL := 5.0;
+	FLOW_TABLE_SIZE: USINT := 5;
+
+	(* ------------------------ No handling in language unfortunately ----------------------------------------*)
+	SMALLEST_REAL: REAL := -3.402823E+38;
+	LARGEST_REAL: REAL := 3.402823E+38;
+	
+	NUM_GPS_AXES: USINT := 4; // if changed here, change in HMI TD_HMI also
+	NUM_GPS_FILTER_SAMPLES: USINT := 20;
+	NUM_GPS_OFFSET_FILTER_SAMPLES: USINT := 15;
+	
+	// if changed here also change in HMI TD_HMI
+	NUM_SCREW_PARAMETERS: INT := 8; // number of screw parameters coded by pnezD field
+END_VAR
+
+VAR_GLOBAL
+	(* ------------------------ TIME TRACKING ----------------------------------------*)
+	TIME_SECONDS: DWORD;
+	MSTIME: DWORD;
+	CYCLE_TIME_START: REAL := 0.0;
+	CYCLE_START: DWORD := 0;
+
+	(* ----------------------- DEBUGGING CONTROL ------------------------------------ *)
+	SIMULATION: BOOL := FALSE;
+	SIMULATED_TIME_US: DWORD := 12345678;
+	DEBUG_LC_STALL_DETECTED: BOOL := FALSE;
+	DEBUG_UR_STALL_DETECTED: BOOL := FALSE;
+	DEBUG_HARD_SOIL_DETECTED: BOOL := FALSE;
+
+	(* ---------------------- GLOBAL HARDWARE AND CONTROL ------------------------------ *)
+	pNVM1: POINTER TO sPersistent_1 := ADR(%MB0);
+	pNVM2: POINTER TO sPersistent_2;
+	pNVM3: POINTER TO sPersistent_3;
+	pNVM4: POINTER TO sPersistent_4;
+	REMAINING_BYTES_OF_NVM: UDINT := 2358; // starting amount (2358 kB)
+	
+	AUTOMATIC_ALLOWED: BOOL := TRUE;
+	FEEDBACK_FAILED: BOOL := FALSE;
+	ANY_VALVE_FAILED: BOOL := FALSE;
+	BV: REAL;
+	
+	BASE_ROLL_FILTERED_SLOW: REAL;
+	BASE_PITCH_FILTERED_SLOW: REAL;
+	BASE_ROLL_FILTERED_FAST: REAL;
+	BASE_PITCH_FILTERED_FAST: REAL;
+	BASE_PITCH_FILTERED_MEDIUM: REAL;
+	
+	HORN_REQUEST_TIMES: INT;
+	HORN_REQUEST_OFF: TIME;
+	HORN_REQUEST_ON: TIME;
+	HORN_REQUEST_LAST_STATE: BOOL;
+	
+	MACHINE_STATE_STRING: STRING;
+	METHOD_STRING: STRING;
+	ERROR_STRING_SHORT: STRING;
+	WARNING_STRING_SHORT: STRING;
+	
+	TRUNION_POS_RAW: UDINT := 0; // Yaw	
+	BOOM_SWING_POS_RAW: UDINT := 0;
+	BOOM_LIFT_POS_RAW: UDINT := 0;
+	JOINT_LIFT_POS_RAW: UDINT := 0;
+	UPPER_CROWD_POS_RAW: UDINT := 0;
+	
+	DRIVE_RAMPUP_DISTANCE: REAL := 5.0;
+	
+	// Address to be used where necessary.
+	J1939_ADDRESS: USINT := 47;
+	
+	(* ---------------------- TRACK MODE STATES and DATA HERE ---------------------- *)
+	TRACK_STATE: eTrackStates;
+	TRACK_MODE_STATE_CHANGE: BOOL := FALSE;
+
+	TRACK_LEFT_TIME: INT := 0;
+	TRACK_RIGHT_TIME: INT := 0;
+	TRACK_BACK_TIME: INT := 4000;
+
+	TRACK_BACK_REQUIRED: BOOL := FALSE;
+
+	(* ---------------------- SCREW MODE STATES and DATA HERE ---------------------- *)
+	SCREW_STATE: eScrewStates;
+	SCREW_MODE_STATE_CHANGE: BOOL := FALSE;
+	SCREW_MODE_PAUSED: BOOL := FALSE;
+	SCREW_MODE_PAUSED_CHANGE: BOOL := FALSE;
+	SCREW_DRIVE_DONE: BOOL := FALSE;
+	SCREW_EMBEDDED_VISUAL: BOOL := FALSE;
+	SCREW_START_POS: REAL;
+
+	COMPRESSOR_REQUEST: BOOL := FALSE;
+
+	UPPER_CROWD_REVEALING: BOOL := FALSE;
+	UPPER_CROWD_DONE_REVEALING: BOOL := FALSE;
+	BRIEF_HAMMER_START: REAL;
+
+	(* Latched values for screw driving operation. *)
+	WP_HEIGHT_LATCH: eWorkpointHeight;
+	SCREW_LENGTH_LATCH: eScrewLength;
+	SCREW_LENGTH_CM: REAL := 150.0;
+
+	(* Latched position values when entering screw mode. *)
+	MAST_SLIDE_AT_WP: REAL;
+	LOWER_CROWD_AT_WP: REAL;
+
+	(* Screw drive calculation variables. *)
+	SCREW_REF_FROM_WP_EMBED: REAL := 0.0;
+
+	CROWD_EMBED_ENDPOINT: REAL := 0.0;
+	CROWD_ADVANCE_MIN: REAL := 0.0;
+	SCREW_EMBEDMENT: REAL := 0.0;
+
+	LEG_LENGTH_EMBED: REAL := 0.0;
+	LEG_LENGTH_ACTUAL: REAL := 0.0;
+	LEG_OVERDRIVE: REAL := 0.0;
+
+	ROTATOR_CENTER_TO_GROUND: REAL;
+	DRILL_TIP_BELOW_ROTATOR: REAL;
+	
+	(* Screw driving data. *)
+	LOWER_CROWD_VEL_SMOOTHED: REAL := 0.0;		(* Lower rotary uses a smoothed version of the lower crowd velocity to remove some noise when following. *)
+	LOWER_CROWD_POS_RAW: UDINT := 0;
+	LOWER_CROWD_VEL_RAW: INT := 0;
+	
+	(* ------ All the fucked up stuff for workpoints that can't be reached by the rotator is here. ------ *)
+	BOOM_SWING_AT_WP: REAL;
+	YAW_AT_WP: REAL;
+	Z_SLIDE_AT_WP: REAL;
+	X_SLIDE_AT_WP: REAL;
+	
+	(* NXT 3 legged motor truss values here. *)
+	BOOM_SWING_DELTA: REAL := 0.0;
+	// target positions:
+	NXT_3LM_X_SLIDE_LEFT: REAL;
+	NXT_3LM_X_SLIDE_RIGHT: REAL;
+	NXT_3LM_Z_SLIDE_LEFT: REAL;
+	NXT_3LM_Z_SLIDE_RIGHT: REAL;
+	NXT_3LM_BOOM_SWING_LEFT: REAL;
+	NXT_3LM_BOOM_SWING_RIGHT: REAL;
+	NXT_3LM_YAW_LEFT: REAL;
+	NXT_3LM_YAW_RIGHT: REAL;
+	
+	(* These are Y and Z relative to the BR pivot. *)
+	WP_Y: REAL;
+	WP_Z: REAL;
+	ROTATOR_WP_Y: REAL;
+	ROTATOR_WP_Z: REAL;
+	ROTATOR_Y: REAL;
+	ROTATOR_OFFSET_Y: REAL;
+	BOOM_SWING_SCREW: REAL;
+	Z_SLIDE_SCREW: REAL;
+	LOW_WP_ADJUST: REAL;
+
+	(* ----------------------- SCREW MODE: Machine pitch ------------------------------ *)
+	BASE_PITCH_START: REAL := 0.0;
+	BASE_PITCH_END: REAL := 0.0;
+	KNUCKLE_PITCH_START: REAL := 0.0;
+	KNUCKLE_PITCH_END: REAL := 0.0;
+	MANDREL_PITCH_ERROR: REAL := 0.0;
+
+	(* ----------------------- SCREW MODE: Compliance preload ------------------------------ *)
+	PRELOAD_COMPLETE: BOOL := FALSE;
+	PRELOAD_ANGLE_START: REAL := 0.0;
+	PRELOAD_DELTA_CURRENT: REAL := 0.0;
+	PRELOAD_MOTION_MAX: REAL := 30.0; // Maximum mast slide motion to preload.
+	PRELOAD_MOTION_LIMIT: REAL := 10.0; // Distance from mast slide full extension.
+	
+	(* ----------------------- SCREW MODE: Leave/return to drive ------------------------ *)
+	RETURNING_TO_DRIVE: BOOL := FALSE;
+	UC_RETURN_POS: REAL;
+	
+	(* ----------------------- SCREW MODE: UR stall detect ------------------------------ *)
+	// This flag is set false at the beginning of every screw drive, then true when we have stalled
+	//	and tne controls has attempted the stall recovery.
+	UR_STALL_RECOVERY: BOOL := FALSE;
+	// The furthest the tip of the drill has been in the ground during a stalled screw drive.  Used so that
+	//	after the drill has been pulled up to try to protect it when we re-engage with the ground.
+	UR_STALL_FURTHEST_EXTENT: REAL;
+	
+	(* ---------------------- SCREW MODE: LC stall detect ---------------------- *)
+	// Time when the LC velocity dropped low enough that we suspect a stall.
+	LC_STALL_START: REAL := 0;
+	LC_STALL_SUSPECTED: BOOL := FALSE;
+	LC_RAMPUP: BOOL := FALSE;
+	
+	(* ---------------------- RWP MODE STATES and DATA HERE ---------------------- *)
+	RWP_STATE: eRWPStates;
+	RWP_MODE_STATE_CHANGE: BOOL := FALSE;
+	RWP_MODE_PAUSED: BOOL := FALSE;
+	RWP_MODE_PAUSED_CHANGE: BOOL := FALSE;
+
+	YAW_SQUARE_TO_LASER: REAL := 0.0;
+
+	(* ---------------------- MISCELLANEOUS STATE DATA ---------------------- *)
+	TARGET_PLATE_UP: BOOL := FALSE;
+	PROXIMITY_SENSOR_PRESENCE_CONFIRMED: BOOL := FALSE;
+	LAST_PROXIMITY_SENSOR_CYCLE_WARNING: BOOL;  // used to check if a condition occurred across two cycles (expect condition to happen momentarily, but not sustained)
+	LAST_PROXIMITY_SENSOR_INSTALL_STATUS: BOOL;
+	
+	(* ----------------------- TOP LEVEL FBs -------------------------------------------- *)
+	processRemote_01: processRemote;
+	machineState_01: machineState;
+	runActuators_01: runActuators;
+	xyzTrueMotion_01: xyzTrueMotion;
+	
+	
+END_VAR
+

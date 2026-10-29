@@ -1,0 +1,49 @@
+
+(********************** Declaration ****************************)
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+	(* ----------------------- REMOTE SIMULATION ----------------------------------------- *)
+
+	SIM_LJ_FB: INT := 0;
+	SIM_LJ_LR: INT := 0;
+	SIM_RJ_FB: INT := 0;
+	SIM_RJ_LR: INT := 0;
+	SIM_V1: INT := 0;
+	SIM_V2: INT := 0;
+	SIM_V3: INT := 0;
+	SIM_V4: INT := 0;
+	SIM_LMB1: BOOL := FALSE; (* Left momentary button *)
+	SIM_RMB1: BOOL := FALSE; (* Right momentary button, outboard *)
+	SIM_RMB2: BOOL := FALSE; (* Right momentary button, inboard *)
+	SIM_RTCB1_UP: BOOL := FALSE;
+	SIM_RTCB1_DOWN: BOOL := FALSE;
+	SIM_RTCB2_UP: BOOL := FALSE;
+	SIM_RTCB2_DOWN: BOOL := FALSE;
+	SIM_T3P1_UP: BOOL := FALSE;
+	SIM_T3P1_DN: BOOL := FALSE;
+	SIM_T3P2_UP: BOOL := FALSE;
+	SIM_T3P2_DN: BOOL := FALSE;
+	SIM_T3P3_UP: BOOL := FALSE;
+	SIM_T3P3_DN: BOOL := FALSE;
+	SIM_T3P4_UP: BOOL := FALSE;
+	SIM_T3P4_DN: BOOL := FALSE;
+
+	(* ----------------------------- DEBUG MESSAGES ---------------------------------------------- *)
+	DEBUG_MODE: STRING := 'NOT set';
+	DEBUG_SUBSTATE: STRING := 'NOT set';
+	DEBUG_MSG1: STRING := 'NOT set';
+	DEBUG_MSG2: STRING := 'NOT set';
+	DEBUG_MSG_SIM: STRING := 'NOT set';
+	DEBUG_MSG_NOTOUCH: STRING := 'NOT set';
+	DEBUG_4TH_BIT: UINT;
+	
+	// debug
+	
+// 	debug: ARRAY [0..600] OF REAL := [600(0)];
+	
+	test_latch: BOOL := FALSE;
+	ET2_Test_last: UINT := 0;
+
+	//debug_msgs: ARRAY [0..100] OF LWORD := [100(0)];
+	// HaweVpocMaintain
+END_VAR

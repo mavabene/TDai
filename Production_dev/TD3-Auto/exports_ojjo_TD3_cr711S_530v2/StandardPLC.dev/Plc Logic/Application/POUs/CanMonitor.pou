@@ -1,0 +1,69 @@
+
+(********************** Declaration ****************************)
+PROGRAM CanMonitor
+VAR
+	tmpLATITUDE: REAL;
+	tmpLONGITUDE: REAL;
+	pbLATITUDE: POINTER TO BYTE;
+	pbLONGITUDE: POINTER TO BYTE;
+	baLATITUDE: ARRAY [0..3] OF BYTE;
+	baLONGITUDE: ARRAY [0..3] OF BYTE;
+	IDX: SINT;
+	
+	GpsGarmin18x_01: GpsGarmin18x;
+	GARMIN_INSTALLED: BOOL := FALSE;
+	IFM_INSTALLED: BOOL := FALSE;
+	SUCCESS: BOOL;
+	
+	manageCan3_01: manageCan3;
+END_VAR
+
+(********************** Implementation ****************************)
+NODE_STATES();
+//RETURN;
+
+(* TODO: There is some weird powerup behavior of the GPS monitoring code that I don't understand.  Rewrite the GPS
+	monitor in ST and figure this out at some point. *)
+IF (TIME_SECONDS_FLOAT < 30) THEN
+	RETURN;
+END_IF
+
+(*
+GpsGarmin18x_01(xSUCCESS => SUCCESS, xERROR => ERROR_GPS, LATITUDE => tmpLATITUDE, LONGITUDE => tmpLONGITUDE);
+IF SUCCESS THEN
+	GARMIN_INSTALLED := TRUE;
+	LATITUDE := tmpLATITUDE;
+	LONGITUDE := tmpLONGITUDE;
+END_IF
+*)
+
+
+// Try the old IFM part if we don't find the Garmin.
+IF NOT GARMIN_INSTALLED AND pNVM3^.MACHINE_VERSION <= 1 THEN
+	CANRemoteGPS(xError => ERROR_GPS, rLatitude => tmpLATITUDE, rLongitude => tmpLONGITUDE);
+	IF NOT ERROR_GPS THEN
+		IFM_INSTALLED := TRUE;
+		LATITUDE := tmpLATITUDE;
+		LONGITUDE := tmpLONGITUDE;
+	END_IF
+END_IF;
+
+// Read other CanBus gadgets.
+//readLhpData_01();
+manageCan3_01();
+
+(*
+IF NOT GARMIN_INSTALLED AND NOT IFM_INSTALLED THEN
+	pbLONGITUDE := ADR(Longitude_LHP);
+	pbLATITUDE := ADR(Latitude_LHP);
+	FOR IDX := 0 TO 3 DO
+		baLATITUDE[IDX] := pbLATITUDE^;
+		pbLATITUDE := pbLATITUDE + 1;
+		baLONGITUDE[IDX] := pbLONGITUDE^;
+		pbLONGITUDE := pbLONGITUDE + 1;
+	END_FOR
+END_IF
+*)
+
+
+

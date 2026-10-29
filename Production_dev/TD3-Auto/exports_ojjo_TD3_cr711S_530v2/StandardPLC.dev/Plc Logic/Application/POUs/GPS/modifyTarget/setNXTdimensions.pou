@@ -1,0 +1,41 @@
+
+(********************** Declaration ****************************)
+(* This function sets the truss geometry.  The actual pNEZd adjustment is set separately, for clarity.  This may be combined later *)
+FUNCTION setNXTdimensions : BOOL
+
+VAR_INPUT
+END_VAR
+VAR
+	MOTOR_TRUSS_TYPE: USINT := 0; // 0 = standard, 1 = heavy
+END_VAR
+
+(********************** Implementation ****************************)
+IF isNXT_SI_perHMI() THEN // gps calibrated to wp reference
+	// heavy truss
+	IF SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE > 30 THEN
+		NXT_PNEZD_REF_TO_3L_WP_OFFSET := NXT_SI_HVY_WP_TO_3LWP;
+	// standard truss
+	ELSIF SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE > 10 THEN
+		NXT_PNEZD_REF_TO_3L_WP_OFFSET := NXT_SI_STD_WP_TO_3LWP;
+	ELSE
+		;// TODO: ERROR
+	END_IF
+	
+	NXT_MOTOR_SIDE_LEG_WP_OFFSET := ZERO_VECTOR;
+	//NXT_MOTOR_3L_SCREW_DRIVE_OFFSET := ZERO_VECTOR;
+	NXT_MOTOR_CRIMP_OFFSET := ZERO_VECTOR;
+	NXT_STD_SIDE_LEG_OFFSET := ZERO_VECTOR;
+ELSIF isNXT_INT_perHMI() THEN // gps calibrated to pin reference
+	NXT_PNEZD_REF_TO_3L_WP_OFFSET := NXT_INT_PIN_TO_3LWP; // [0, 0, -203.2]
+	NXT_MOTOR_SIDE_LEG_WP_OFFSET := NXT_INT_STD_WP_TO_MOTOR_SIDE_LEG_WP; // [0, 0, 711.2]; // mm
+	//NXT_MOTOR_3L_SCREW_DRIVE_OFFSET := ET2_MTR_PIN_TO_3LWP;
+	NXT_MOTOR_CRIMP_OFFSET := NXT_INT_MTR_CRIMP_WP_ADJ; // [0, 0, -42.0]; //mm
+	NXT_STD_SIDE_LEG_OFFSET := ZERO_VECTOR;
+ELSE // gps calibrated to nxt Var pin reference
+	NXT_PNEZD_REF_TO_3L_WP_OFFSET := pNVM4^.HMI_VECTORS[NXT_VAR_THIRD_LEG_WP_OFFSET];
+	NXT_MOTOR_SIDE_LEG_WP_OFFSET := pNVM4^.HMI_VECTORS[NXT_VAR_MOTOR_SIDE_LEG_WP_OFFSET];
+	//NXT_MOTOR_3L_SCREW_DRIVE_OFFSET := pNVM4^.HMI_VECTORS[NXT_VAR_STD_TRUSS_OFFSET];
+	NXT_MOTOR_CRIMP_OFFSET := pNVM4^.HMI_VECTORS[NXT_VAR_MOTOR_CRIMP_OFFSET];
+	NXT_STD_SIDE_LEG_OFFSET := ZERO_VECTOR;
+END_IF
+

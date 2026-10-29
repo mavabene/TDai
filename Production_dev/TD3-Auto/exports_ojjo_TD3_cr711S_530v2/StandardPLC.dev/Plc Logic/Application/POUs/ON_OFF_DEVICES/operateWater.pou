@@ -1,0 +1,108 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateWater
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VEL: REAL;
+	PUMP_FRACTION: REAL;
+	DRILL_VEL: REAL;
+	LAST_MSTIME: DWORD := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+//
+// Running the water to the drill to mitigate dust pollution.
+//
+
+IF pNVM3^.WATER_PUMP_LPM <= 0 THEN // prevent /0 error
+	setOutput(ADR(AXES[AXIS_WATER].OUTPUT), 0, TRUE);
+ELSE
+	IF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_LOAD_SCREW THEN
+		// Getting ready to do a new screw.  Reset the volume.
+		WATER_VOLUME_L := 0.0;
+	END_IF
+	
+	IF pNVM3^.WATER_USED AND MACHINE_MODE = SCREW_MODE THEN
+		IF (
+			(* This is before drilling really gets started. *)
+			SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE OR
+			SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE OR
+			SCREW_STATE = SCREW_STATE_DRILL_EXTEND
+			) THEN
+			IF DRILL_TIP_TO_GROUND > 0 THEN
+				// Drill tip above ground.
+				PUMP_FRACTION := pNVM4^.WATER_HOVER_LPT / pNVM3^.WATER_PUMP_LPM;
+			ELSE
+				// Drill tip below ground.
+				PUMP_FRACTION := pNVM4^.WATER_ENTER_LPT / pNVM3^.WATER_PUMP_LPM;
+			END_IF
+		ELSIF (
+			(* Here's the normal drilling. *)
+			(SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND (NOT UPPER_CROWD_REVEALING AND NOT UPPER_CROWD_DONE_REVEALING)) OR
+			SCREW_STATE = SCREW_STATE_DRIVE_ASSIST OR
+			SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+			SCREW_STATE = SCREW_STATE_BRIEF_HAMMER) THEN
+			
+			// Drill is on.  If the drill is going down, or if the lower crowd individually is going down, run the water as well.
+			DRILL_VEL := LOWER_CROWD_VEL_SMOOTHED + AXES[AXIS_UPPER_CROWD].FEEDBACK.VELOCITY_ENGR;
+			IF (DRILL_VEL <= -0.2) THEN
+				VEL := DRILL_VEL;
+			ELSIF (LOWER_CROWD_VEL_SMOOTHED <= -0.2) THEN
+				// Lower crowd is running.
+				VEL := LOWER_CROWD_VEL_SMOOTHED;
+			ELSE
+				// Water off here.
+				VEL := 0.0;
+			END_IF
+			// Actuator distances are measured in cm, water flow is setup as per meter, so use the 100
+			//	scale factor.  Also, velocities are in per second, and flow of pump is rated in per minute, so
+			//	the 60 scale factor.
+			PUMP_FRACTION := ((60.0 * (ABS(VEL) / 100.0) * pNVM3^.WATER_DRILL_LPD) / pNVM3^.WATER_PUMP_LPM);
+		ELSE
+			PUMP_FRACTION := 0.0;
+		END_IF
+		
+		// Limit pump fraction in case there are issues in the setup.
+		IF PUMP_FRACTION > 1.0 THEN
+			PUMP_FRACTION := 1.0;
+		ELSIF PUMP_FRACTION < 0.0 THEN
+			PUMP_FRACTION := 0.0;
+		END_IF
+	
+		// If we are hammering, we are pulverizing rock and the resultant dust has more surface area than the grains of the
+		//	base soil.
+		IF HAMMER_CMD <> 0 THEN
+			PUMP_FRACTION := PUMP_FRACTION * (1.0 + (pNVM4^.WATER_HAMMER_RATIO / 100.0));
+		END_IF
+		
+	ELSE
+		PUMP_FRACTION := 0.0;
+	END_IF
+	
+	WATER_CMD := REAL_TO_UINT(PUMP_FRACTION * 1000);
+	WATER_FLOW_LPM := PUMP_FRACTION * pNVM3^.WATER_PUMP_LPM;
+	WATER_VOLUME_L := WATER_VOLUME_L + (WATER_FLOW_LPM * TO_REAL(MSTIME - LAST_MSTIME)) / (1000.0 * 60.0);
+	
+	LAST_MSTIME := MSTIME;
+	
+	IF WATER_FORCE.FORCED THEN
+		// Just force to 100% for now.
+		IF WATER_FORCE.DOUT_STATE THEN
+			WATER_CMD := 1000;
+		ELSE
+			WATER_CMD := 0;
+		END_IF
+	END_IF
+	
+	IF WATER_CMD <> 0 THEN
+		setOutput(ADR(AXES[AXIS_WATER].OUTPUT), REAL_TO_WORD(WATER_CMD), TRUE);
+	ELSE
+		setOutput(ADR(AXES[AXIS_WATER].OUTPUT), 0, TRUE);
+	END_IF
+	HaweOutput(ADR(AXES[AXIS_WATER]));	
+
+END_IF
+

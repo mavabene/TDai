@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION isRwpModeStateChange : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+isRwpModeStateChange := RWP_MODE_STATE_CHANGE;

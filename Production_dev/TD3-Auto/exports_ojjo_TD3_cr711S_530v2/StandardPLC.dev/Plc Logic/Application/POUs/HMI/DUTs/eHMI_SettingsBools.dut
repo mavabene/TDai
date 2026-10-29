@@ -1,0 +1,33 @@
+
+(********************** Declaration ****************************)
+(* 	These var names correlate to HMI_BOOLS array values.  
+	To add persistent BOOLs, just add name here and call via HMI_BOOLS[ENUM_NAME]
+	!! If you change positions, persistent memory will be affected! !!
+	** Updates here must be made in both PLC and HMI code **
+*)
+TYPE eHMI_SettingsBools :
+(
+	SOFT_SOIL_ABOVE_GROUND_AIR_ON := 1,
+	SOFT_SOIL_CONE_ON_SCREW_TIP := 2,
+	SCREW_PARAMS_SOURCE_IS_PNEZD := 3,
+	PRELOAD_AUTO_MAST_LEAN_COMPENSATION := 4,
+	FWP_Z_AUTOTARGET := 5,
+	eHMI_SettingsBools_RESERVED_6 := 6,
+// 	PINNINGTON_ROW_PITCH_CONVENTION := 7,
+	ET_PLUMB_TRACKS_TO_BASE_PITCH_MATCHED := 7,
+	HIGH_WP_ALLOWED := 8,
+	TA_AUTO_MODE_ADVANCE := 9,
+	PROXIMITY_SENSOR_INSTALLED := 10,
+	AUTO_PRELOAD_ON := 11,
+	ALLOW_HARD_SOIL_SOFT_SOIL_OPERATOR_ACCESS := 12,
+	eHMI_SettingsBools_RESERVED_13 := 13,
+	eHMI_SettingsBools_RESERVED_14 := 14,
+	eHMI_SettingsBools_RESERVED_15 := 15,
+	eHMI_SettingsBools_RESERVED_16 := 16,
+	eHMI_SettingsBools_RESERVED_17 := 17,
+	eHMI_SettingsBools_RESERVED_18 := 18,
+	eHMI_SettingsBools_RESERVED_19 := 19,
+	eHMI_SettingsBools_RESERVED_20 := 20
+	
+);
+END_TYPE

@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+FUNCTION setCycletimeData : BOOL
+VAR_INPUT
+	STEP: INT;
+	DATA: UINT;
+	SCREW: UDINT;
+	SIDE: INT;
+	TRUSS: INT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+// Buffer data for later transmission to web.
+CanMonitor.manageCan3_01.bufferCycleTime(STEP := STEP, DAT := DATA, SCREW := SCREW, SIDE := SIDE, TRUSS := TRUSS, MS := MSTIME - CYCLE_START);
+
+// Track steps for data collection on HMI.
+CYCLE_STEP := STEP;
+CYCLE_DATA := DATA;
+CYCLE_SCREW := SCREW;
+CYCLE_SIDE := SIDE;
+CYCLE_TRUSS := TRUSS;
+CYCLE_START := MSTIME;

@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION BUILD_ROTATION : Rotation3D
+VAR_INPUT
+	YAW_VAL: REAL;
+	PITCH_VAL: REAL;
+	ROLL_VAL: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+BUILD_ROTATION[rot.YAW_DEG] := YAW_VAL;
+BUILD_ROTATION[rot.PITCH_DEG] := PITCH_VAL;
+BUILD_ROTATION[rot.ROLL_DEG] := ROLL_VAL;

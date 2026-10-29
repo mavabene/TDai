@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXTmotorSideLeg_perLatch : BOOL // no adjust needed for side legs
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXTmotorSideLeg_perLatch :=
+	isNXTmotorTruss_perScrewParams() 
+	AND 
+	(SCREW_SIDE_LATCH <> eScrewSide.SCREW_CENTER);

@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+{attribute 'to_string'}
+TYPE rot :
+(
+	// coordinates
+	pX := 1,
+	pY := 2,
+	pZ := 3,
+	// angles
+	YAW_DEG := 4,
+	PITCH_DEG := 5,
+	ROLL_DEG := 6,
+	// translations
+	deltaX := 7,
+	deltaY := 8,
+	deltaZ := 9
+	
+);
+
+END_TYPE

@@ -1,0 +1,57 @@
+
+(********************** Declaration ****************************)
+// return offsets to account for how they will change after mast pitches from current position
+// This function doesn't assume standard plumb truss frame because we need to find the change from actual mast pitch to target mast pitch
+FUNCTION PITCHING_MAST_WP_OFFSETS : Vector3D
+VAR_INPUT
+	TARGET_MAST_PITCH: REAL; // typically [heading, pitch, 0] compass heading
+	TARGET_ZSLIDE_POSITION: REAL; // cm or current if not moving
+	CURRENT_MAST_PITCH: REAL; // getting current offsets to compare to final offsets to get change
+	//CURRENT_REFERENCE_HEADING: LREAL; // ie is machine heading ideally North or South or some other row orientation.  usually 0 or 180.
+	
+END_VAR
+VAR
+	LHR_FRAME: BOOL := TRUE; // is it a LHR frame?
+	LHR_FRAME_ROTATION: Rotation3D; // no change!
+	PRE_ROTATION_VECTOR: Vector3D;
+	CURRENT_MAST_PITCH_ROTATION: Rotation3D := [0, 0, 0];
+	TARGET_MAST_PITCH_ROTATION: Rotation3D := [0, 0, 0];
+	YAW_ROTATION: Rotation3D := [0, 0, 0];
+	PLUMB_PITCH_PIVOT_TO_WP_VECTOR: Vector3D;
+	POST_PITCH_OFFSETS_VECTOR: Vector3D;
+	CURRENT_PITCHED_PITCH_PIVOT_TO_WP_VECTOR: Vector3D;
+	TARGET_PITCH_PIVOT_TO_WP_VECTOR: Vector3D;
+	index: USINT;
+END_VAR
+(*
+Mast frame (from operator perspective) (LHR)
+- yaw: CW looking from above is positive (compass direction)
+- Pitch: top of mast tilting away from operator is positive (eg third leg screw has positive pitch) (deg)
+- Roll: Mast top tilting left is positive (deg)
+- x: forward is positive
+- y: right is positive
+- z: up is positive
+*)
+(********************** Implementation ****************************)
+(* get offset vector, then convert it to World Frame *)
+
+(* get offset vector *)
+
+// get plumb offset from pitch pivot to WP (Center of Rotation at drill rod)
+PLUMB_PITCH_PIVOT_TO_WP_VECTOR := GET_PITCH_PIVOT_TO_DRILL_ROD_VECTOR_MAST_FRAME(TARGET_ZSLIDE_POSITION);
+
+
+// get current offset from pitch pivot to WP (Center of Rotation at drill rod) according to current mast pitch
+CURRENT_MAST_PITCH_ROTATION[rot.PITCH_DEG] := CURRENT_MAST_PITCH;
+CURRENT_MAST_PITCH_ROTATION := CONVERT_MAST_ROTATION_TO_FROM_LHR(CURRENT_MAST_PITCH_ROTATION);
+CURRENT_PITCHED_PITCH_PIVOT_TO_WP_VECTOR := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT
+											(PLUMB_PITCH_PIVOT_TO_WP_VECTOR, CURRENT_MAST_PITCH_ROTATION, LHR_FRAME);
+
+// get target offset from pitch pivot to WP (Center of Rotation at drill rod)
+TARGET_MAST_PITCH_ROTATION[rot.PITCH_DEG] := TARGET_MAST_PITCH;
+
+TARGET_MAST_PITCH_ROTATION := CONVERT_MAST_ROTATION_TO_FROM_LHR(TARGET_MAST_PITCH_ROTATION);
+TARGET_PITCH_PIVOT_TO_WP_VECTOR := ROTATION_3D_INTRINSIC_YPR_DEG_STRUCT
+									(PLUMB_PITCH_PIVOT_TO_WP_VECTOR, TARGET_MAST_PITCH_ROTATION, LHR_FRAME);
+
+PITCHING_MAST_WP_OFFSETS := subtractVectors(CURRENT_PITCHED_PITCH_PIVOT_TO_WP_VECTOR, TARGET_PITCH_PIVOT_TO_WP_VECTOR);

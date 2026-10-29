@@ -1,0 +1,205 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK PITCH
+VAR_INPUT
+	INIT: BOOL;
+	pPITCH: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	TARGET_POS: REAL;
+	TARGET_LAST: REAL;
+	VEL: REAL;
+	ACCEL: REAL;
+	PLUMB_MAST: BOOL := FALSE;
+	PLUMB_MAST_DISTANCE: INT := 2000; // mm, distance from target to plumb mast
+	
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the pitch axis based on the top-level state of the machine.   Pitch from the operator's viewpoint is positive when the
+	bottom is coming toward them. *)
+VALID := TRUE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pPITCH^.SETPOINT.POSITION_ENGR);
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	IF KNUCKLE_INCLINOMETER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		IF pNVM3^.MACHINE_VERSION >= 1 THEN
+			POSITION_RAW := -KNUCKLE_ROLL_RAW;
+		ELSE
+			POSITION_RAW := KNUCKLE_PITCH_RAW;
+		END_IF
+	END_IF
+END_IF
+
+Sampled(ADR(pPITCH^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+CORRECTED_MAST_PITCH := pPITCH^.FEEDBACK.POSITION_ENGR - pNVM4^.HMI_REALS[KNUCKLE_TO_MAST_PITCH_DELTA];
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pPITCH);
+	RETURN;
+END_IF
+
+CLOSED_LOOP := FALSE;
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pPITCH^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND isNXTmotorThirdLeg_perLatch() AND
+	(
+		MACHINE_MODE = SCREW_MODE AND
+		(
+			SCREW_STATE = SCREW_STATE_INITIAL_ROTATE OR
+			SCREW_STATE = SCREW_STATE_MAST_TO_TARGET
+		)
+	) THEN
+	(*	When installing the NXT three legged motor, we are moving the pitch in screw drive.  
+		So when doing the initial rotate state, we need to return to the loading position, 
+		and when we move into the screw drive state, we need to get to the correct angle 
+		for the third leg install. *)
+	IF NOT pNVM4^.HMI_BOOLS[SCREW_PARAMS_SOURCE_IS_PNEZD] THEN
+		SCREW_PARAMETERS_CURRENT.NS_PITCH := -ATAN_DEG(pNVM1^.TORQUE_TUBE_PITCH / 100);
+	END_IF
+	// 5 is to give room for mast foot to move
+	TARGET_POS := SCREW_PARAMETERS_CURRENT.NS_PITCH - pNVM3^.MAST_LEAN + pNVM4^.HMI_REALS[KNUCKLE_TO_MAST_PITCH_DELTA] + 3; 
+	// remove 5 back out
+	IF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+		// If we are driving the third leg, it is *relative* to the row pitch.
+		TARGET_POS := TARGET_POS + SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE - 3;
+		// TARGET_POS := TARGET_POS + SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE - 1.0;
+	END_IF
+	
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		IF SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+			TrapezoidStart(ADR(pPITCH^.PROFILER), ADR(pPITCH^.SETPOINT), TIME_US, pPITCH^.FEEDBACK,
+				TARGET_POS, PITCH_VEL, PITCH_ACCEL);
+		ELSE
+			// Slow this down a little bit when pulling back on the third leg, as full speed will cause the
+			//	foot of the mast to drag modestly.
+			TrapezoidStart(ADR(pPITCH^.PROFILER), ADR(pPITCH^.SETPOINT), TIME_US, pPITCH^.FEEDBACK,
+				TARGET_POS, PITCH_VEL * 0.75, PITCH_ACCEL);
+		END_IF
+	ELSIF isPauseRequested() THEN
+		(* Stop what we are doing. *)
+		TrapezoidStop(ADR(pPITCH^.PROFILER), ADR(pPITCH^.SETPOINT), TIME_US, pPITCH^.CONFIG ,pPITCH^.FEEDBACK);
+	END_IF
+
+	(* Run this only here because typically when the pitch is under closed loop control it is not profiled
+		position/velocity. *)
+	TrapezoidRun(ADR(pPITCH^.PROFILER), ADR(pPITCH^.SETPOINT), TIME_US);
+	(* Prepare to run the control loop. *)
+	CLOSED_LOOP := TRUE;
+
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		(
+			(MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL) 
+			OR
+			(MACHINE_MODE = RWP_MODE AND (
+				RWP_STATE = RWP_STATE_SQUARE_YAW OR
+				RWP_STATE = RWP_STATE_LOCATE_WP OR
+				RWP_STATE = RWP_STATE_WAIT_LEVEL OR
+				RWP_STATE = RWP_STATE_GPS_FAST_TARGET )
+			) 
+			OR
+			(MACHINE_MODE = SCREW_MODE AND
+				( (SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE AND PRELOAD_PLUMB_MAST) OR
+				((SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR SCREW_STATE = SCREW_STATE_INITIAL_ROTATE) AND 
+					HMI_BOOLS_VALUES[PRELOAD_AUTO_MAST_LEAN_COMPENSATION]) OR
+				SCREW_STATE = SCREW_STATE_ASSEMBLE OR
+				SCREW_STATE = SCREW_STATE_FWP OR
+				SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS) 
+			)
+		)
+				(*
+				SCREW_STATE = SCREW_STATE_FWP OR //AND GPS_TRUSS_CYCLE <> GPS_NO_MOVE)))
+				SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP OR
+				SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS))*)
+	THEN
+	
+	// As we approach the target we plumb the mast so the gps information is more accurate
+	IF isTrackModeStateChange() THEN
+		PLUMB_MAST := FALSE;
+	END_IF
+	(* Plumb the mast with respect to the ground.  TORQUE_TUBE_PITCH is in %, which is rise over run of 100.  Hence the
+		divide by 100 below. *)
+	IF MACHINE_MODE = TRACK_MODE AND (TRACK_STATE <> TRACK_STATE_NORMAL OR GPS_TRACK_MODE_NORMAL_TRACK_POS) THEN // nearing target and slowing, plumb mast
+		TARGET_POS := PITCH_TRACK_POS;
+	ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE THEN
+		IF isNXTmotorThirdLeg_perLatch() THEN 
+			TARGET_POS := SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE + SCREW_PARAMETERS_CURRENT.NS_PITCH;
+		ELSE
+			TARGET_POS := SCREW_PARAMETERS_CURRENT.NS_PITCH;
+		END_IF
+		TARGET_POS := TARGET_POS + pNVM4^.HMI_REALS[KNUCKLE_TO_MAST_PITCH_DELTA];
+	ELSE
+		IF NOT pNVM4^.HMI_BOOLS[SCREW_PARAMS_SOURCE_IS_PNEZD] THEN
+			SCREW_PARAMETERS_CURRENT.NS_PITCH := -ATAN_DEG(pNVM1^.TORQUE_TUBE_PITCH / 100);
+		END_IF
+		// adjust to offset Knuckle Pitch to get mast to desired target, change sign for slope to mast pitch (opposite) 
+		TARGET_POS := SCREW_PARAMETERS_CURRENT.NS_PITCH - pNVM3^.MAST_LEAN + pNVM4^.HMI_REALS[KNUCKLE_TO_MAST_PITCH_DELTA];
+	END_IF
+
+	IF MACHINE_MODE = TRACK_MODE OR ((MACHINE_MODE = RWP_MODE OR MACHINE_MODE = SCREW_MODE) AND GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) THEN
+		VEL := PITCH_VEL / 40;
+		IF (MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL) AND (AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR > 20) THEN
+			VEL := VEL / 4;
+		END_IF 
+		 	ACCEL := PITCH_ACCEL / 20;
+	ELSIF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE THEN
+		VEL := PITCH_VEL / 120;
+		ACCEL := PITCH_ACCEL / 60;
+		OUTPUT_MAX := 100; // 10%
+	ELSE
+		VEL := PITCH_VEL / 5;
+		ACCEL := PITCH_ACCEL / 5;
+	END_IF
+	setVelAccel(TARGET_POS, pPITCH^.FEEDBACK.POSITION_ENGR,
+		4, 0.5, VEL, ACCEL, ADR(VEL), ADR(ACCEL));
+	SetpointInit(ADR(pPITCH^.SETPOINT), pPITCH^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+	CLOSED_LOOP := TRUE;
+ELSIF NOT AUTOMATIC AND (MACHINE_MODE = RWP_MODE OR MACHINE_MODE = SETUP_MODE) THEN
+	(* Allow the operator to manually adjust the pitch. *)
+	IF nearHardStop(pPITCH^, JS := REMOTE.V2_FB, JS_POS_IS_OUTPUT_POS := TRUE) THEN
+		OUTPUT_MAX := protectHardStop(pPITCH^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pPITCH^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	
+	JOYSTICK_01(JS := REMOTE.V2_FB, JS_POS_IS_OUTPUT_POS := TRUE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pPITCH^.OUTPUT.MAGNITUDE, POSITIVE => pPITCH^.OUTPUT.POSITIVE);
+		
+ELSE
+	setOutput(ADR(pPITCH^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		(* Setpoint generator is run above.  Note that we leave the integrator on at all times, as the machine is going to be moving so the pitch needs to correct. *)
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pPITCH^.LOOP_PID), pOUTPUT := ADR(pPITCH^.OUTPUT), SP := pPITCH^.SETPOINT, FB:= pPITCH^.FEEDBACK, CFG := pPITCH^.CONFIG, TRUE);
+			(* I_ENABLED := (pPITCH^.PROFILER.STATE = HOLD)); *)
+	ELSE
+		pPITCH^.SETPOINT.POSITION_ENGR := pPITCH^.FEEDBACK.POSITION_ENGR;
+		pPITCH^.SETPOINT.POSITION_RAW := pPITCH^.FEEDBACK.POSITION_RAW;
+	END_IF
+	
+	HaweOutput(pPITCH);
+END_IF

@@ -1,0 +1,218 @@
+
+(********************** Declaration ****************************)
+//{attribute 'qualified_only'}
+VAR_GLOBAL CONSTANT
+	LEG_LENGTHS_COUNT: USINT := 10;
+	SCREW_LENGTHS_COUNT: USINT := 3;
+	SCREW_LENGTHS_DYNAMIC_COUNT: USINT := 20;
+	
+END_VAR	
+
+VAR_GLOBAL
+
+	DRIVE_DEPTH_TOLERANCE: REAL := 2.58;
+
+	(* ---------------------- E-STOP PARAMETERS ------------------------------- *)
+	DRIFTER_TO_TOP_ESTOP: REAL := 0;
+	LOWER_CROWD_UP_ESTOP: REAL := 0;
+	LOWER_CROWD_DOWN_ESTOP: REAL := 0;
+	PITCH_BACK_ESTOP: REAL := 0;
+	PITCH_FWD_ESTOP: REAL := 70;
+	BASE_PITCH_ESTOP: REAL := 15.0;
+	BASE_ROLL_ESTOP: REAL := 15.0;
+	BASE_PITCH_SETUP_ESTOP: REAL := 40.0;
+	PITCH_FWD_SETUP: REAL := 80;
+	FUEL_LEVEL_ESTOP: REAL := 5.0;
+	HYDRAULIC_TEMP_ESTOP: REAL := 85.0;
+
+	(* ---------------------- WARNING PARAMETERS ------------------------------- *)
+	DRIFTER_TO_TOP_WARNING: REAL := 30;
+	LOWER_CROWD_UP_WARNING: REAL := 300;
+	LOWER_CROWD_DOWN_WARNING: REAL := 0;
+	PITCH_BACK_WARNING: REAL := 0;
+	PITCH_FWD_WARNING: REAL := 0;
+	BASE_ROLL_WARNING: REAL := 10.0;
+	BASE_PITCH_WARNING: REAL := 10.0;
+	FUEL_LEVEL_WARNING: REAL := 15.0;
+	FUEL_LEVEL_HORN: REAL := 10.0;
+	HYDRAULIC_TEMP_WARNING: REAL := 75.0;
+	HYDRAULIC_TEMP_HORN: REAL := 80.0;
+	ROTATOR_WARNING: REAL := 32.0;
+
+	PUMP_PRESSURE_WARNING: REAL := 300;
+
+	(* ---------------------- LENGTH DIMENSIONS ------------------------------- *)
+
+	(* This is a nominal translation, in cm/degree, for how boom swing motions affects Y motion. *)
+	BOOM_SWING_TO_Y: REAL := 80.0 / 50.0;
+	(* Distance between boom swing pivot and yaw pivot with X slide retracted. *)
+	BS_PIVOT_TO_YAW_PIVOT: REAL := 135;
+	(* Distance between boom swing pivot and drill rod with X slide retracted. *)
+	BS_PIVOT_TO_DRILL_ROD: REAL := 270;
+	(* Distance between yaw pivot and drill rod with X slide retracted. *)
+	YAW_PIVOT_TO_DRILL_ROD: REAL := 135;
+	(* Perpendicular distance between pitch pivot and drill rod. *)
+	PITCH_PIVOT_TO_DRILL_ROD: REAL := 0;
+	(* Vertical distance from pitch pivot to center of rotator at top of Z slide *)
+	PITCH_PIVOT_TO_CENTER_OF_ROTATOR_AT_MAX_Z_SLIDE : REAL := 19.2; // cm
+	(* Height of the rotator off the ground with Z slide retracted. *)
+	ROTATOR_HEIGHT_MINIMUM: REAL := 0;
+
+	(* Height of the lowest protrusion on the mast when Zslide is down and mast slide is all the
+		way down. *)
+	MAST_SLIDE_LENGTH: REAL := 0;
+
+	MAST_SLIDE_COMMAND_LIMIT_MIN: REAL := 5;
+
+	(* Distance (cm) from mast foot to ground when loading a screw. *)
+	MAST_FOOT_LOADING_POS: REAL := 15.0;
+	
+	(* This is from load/drive start position to tip coincident with mast foot, applies at any angle. *)
+	SCREW_TIP_TO_MAST_FOOT: REAL := 16.0;
+
+	(* Measured between mandrel tip and center of rear cog on track. *)
+	BASE_PITCH_PIVOT_LEN: REAL := 0;
+
+	(* Distance from the end of the chuck to the reference surface. *)
+	CHUCK_BOTTOM_TO_REFERENCE: REAL := 2.8;
+
+	(* Distance from reference surface to top of the screw. Reference surface is the top of the "flower" or gear shape on the screw*)
+	REFERENCE_TO_TOP: REAL := 7.0;
+
+	(* Position of the centralizer *bottom* with respect to the ground with the mast slide all the way up and the Z slide
+		all the way down.  Positive means this is above the ground surface. *)
+	CENTRALIZER_TO_GROUND_NOMINAL: REAL := 0;
+	(* Bottom extent of chuck to the reference surface on the lower crowd. *)
+	CHUCK_TO_LC_REFERENCE: REAL := -63.2;
+	(* This is how far the screw should be into the top of the centralizer when loading. *)
+	SCREW_INSERT_TO_CENTRALIZER: REAL := 4.0;
+	(* Thickness of the centralizer frtom top of top plate to bottom of bottom plate. *)
+	CENTRALIZER_THICKNESS: REAL := 16.0;
+	(* Full width (in Y) of the centralizer. *)
+	CENTRALIZER_WIDTH: REAL := 62.0;
+	(* Distance from screw tip to ground on the NXT 3LM N/S screw when mast foot is on the ground. *)
+	SCREW_TIP_TO_GROUND_NXT_3LM_NS: REAL := 9 * 2.54;
+
+	(* TODO: low workpoint mode!!! *)
+	(* Old: When Z slide is fully retracted, this is the distance from the center of the BR
+		pivot to the center of the rotator. *)
+	BR_ROT_PIVOT_MIN: REAL := 26.66;
+	
+	MAST_SLIDE_COR_POS: REAL := 195; // used to be settable via HMI, but setting has been deprecated.  now it is hardcoded
+
+	(* ---------------------- SETUP IN machineInit FOR MACHINE TYPE ------------------------------- *)
+
+	(* cm: minimum LC pos that respects 10cm reveal. *)
+	LOWER_CROWD_MIN_END_POS: REAL := 0;
+
+	(* We limit lower crowd motion to protect the hose chain *even in manual*! *)
+	LOWER_CROWD_CHAIN_LIMIT: REAL := 0;
+
+	DRIFTER_TO_TOP_MIN: REAL := 0;
+
+	(* Distance of the pitch pivot from the ground when the outrigger is down. *)
+	PITCH_PIVOT_HEIGHT: REAL := 0;
+	
+	(* ---------------------- Earth Truss 2.0 vectors  ------------------------------- *)
+	ET2_TLM_3L_ATOL_TO_WP : REAL := 18.0; // cm
+	ET2_TLM_T_ATOL_TO_WP : REAL := 108.18; // cm
+	ET2_STD_ATOL_TO_WP : REAL := 21.68; // cm
+
+	
+	// depends on Z slide height.  The listed value coorrelates to z-slide at 167.5cm
+	// mast coordinate frame from operators perspective: x is forward, y is to right, z is up
+	PITCH_PIVOT_TO_DRILL_ROD_AT_COR_AT_MAX_ZSLIDE: Vector3D := [-934.72, 0, 192]; // mm, 
+	// these values get us close but still inbetween measured and theoretical:
+	OPT_PITCH_PIVOT_TO_DRILL_ROD_AT_COR_AT_MAX_ZSLIDE: Vector3D := [-1010, 0, 205]; // mm ;[-101.57, 0, 20.8]; // cm, optimized around 40 deg for ET2 motors
+	
+	// Truss Geometry
+	//Earth Truss 2.0 INT vectors
+	NXT_INT_PIN_TO_3LWP: Vector3D := [0, 0, -203.2]; //mm from INT standard truss wp to third leg intersection with side leg plane
+	NXT_INT_MTR_CRIMP_WP_ADJ: Vector3D := [0, 0, -42.0]; //mm
+	NXT_INT_STD_WP_TO_MOTOR_SIDE_LEG_WP: Vector3D := [0, 0, 711.2]; // mm
+	
+	// SI 
+	NXT_SI_STD_WP_TO_3LWP: Vector3D := [0, 0, 1016.0];
+	NXT_SI_HVY_WP_TO_3LWP: Vector3D := [0, 0, 406.4];
+	
+	// for zeroing
+	ZERO_VECTOR: Vector3D := [0,0,0];
+	ZERO_ROTATION: Rotation3D := [0,0,0];
+	
+	(* ---------------------- TARGET DIMENSIONS ------------------------------- *)
+	TARGET_PLATE_TIME_MS: UINT := 2000;
+
+	(* ---------------------- LEG AND SCREW PARAMETERS HERE ------------------------------- *)
+
+	//SCREW_PITCH_CM: REAL := 5.08;
+	(* This is counts on the lower rotary per count on the lower crowd for the screw pitch
+		being used. This calculation is:
+
+		Lower_rotary_counts / Lower_crowd_counts = (Lower_rotary_CtPerRev * Lower_rotary_OutputGearing ) / (Lower_crowd_CtPerInch * Screw_Pitch_Inch)
+
+		On TD-2, these values are:
+			Lower_rotary_CtPerRev = 4096
+			Lower_rotary_OutputGearing = 2.50 (revs of the input shaft to revs of the output shaft)
+			Lower_crowd_CtPerInch = 500 (from DT)
+			Screw_Pitch_Inch = 2
+			Lower rotary pitch circle = 5.223"
+
+		So: PITCH_LR_PER_LC = (4096 * 2.50) / (500 * 2) = 10.24
+		
+		Using pitch circle: PITCH_LR_PER_LC = (4096 * 2.50) / (499.25 * 2) = 10.255
+
+		Using 1.25" per tooth of #100 chain and 13 teeth per rev: (4096 * 2.50) / (504.12 * 2) = 10.15
+
+		HOWEVER! heuristically we know the closest estimate we get is 10.404, so this is what we're using!
+		
+		*)
+	CTS_LR_PER_CT_LC: REAL := 10.404;
+	(* Counts per revolution on the LR encoder used for the calculation of CTS_LR_PER_CT_LC.  This is a little more
+		complicated than you might think, because we don't have prefectly consistent gearing on the lower crowd.  The
+		sprocket drives the chain, and the number of counts on the feedback device needed to get a given linear motion
+		had to be determined heuristically. *)
+	SCREW_PITCH_NOMINAL: REAL := 5.08;
+	CTS_LR_PER_REV_NOMINAL: REAL := 4096;
+	CTS_LC_PER_REV_NOMINAL: REAL := 8192;
+	
+	// When recovering from stall and predrilling, we leave at least this much of the drill in the screw for lateral support.
+	DRILL_IN_SCREW_MINIMUM: REAL := 3.0;
+	// When retracting the drill to free the UR in a stall, we leave the windgs at least this far from the screw tip.
+	WING_TO_SCREW_MINIMUM: REAL := 5.0;
+
+	(* ---------------------- ANCILLARY SETTINGS -------------------------------- *)
+	// Temperature (C) of hydraulic temperature fluid required before turning the air compressor supply on.
+	COMPRESSOR_SUPPLY_TEMP_MINIMUM: REAL := 5;
+
+	// Engr = (Counts - offset) * scale
+	PRESSURE_SCALE_FACTOR: REAL := 0;
+	PRESSURE_OFFSET: REAL := 0;
+
+	// Engr = ((Counts - offset) * scale) - offset
+	TEMPERATURE_SCALE_FACTOR: REAL := 0.0;
+	TEMPERATURE_OFFSET: REAL := 0.0;
+	TEMPERATURE_ZERO: REAL := 0.0;
+
+	(* ------------------------- PRESSURE RELATED ---------------------------------- *)
+	// Nominal compensator setting for the LC motor.
+	LC_PRESSURE_SETUP: REAL := 1800;
+	
+	// The pressure to an actuator can't be set exactly, can change with temperature, with small bypass flow, etc.
+	//	Because it can't be set exactly, we need a range within which we think are are at a pressure.
+	PRESSURE_UNCERTAINTY_BAND: REAL := 500;
+	
+	// Minimum pressure at which we start detecting a stall.  We don't want to detect this when the engine is off,
+	//	or when the pump is idling.
+	STALL_MINIMUM_PRESSURE: REAL := 800;
+	// Size of the band in which the pressure must fall to be considered a stall.
+	STALL_DETECT_BAND: REAL := 30;
+
+	(* ----------------------- TIMING (COORDINATED) ------------------------------- *)
+	MAST_SLIDE_RETRACT_DELAY_SEC: REAL := 1.5; // Seconds
+
+	BOOTUP_ERROR_DELAY_SEC: DWORD := 0;
+	AIR_STARTUP_DELAY: DWORD := 15; // Seconds
+	
+	Pi : REAL := 3.14159265;
+	
+END_VAR

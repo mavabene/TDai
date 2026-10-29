@@ -1,0 +1,34 @@
+
+(********************** Declaration ****************************)
+FUNCTION lowWpCalcs : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+(* This does the calculation of the BR and Z slide for the low workpoint situation.
+	We are keeping the Z of the rotator always in the same position. *)
+
+	(* TODO: low workpoint mode!!! *)
+	(* Calculate the offset in Y and Z of the workpoint from the BR pivot.  The Y is handled
+		by Zslide and BR, the Z is by lower crowd. *)
+	WP_Y := (BR_ROT_PIVOT_MIN + Z_SLIDE_AT_WP) *
+		SIN_DEG(AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR);
+	ROTATOR_WP_Y := WP_Y;
+
+	(* Remember that the hi target position has the lower crowd in a position where the target is at the
+		rotator center in Z! *)
+	ROTATOR_WP_Z := (BR_ROT_PIVOT_MIN + Z_SLIDE_AT_WP) *
+		COS_DEG(AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR);
+	WP_Z := ROTATOR_WP_Z - (pNVM1^.LOWER_CROWD_COR_POS - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR);
+
+	(* The rotator will move left and right to put the mandrel in the laser at the screw angle. Only use
+		this on array screws! *)
+	ROTATOR_OFFSET_Y := TAN_DEG(20) * (pNVM1^.LOWER_CROWD_COR_POS - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR);
+
+	(* Now offsetting the rotator is also going to move the lower crowd further from the workpoint.
+		Calculate this offset here for the drive to height calculation.  Delta is measured such that
+		pushing the crowd down from the workpoint is positive. *)
+	LOW_WP_ADJUST := -((1 - COS_DEG(20))/COS_DEG(20)) * (pNVM1^.LOWER_CROWD_COR_POS - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR);
+
+

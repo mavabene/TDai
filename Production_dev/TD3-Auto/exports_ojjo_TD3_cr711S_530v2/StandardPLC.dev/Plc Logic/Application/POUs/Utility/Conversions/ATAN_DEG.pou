@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION ATAN_DEG: REAL
+VAR_INPUT
+	VALUE: REAL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+//ATAN_DEG := (180 * ATAN(VALUE)) / 3.14159;
+ATAN_DEG := (180 * ATAN(VALUE)) / Pi;

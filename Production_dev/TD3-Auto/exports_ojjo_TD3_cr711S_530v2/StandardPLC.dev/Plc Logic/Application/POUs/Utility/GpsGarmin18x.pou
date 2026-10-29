@@ -1,0 +1,205 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK GpsGarmin18x
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	xSUCCESS: BOOL;
+	xERROR: BOOL;
+	DEGREES: INT;
+	MINUTES: REAL;
+	RTMP: REAL;
+	LATITUDE: REAL;
+	LONGITUDE: REAL;
+END_VAR
+VAR
+	(* State logic is here. *)
+	LAST_FIX: DWORD := 0;
+	
+	(* SERIAL COMM starts here. *)
+	BUFFER: STRING[255] := '';
+	bOpenCom: BOOL := TRUE;
+	hCom: SysCom.RTS_IEC_HANDLE := SysCom.RTS_INVALID_HANDLE;
+	Result: SysCom.RTS_IEC_RESULT;
+	Result1: SysCom.RTS_IEC_RESULT;
+
+	pByte: POINTER TO BYTE;
+	csComSettings: COM_Settings;
+	COUNT: UDINT;
+	dwRead: UDINT;
+	dwTotal: UDINT;
+	uiReadLength:UINT := 100;//255 - 82 - 3;
+	strRead: STRING[255];
+	
+	(* GPS DECODE starts here. *)
+	COLUMNS: ARRAY [1..25] OF STRING;
+	COLUMN: UINT;
+	
+	COMMAND: STRING[255];
+	COMMAND_REMAIN: STRING[255];
+	UNIDENTIFIED: STRING[255];
+	BUFFER_REMAIN: STRING[255];
+	DOLLAR: INT;
+	DONE: BOOL;
+	LENGTH: INT;
+	CRLF: INT;
+	COMMA: INT;
+	
+	GPGGA_COUNT: UDINT := 0;
+	GPGSA_COUNT: UDINT := 0;
+	GPRMC_COUNT: UDINT := 0;
+	PGRMB_COUNT: UDINT := 0;
+	PGRME_COUNT: UDINT := 0;
+	GPGSV_COUNT: UDINT := 0;
+	PGRMT_COUNT: UDINT := 0;
+	UNIDENTIFIED_COUNT: UDINT := 0;
+	
+	DOLLAR_COUNT: UINT := 0;
+	CRLF_COUNT: UINT := 0;
+	CMD_COUNT: UINT := 0;
+	GARBAGE_COUNT: UINT := 0;
+	TOO_LONG_COUNT: UINT := 0;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+COUNT := COUNT + 1;
+
+IF COUNT < 25 THEN
+	RETURN;
+END_IF
+
+xSUCCESS := FALSE;
+
+IF bOpenCom THEN
+	
+	bOpenCom := FALSE;
+	hCom := SysComOpen(sPort:= SYS_COMPORT1 , pResult:= ADR(Result));
+
+	// Configure the connection
+	csComSettings.byParity := SYS_NOPARITY;
+	csComSettings.byStopBits := SYS_ONESTOPBIT;
+	csComSettings.sPort := SYS_COMPORT1;
+	csComSettings.ulBaudrate := SYS_BR_19200;
+	csComSettings.ulBufferSize := 4;
+	csComSettings.ulTimeout := 10;
+	
+	Result1 := SysComSetSettings(hCom:= hCom, pSettings:= ADR(csComSettings) , pSettingsEx:= 0);
+			
+END_IF
+
+// Read data
+dwRead := SysComRead(hCom:= hCom, pbyBuffer:= ADR(strRead), ulSize:=uiReadLength, ulTimeout:= 10, pResult:= ADR(Result));
+IF dwRead > 0 THEN	//if data received
+	pByte := ADR(strRead) + dwread;
+	pByte^ := 0;
+	dwTotal := dwTotal + dwRead;
+	BUFFER := CONCAT(BUFFER, strRead);
+END_IF
+
+DONE := FALSE;
+
+(* Search through entire buffer... *)
+WHILE NOT DONE DO
+	IF (LENGTH := LEN(BUFFER)) > 0 THEN
+		(* We have data, look for a dollar sign. *)
+		DOLLAR := FIND(STR1 := BUFFER, STR2 := '$$');
+		IF DOLLAR > 0 THEN
+			IF DOLLAR <> 1 THEN
+				// Get rid of everything up to the dollar.
+				BUFFER := RIGHT(BUFFER, LENGTH - (DOLLAR - 1));
+				UNIDENTIFIED := BUFFER;
+				(* Just skip over the garbage at the front of the string. *)
+				GARBAGE_COUNT := GARBAGE_COUNT + 1;
+			END_IF
+			DOLLAR_COUNT := DOLLAR_COUNT + 1;
+			
+			(* See if we have a full command. *)
+			CRLF := FIND(BUFFER, '$R$N');
+			
+			IF CRLF > 0 THEN
+				CRLF_COUNT := CRLF_COUNT + 1;
+			
+				(* We've found our command! *)
+				
+				(* First, copy to handle one command, dropping the leading $$ and trailing $R$N. *)
+				COMMAND := LEFT(BUFFER, CRLF - 1);
+				COMMAND_REMAIN := COMMAND;
+				BUFFER := RIGHT(BUFFER, LEN(BUFFER) - (LEN(COMMAND) + 2));
+				IF LEN(BUFFER) <> 0 THEN
+					BUFFER_REMAIN := BUFFER;
+				END_IF
+
+				COLUMN := 1;
+				WHILE (COMMA := FIND(COMMAND_REMAIN, ',')) > 0 DO
+					COLUMNS[COLUMN] := LEFT(COMMAND_REMAIN, COMMA - 1);
+					COMMAND_REMAIN := RIGHT(COMMAND_REMAIN, LEN(COMMAND_REMAIN) - COMMA);
+					COLUMN := COLUMN + 1;
+					IF COLUMN >= SIZEOF(COLUMNS) THEN
+						BUFFER := '';
+						GARBAGE_COUNT := GARBAGE_COUNT + 1;
+						RETURN;
+					END_IF
+				END_WHILE
+				COLUMNS[COLUMN] := COMMAND_REMAIN;
+				CMD_COUNT := CMD_COUNT + 1;
+				
+				IF COLUMNS[1] = '$$GPGGA' THEN
+					GPGGA_COUNT := GPGGA_COUNT + 1;
+				ELSIF COLUMNS[1] = '$$GPGSA' THEN
+					GPGSA_COUNT := GPGSA_COUNT + 1;
+				ELSIF COLUMNS[1] = '$$GPRMC' THEN
+					GPRMC_COUNT := GPRMC_COUNT + 1;
+					RTMP := TO_REAL(COLUMNS[4]) / 100.0;
+					DEGREES := TRUNC_INT(RTMP);
+					MINUTES := RTMP - TO_REAL(DEGREES);
+					LATITUDE := RTMP + (100.0 * MINUTES) / 60.0;
+					RTMP := TO_REAL(COLUMNS[6]) / 100.0;
+					DEGREES := TRUNC_INT(RTMP);
+					MINUTES := RTMP - TO_REAL(DEGREES);
+					LONGITUDE := RTMP + (100.0 * MINUTES) / 60.0;
+					LAST_FIX := TIME_SECONDS;
+					IF COLUMNS[5] = 'S' THEN
+						LATITUDE := -LATITUDE;
+					END_IF
+					IF COLUMNS[7] = 'W' THEN
+						LONGITUDE := -LONGITUDE;
+					END_IF
+					xSUCCESS := TRUE;
+				ELSIF COLUMNS[1] = '$$PGRMB' THEN
+					PGRMB_COUNT := PGRMB_COUNT + 1;
+				ELSIF COLUMNS[1] = '$$PGRME' THEN
+					PGRME_COUNT := PGRME_COUNT + 1;
+				ELSIF COLUMNS[1] = '$$GPGSV' THEN
+					GPGSV_COUNT := GPGSV_COUNT + 1;
+				ELSIF COLUMNS[1] = '$$PGRMT' THEN
+					PGRMT_COUNT := PGRMT_COUNT + 1;
+				ELSE
+					UNIDENTIFIED_COUNT := UNIDENTIFIED_COUNT + 1;
+					UNIDENTIFIED := COLUMNS[1];
+				END_IF
+			ELSIF LEN(BUFFER) > 82 THEN
+				(* Longest GPS message is 82, if we get there without a terminator we've got garbage. *)
+				TOO_LONG_COUNT := TOO_LONG_COUNT + 1;
+				BUFFER := '';
+				DONE := TRUE;
+			ELSE
+				// Got a $, but no CRLF, so waiting for more.
+				DONE := TRUE;
+			END_IF
+		ELSE
+			(* We've got data, but no command.  Must be garbage, discard. *)
+			GARBAGE_COUNT := GARBAGE_COUNT + 1;
+			BUFFER := '';
+			DONE := TRUE;
+		END_IF;
+	ELSE
+		DONE := TRUE;
+	END_IF
+END_WHILE
+
+IF TIME_SECONDS - LAST_FIX < 30 THEN
+	xERROR := FALSE;
+ELSE
+	xERROR := TRUE;
+END_IF

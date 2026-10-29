@@ -1,0 +1,35 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK canInit
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	CAN_Enable0: ifmRCAN.CAN_Enable;	
+	CAN_Enable1: ifmRCAN.CAN_Enable;	
+	CAN_Enable2: ifmRCAN.CAN_Enable;	
+	CAN_Enable3: ifmRCAN.CAN_Enable;
+	BAUD: ifmDevice.CAN_BAUDRATE;	
+END_VAR
+
+(********************** Implementation ****************************)
+CAN_Enable0(
+	xEnable:= TRUE, 
+	eChannel:= 0, 
+	eBaudrate:= setBaud(CANbus_0.Baudrate)); //ifmDEVICE.CAN_BAUDRATE.KBAUD_250);
+
+CAN_Enable1(
+	xEnable:= TRUE, 
+	eChannel:= 1, 
+	eBaudrate:= setBaud(CANbus_1.Baudrate)); //ifmDEVICE.CAN_BAUDRATE.KBAUD_250);
+	
+CAN_Enable2(
+	xEnable:= TRUE, 
+	eChannel:= 2, 
+	eBaudrate:= setBaud(CANbus_2.Baudrate)); //ifmDEVICE.CAN_BAUDRATE.KBAUD_250);
+
+CAN_Enable3(
+	xEnable:= TRUE, 
+	eChannel:= 3, 
+	eBaudrate:= setBaud(CANbus_3.Baudrate)); //ifmDEVICE.CAN_BAUDRATE.KBAUD_250);

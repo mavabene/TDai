@@ -1,0 +1,149 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK trackStateMachine
+VAR_INPUT
+	RMT: POINTER TO sKartech3B256KA;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	Z_SLIDE_START_POS: REAL;
+	Z_SLIDE_CLEAR: BOOL;
+	GPS_TRACK_MODE_PRE_TARGET_INIT: BOOL := FALSE;
+	
+END_VAR
+(********************** Implementation ****************************)
+(* Track mode is pretty simple.  We basically always want the tracks to be controlled by the main
+	2D joysticks.  To this we add auto-levelling, so we first need to go through a state that clears
+	everything from the ground (mast slide, Z slide, and the two crowds).  Then, we will turn on
+	auto-levelling of the rotator and pitch, and then simply map the remote onto the valve.
+*)
+
+TRACK_MODE_STATE_CHANGE := FALSE;
+
+IF isAutomaticRequested() OR isManualRequested() OR isBumpRequested() OR isNewModeEnabled() THEN
+	(* We've just gone into this mode.  Start from the beginning... *)
+	setTrackModeState(TRACK_STATE_ENTRY);
+	IF isNewModeEnabled() THEN
+		Z_SLIDE_CLEAR := FALSE;
+		TA_STATUS_FLAG := eDataCollection.TA_WASNT_USED;
+		IF TRUSS_COMPLETED THEN
+			PLC_TRANSMIT_6.LAST_CYCLE_TIME := TO_UINT((MSTIME - CYCLE_START_TIME)/1000);
+			CYCLE_START_TIME := MSTIME;
+		END_IF
+	END_IF
+	AUTO_MODE_ADVANCE := FALSE;
+END_IF
+
+IF MACHINE_NO_TOUCH THEN
+	RETURN;
+END_IF
+
+CASE TRACK_STATE OF
+	TRACK_STATE_ENTRY:
+		IF AUTOMATIC AND AUTOMATIC_ALLOWED THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_ENTER_TRACK, 0, 0, -1, -1);
+			
+			setTrackModeState(TRACK_STATE_CLEAR_GROUND);
+			Z_SLIDE_START_POS := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR;
+			//Z_SLIDE_CLEAR := FALSE;
+		ELSE
+			setTrackModeState(TRACK_STATE_NORMAL);
+		END_IF
+	TRACK_STATE_CLEAR_GROUND:
+		(* Wait for the mast slide, Z slide, and both crowds to MOSTLY finish moving. *)
+		IF ABS(AXES[AXIS_Z_SLIDE].LOOP_PID.PERR_ENGR) < 1 THEN
+			Z_SLIDE_CLEAR := TRUE;
+		ELSE
+			IF TRACK_BACK_REQUIRED THEN
+				(* We know we're just out of crimp, so we can just wait for the Z slide to clear by a bit before
+				letting the operator track back. *)
+				IF ABS(AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR - Z_SLIDE_START_POS) > (Z_SLIDE_TRACK_CLEARANCE - 1) THEN
+
+					//IF ABS(AXES[AXIS_Z_SLIDE].LOOP_PID.PERR_ENGR - Z_SLIDE_START_POS) > Z_SLIDE_TRACK_CLEARANCE THEN
+					Z_SLIDE_CLEAR := TRUE;
+				
+				END_IF
+			END_IF
+		END_IF
+		IF (ABS(AXES[AXIS_MAST_SLIDE].LOOP_PID.PERR_ENGR) < 1)
+			AND (ABS(AXES[AXIS_LOWER_CROWD].LOOP_PID.PERR_ENGR) < 1)
+// 			AND (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 1) // not moving tch anymore so don't need to move upper crowd
+			AND Z_SLIDE_CLEAR THEN
+			setTrackModeState(TRACK_STATE_WAIT_DRIVE);
+			TRUSS_COMPLETED := FALSE;
+		ELSIF ABS(AXES[AXIS_MAST_SLIDE].LOOP_PID.PERR_ENGR) >= 1 THEN
+			setWaitingStrings('Mast slide', 'Mast slide');
+		ELSIF ABS(AXES[AXIS_LOWER_CROWD].LOOP_PID.PERR_ENGR) >= 1 THEN
+			setWaitingStrings('Lower crowd', 'Lower crowd');
+		ELSIF ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) >= 1 THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		ELSIF NOT Z_SLIDE_CLEAR THEN
+			setWaitingStrings('Zslide', 'Zslide');
+		END_IF
+	TRACK_STATE_WAIT_DRIVE:
+		(* If a BA has been installed (in crimp mode), we want to wait for the operator
+			to drive the tracks for a couple of seconds to make sure that the operator
+			has time to clear the truss. *)
+		IF NOT TRACK_BACK_REQUIRED THEN
+			setTrackModeState(TRACK_STATE_POSITION_BOOM);
+			TRUSS_BEING_ASSEMBLED := FALSE;
+		ELSIF TRACK_LEFT_TIME > TRACK_BACK_TIME AND TRACK_RIGHT_TIME > TRACK_BACK_TIME THEN
+			setTrackModeState(TRACK_STATE_POSITION_BOOM);
+			TRACK_BACK_REQUIRED := FALSE;
+			TRUSS_BEING_ASSEMBLED := FALSE;
+		ELSE
+			WAITING_ON_STRING := '';
+			setWaitingStrings('Track back', 'Track back');
+		END_IF
+		confirmMonitorStart();
+	TRACK_STATE_POSITION_BOOM:
+		IF (AXES[AXIS_BOOM_LIFT].LOOP_PID.SETTLED = TRUE)
+			AND (AXES[AXIS_JOINT_LIFT].LOOP_PID.SETTLED = TRUE)
+			THEN
+			setTrackModeState(TRACK_STATE_CROWDS_DOWN);
+		ELSIF NOT AXES[AXIS_BOOM_LIFT].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Boom lift', 'Boom lift');
+		ELSIF NOT AXES[AXIS_JOINT_LIFT].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Joint lift', 'Joint lift');
+		END_IF
+	TRACK_STATE_CROWDS_DOWN:
+		IF (ABS(AXES[AXIS_MAST_SLIDE].LOOP_PID.PERR_ENGR) < 1)
+			AND (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE)
+// 			AND (AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR < 1)
+			AND (AXES[AXIS_Z_SLIDE].LOOP_PID.PERR_ENGR < 1) THEN
+			setTrackModeState(TRACK_STATE_NORMAL);
+			GetTAoffsets(FALSE); // reset offsets
+		ELSIF ABS(AXES[AXIS_MAST_SLIDE].LOOP_PID.PERR_ENGR) >= 1 THEN
+			setWaitingStrings('Mast slide', 'Mast slide');
+		ELSIF AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED <> TRUE THEN
+			setWaitingStrings('Lower crowd', 'Lower crowd');
+			// not needed anymore, as we are putting TCH up and using GPS to navigate
+// 		ELSIF NOT AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+// 			setWaitingStrings('Upper crowd', 'Upper crowd');
+		ELSIF NOT AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Z slide', 'Z slide');
+		END_IF
+		IF TRACK_BACK_REQUIRED THEN
+			confirmMonitorStart();
+		END_IF
+	TRACK_STATE_NORMAL:
+		(* Now just sit here while the operator runs the tracks.  Since we want operator input,
+			flash the green light. *)
+		confirmMonitorStart();
+		(* Track Assist Auto Mode Advance *)
+		IF 	SET_HMI_BOOLS[TA_AUTO_MODE_ADVANCE] AND
+			GPS_TRACK_ASSIST_ACTIVE AND
+			(GPS_AXES[GPS_X].FILTERED_TARGET_POSITION < 16) AND
+			(GPS_AXES[GPS_X].FILTERED_TARGET_POSITION > 10) AND
+			ABS(td3_1.AXES[AXIS_TRACK_LEFT].OUTPUT.MAGNITUDE < TRACK_AUTO_MODE_ADVANCE_TRIGGER) AND
+			ABS(td3_1.AXES[AXIS_TRACK_RIGHT].OUTPUT.MAGNITUDE < TRACK_AUTO_MODE_ADVANCE_TRIGGER) AND
+			GpsTargetInRangeIndication()
+			THEN
+			GetTAoffsets(TRUE);
+			AUTO_MODE_ADVANCE := TRUE;
+			MODE_CHANGE_REQUEST := TRUE;
+		END_IF
+		
+END_CASE
+

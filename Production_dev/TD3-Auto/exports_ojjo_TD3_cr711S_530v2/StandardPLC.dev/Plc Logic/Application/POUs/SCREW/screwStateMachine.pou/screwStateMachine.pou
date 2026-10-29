@@ -1,0 +1,1054 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK screwStateMachine
+VAR_INPUT
+	RMT: POINTER TO sKartech3B256KA;
+END_VAR
+VAR
+	CONFIRM_EARLY: BOOL := FALSE;
+	RETRACT_START_TIME: REAL;
+
+	ROTATOR_MONITOR: settledForWithin;
+	ROTATOR_SETTLED: BOOL;
+	
+	UPPER_CROWD_RETRACT: REAL;
+	LOWER_CROWD_RETRACT: REAL;
+	MAST_SLIDE_RETRACT: REAL;
+	MAST_SLIDE_AT_GROUND: REAL;
+	LOWER_CROWD_AT_GROUND: REAL;
+	UPPER_CROWD_SETTLE_START: DWORD;
+	
+	TARGET_UP_START: DWORD;
+	
+	DRIVE_TIME_START: REAL;
+	DELAY_TIME_START: REAL;
+	
+	DRILL_REVERSE_SETTLED: REAL;
+	DRILL_REVERSE_HOLDING: REAL;
+	UC_LAST_STATE: eTrapezoidStates;
+
+	RELIEVE_SPOILS_PRESSURE_FROM: eScrewStates;
+	LC_START_AFTER_CLEAR: REAL := 0;
+	LC_ADVANCE_AFTER_CLEAR: REAL := 0;
+	
+	FWP_FIRST_GPS_ATTEMPT: BOOL := TRUE;
+	FWP_SECOND_GPS_ATTEMPT: BOOL := TRUE;
+	GPS_FWP_AUTOTARGET_TIMER: TON;
+	FIRST_IN_LEVEL: BOOL := TRUE;
+	FWP_ADJUST_Z_WITH_ZSLIDE: BOOL := FALSE;
+	//FWP_LC_TO_ZSLIDE_TRANSITION: REAL := 4;
+	FWP_LC_TO_ZSLIDE_TRANSITION: REAL := 1; // height above LOWER_CROWD_AT_WP where LC to Z slide transition occurs, allow for truss cap to be assembled
+	//TRANSITION_TO_CRIMP_MODIFICATION_FACTOR: REAL := 0.9;
+	WAS_SCREW_DRIVE: BOOL := FALSE;
+	MANUAL_TO_AUTO_TIMER: TON;
+	MANUAL_TO_AUTO_PT: TIME;
+	MANUAL_TO_AUTO_HORN: USINT; // Number of times for horn to honk
+	PRE_LOAD_COMPENSATION: TON;
+	DRIVE_ASSIST_HAMMER: BOOL := FALSE;
+END_VAR
+(********************** Implementation ****************************)
+(* Run the normal monitoring function of the state.  The idea is that this
+	gets called once every scan, near the top of the main program (PLC_PRG).
+	All of the actuator code gets called below this.  This will allow typical sequences like this:
+
+	1) We confirm that we want to change to a new state.
+	2) The new state starts a motion that takes time to complete.
+	3) The motion completion causes another state change.
+
+	This will result in 1) above being done here.  Then this state logic will exit,
+	and this will let the actuator code run.  That will detect the new state, and will
+	result in 2) above being done there.  Then, the scan will exit.  On the next scan,
+	this code runs again, and the motion will be in progress and we can monitor for
+	completion here.
+
+	State changes should always use the setState function.  A change in state needs to be
+	flagged to the actuator programs that run after, so you don't want to change state without
+	having the corresponding "changed" flag set!
+
+*)
+
+(* Always clear the state changed flag on entry!! *)
+SCREW_MODE_STATE_CHANGE := FALSE;
+SCREW_MODE_PAUSED_CHANGE := FALSE;
+
+IF isAutomaticRequested() OR isManualRequested() OR isBumpRequested() OR isNewModeEnabled() THEN
+	(* We've switched from auto to manual or vice versa, or have just gone into this mode.
+		Start from the beginning in any of these cases. *)
+	IF WAS_SCREW_DRIVE THEN
+		// 2 honks per second
+		MANUAL_TO_AUTO_HORN := 2 * TO_USINT(pNVM4^.HMI_SINTS[SCREW_DRIVE_MAN_AUTO_DELAY]);
+		hornRequest(MANUAL_TO_AUTO_HORN, T#300MS, T#200MS);
+		IF isManualRequested() THEN
+			SCREW_DRIVE_COMPLETE_REASON := eDataCollection.SCREW_DRIVE_ENDED_BY_GOING_MANUAL;
+		END_IF
+	END_IF
+	SCREW_STATE := SCREW_STATE_ENTRY;
+	f2MonitorStop();
+END_IF
+
+IF isNewModeEnabled() THEN
+	
+	// debug
+	TestVar1 := 1111;
+	TestVar2 := 2222;
+	TestVar3 := 3333;
+	//TestVar6 := FALSE;
+	
+	WAS_SCREW_DRIVE := FALSE;
+
+	(* We are coming into screw mode from RWP.  Latch the position of all axes that will be moved after
+		locating the workpoint! *)
+	// These are for normal array trusses; mast slide moves down to located the ground, lower crowd moves to
+	//	drive the screw.
+	MAST_SLIDE_AT_WP := AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR;
+	LOWER_CROWD_AT_WP := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+
+	// Used when rotator is moved during screw drive mode, we need to get back afterwards.
+	Z_SLIDE_AT_WP := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR; 
+	X_SLIDE_AT_WP := AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;
+	BOOM_SWING_AT_WP := AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR;
+	YAW_AT_WP := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR;
+	
+	// Informational for HMI.
+	DRIVE_WP_HEIGHT := ROTATOR_HEIGHT_MINIMUM + Z_SLIDE_AT_WP;
+	// if eager operator didn't go to RWP locate_wp because x was close enough
+	SetYawSquareToTargetHeading();
+	
+	TRUSS_BEING_ASSEMBLED := FALSE;
+	
+	// Run any calcs related to rotator motion after WP location.
+	lowWpCalcs();
+	//nxt3lmCalcs();
+END_IF
+
+IF isScrewDriveStates(SCREW_STATE) THEN
+	DRIVE_TIME := (TIME_SECONDS_FLOAT - DRIVE_TIME_START);
+	// When we are driving a screw, check the machine roll and pitch to confirm everything is still copasetic.
+	IF NOT isContinueAllowed() THEN
+		// Message was put up by the "allowed" function, just honk the horn here.
+		hornRequest(3, T#500MS, T#100MS);
+		RETURN; 
+	END_IF
+END_IF
+
+IF MACHINE_NO_TOUCH THEN
+	RETURN;
+END_IF
+
+CASE SCREW_STATE OF
+	SCREW_STATE_ENTRY:
+		(* Entry just checks manual/auto and man/auto screw drive delay then immediately transitions. *)
+		IF AUTOMATIC AND AUTOMATIC_ALLOWED THEN
+			IF WAS_SCREW_DRIVE THEN
+				// Convert seconds to TIME
+				MANUAL_TO_AUTO_TIMER(IN := TRUE, PT := (TO_TIME(TO_INT(pNVM4^.HMI_SINTS[SCREW_DRIVE_MAN_AUTO_DELAY] * T#1S))));
+				IF MANUAL_TO_AUTO_TIMER.Q THEN
+					MANUAL_TO_AUTO_TIMER(IN := FALSE, PT :=  (TO_TIME(TO_INT(pNVM4^.HMI_SINTS[SCREW_DRIVE_MAN_AUTO_DELAY] * T#1S))));
+					WAS_SCREW_DRIVE := FALSE; 
+				END_IF
+			ELSIF TRUSS_BEING_ASSEMBLED THEN
+				setScrewModeState(SCREW_STATE_ASSEMBLE);
+			ELSE
+				setCycletimeData(eCycleSteps.CYCLE_STEP_ENTER_SCREW, 0, 0, -1, -1);
+// 				setScrewModeState(SCREW_STATE_TARGET_UP); we keep tch up now, so this step not needed
+				setScrewModeState(SCREW_STATE_SELECT_OPERATION);
+				TARGET_UP_START := MSTIME;
+				IF CYCLE_TIME_START <> 0.0 THEN
+					PLC_TRANSMIT_1.LAST_CYCLE_TIME := TIME_SECONDS_FLOAT - CYCLE_TIME_START;
+				END_IF
+				CYCLE_TIME_START := TIME_SECONDS_FLOAT;	
+			END_IF
+		ELSE
+			setScrewModeState(SCREW_STATE_MANUAL);
+		END_IF
+	SCREW_STATE_MANUAL:
+		(* Manual controls. This delegates everything to the actuator function blocks. *)
+		;
+	SCREW_STATE_TARGET_UP:
+		IF MSTIME - TARGET_UP_START > TARGET_PLATE_TIME_MS THEN
+			setScrewModeState(SCREW_STATE_SELECT_OPERATION);
+		END_IF
+	SCREW_STATE_SELECT_OPERATION:
+		(* Latch the values we need... *)
+		// if trying to use the pnezD code and it is not valid, wait for operators to notice warning light and change source
+		// this ensures operators are aware if the remote is setting screw parameters
+		setScrewParameters(); 
+		(* ...and then proceed to next state. *)
+		setScrewModeState(SCREW_STATE_PREPARE_TO_LOAD);
+		setCycletimeData(eCycleSteps.CYCLE_STEP_PREPARE_LOAD, 0, 0, -1, TRUSS_TYPE_LATCH);
+	SCREW_STATE_PREPARE_TO_LOAD:
+		ScrewStatePrepareToLoad();
+	SCREW_STATE_INITIAL_ROTATE:
+		ScrewStateInitialRotate();
+		AUTO_MODE_ADVANCE := FALSE;
+	SCREW_STATE_LOAD_SCREW:
+		ScrewStateLoadScrew();
+	SCREW_STATE_MAST_TO_TARGET:
+		ScrewStateMastToTarget();
+	SCREW_STATE_NXT_TL_ADJUST:
+		ScrewStateNxtTlAdjust();
+	SCREW_STATE_POSITION_MAST_SLIDE:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_POSITION_MAST_SLIDE THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_POSITION_MAST_SLIDE, 0, 0, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+		END_IF 
+	
+		(* We just let the operator use the manual controls to locate the ground. *)
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			PRELOAD_COMPLETE := FALSE;
+			PRELOAD_PLUMB_MAST := FALSE;
+			setScrewModeState(SCREW_STATE_PRELOAD_COMPLIANCE);
+		ELSE
+			setWaitingStrings('Operator', 'Operator');
+		END_IF
+	SCREW_STATE_PRELOAD_COMPLIANCE:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_PRELOAD_COMPLIANCE THEN
+			IF pNVM4^.HMI_BOOLS[AUTO_PRELOAD_ON] THEN
+				setCycletimeData(eCycleSteps.CYCLE_STEP_PRELOAD_COMPLIANCE, 0, 0, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+			END_IF 
+		END_IF
+		
+		// Start screw drive immediately if we aren't using the automated compliance preload, or at the
+		//	completion of it if we are.
+		IF isPauseRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+		 
+		IF NOT SCREW_MODE_PAUSED THEN
+			// time out if mast lean is taking too long
+			PRE_LOAD_COMPENSATION(IN := PRELOAD_COMPLETE, PT := T#10S);	
+			IF  (
+					PRELOAD_COMPLETE AND PRELOAD_PLUMB_MAST AND 
+					(	
+							((ABS(AXES[AXIS_X_SLIDE].FEEDBACK.VELOCITY_ENGR) < 0.03) AND (ABS(AXES[AXIS_PITCH].FEEDBACK.VELOCITY_ENGR) < 0.03)) 
+						OR 
+							(ABS(CORRECTED_MAST_PITCH - SCREW_PARAMETERS_CURRENT.NS_PITCH) < 0.5)
+						OR
+							(isNXTmotorThirdLeg_perLatch()) //AND (ABS(CORRECTED_MAST_PITCH - SCREW_PARAMETERS_CURRENT.THIRD_LEG_VERT_ANGLE) < 1.0))				
+						OR 
+							PRE_LOAD_COMPENSATION.Q
+					) 
+				)
+				OR
+					(PRELOAD_COMPLETE AND NOT PRELOAD_PLUMB_MAST )
+				OR 
+					(NOT pNVM4^.HMI_BOOLS[AUTO_PRELOAD_ON])
+				THEN
+				PRE_LOAD_COMPENSATION(IN := FALSE, PT := T#10S);
+				IF NOT HARD_SOIL_DETECTED THEN
+					// Don't extend the screw if we are setup for soft soil.
+					setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+				ELSE
+					setScrewModeState(SCREW_STATE_DRILL_EXTEND);
+				END_IF
+				DRIVE_TIME_START := TIME_SECONDS_FLOAT;
+				SCREW_EMBEDDED_VISUAL := FALSE;
+				
+				(* Initialization for embedment reduction algorithm. *)
+				FURTHEST_EXTENT := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+				CURRENT_EXTENT := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+				EMBED_REDUCTION_DETECTED := FALSE;
+				EMBEDMENT_REDUCTION := 0;
+				HAMMER_DISTANCE := 0;
+				// Force the hammer state here to prevent strange state entry in operateHammer.
+				HAMMER_STATE := 0;
+				
+				(* Increment the truss number here. *)
+				pNVM1^.SCREW_NUMBER := pNVM1^.SCREW_NUMBER + 1;
+			ELSE
+				// Auto-preload is being used.  Let the mast slide do its work.
+				IF PRELOAD_COMPLETE THEN
+					WAITING_ON_STRING := 'Mast tilt correction';
+					setWaitingStrings('Mast tilt correction', 'Mast tilt');
+				ELSE
+					WAITING_ON_STRING := 'Mast slide compliance takeup';
+					setWaitingStrings('Mast slide compliance takeup', 'Mast slide');
+				END_IF
+			END_IF
+		ELSE
+			(* Pause comes here, no action. *)
+			setWaitingStrings('Operator', 'Operator');
+		END_IF
+		
+		IF isContinueRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+
+	SCREW_STATE_DRILL_EXTEND:
+		// Extend the bit to its normal drilling position.
+		IF (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+			setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+		ELSIF NOT (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+	SCREW_STATE_DRIVE_SCREW:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_DRIVE_SCREW THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_DRIVE_SCREW, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+			WAS_SCREW_DRIVE := TRUE;
+			SCREW_DRIVE_COMPLETE_REASON := eDataCollection.NEW_SCREW_DRIVE; // reset for new drive
+		END_IF
+		
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			prepareForReturn();
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			(* Screw driving comes here!  The only way to exit this state is to have the
+				lower crowd settled at its final destination position. *)
+			IF SCREW_DRIVE_DONE THEN
+				DELAY_TIME_START := TIME_SECONDS_FLOAT;
+				setScrewModeState(SCREW_STATE_UNLOAD_SCREW);
+				WAS_SCREW_DRIVE := FALSE;
+				SCREW_DRIVE_COMPLETE_REASON := eDataCollection.SCREW_DRIVE_ENDED_NORMALLY; // normal completion
+			ELSIF UR_STALL_DETECTED = 1 AND (DRILL_SETUP_SOFT_SOIL <> 1) THEN
+				// Do not run UR stall detect if drill setup has bit inside screw!
+				UC_LAST_STATE := HOLD;
+				prepareForReturn();
+				DRILL_REVERSE_SETTLED := TIME_SECONDS_FLOAT;
+				setScrewModeState(SCREW_STATE_DRILL_REVERSE);
+			ELSIF pNVM4^.SOFT_SOIL_ENABLED
+				AND LC_STALL_DETECTED > 0
+				AND
+					(
+					(NOT UPPER_CROWD_DONE_REVEALING AND LC_STALL_COUNT < pNVM4^.SS_MAX_STALLS) OR
+					(UPPER_CROWD_DONE_REVEALING AND LC_REVEAL_STALL_COUNT < pNVM4^.SS_REVEAL_MAX_STALLS)	
+					)
+				THEN
+
+				(* Monitor the number of times the LC has stalled. *)
+				IF UPPER_CROWD_DONE_REVEALING THEN
+					LC_REVEAL_STALL_COUNT := LC_REVEAL_STALL_COUNT + 1;
+				ELSE
+					LC_STALL_COUNT := LC_STALL_COUNT + 1;
+				END_IF
+				
+				// We understand there are two main reasons for lower crowd stalls:
+				//	1) Hole too small in hard soil.
+				//	2) Lack of spoils removal in hard soil.
+				//
+				// When we are running soft soil algorithm, we give this logic x (eg 3) chances to clear the spoils in the
+				//	course of a drive.  If this doesn't get us to the end, we speculate that:
+				//	1) Ground is hard, AND
+				//	2) Lower crowd is stalled, AND
+				//	3) Upper rotary has NOT stalled, because that would be running the UR stall code.
+				//
+				// When we've had enough stalls, we simply want to exit here, then the next pass of the controls
+				//	will trigger the logic immediately below here.
+				IF NOT (LC_STALL_COUNT >= pNVM4^.SS_MAX_STALLS OR LC_REVEAL_STALL_COUNT >= pNVM4^.SS_REVEAL_MAX_STALLS) THEN
+					// We'll give additional retries if the lower crowd advances more than the amount of spoils we attempt to clear.
+					LC_START_AFTER_CLEAR := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+
+					prepareForReturn();
+					setScrewModeState(SCREW_STATE_CLEAR_SPOILS);
+				END_IF
+			ELSIF pNVM4^.SOFT_SOIL_ENABLED AND
+				DRILL_SETUP_SOFT_SOIL = 1 AND
+				(HARD_SOIL_DETECTED OR LC_STALL_COUNT >= pNVM4^.SS_MAX_STALLS OR LC_REVEAL_STALL_COUNT >= pNVM4^.SS_REVEAL_MAX_STALLS) THEN
+
+				// We've detected hard soils by multiple LC stalls rather than by UR pressure.
+				IF NOT HARD_SOIL_DETECTED THEN
+					HARD_SOIL_DETECTED := TRUE;
+				END_IF
+
+				// We've seen high pressure on the upper rotary, or we've seen multiple LC stalls.  We want to get
+				//	into aggressive drilling poisition.  This will bring put the drill bit into its "drive" orientation,
+				//	and for a winged bit bring the wings out of the screw by backing up the lower crowd.
+				prepareForReturn();
+				setScrewModeState(SCREW_STATE_DRILL_TO_SCREW_END);
+			ELSE
+				setWaitingStrings('Screw drive', 'Screw drive');
+			END_IF
+// *** never true - we always are using GPS ***
+// 			// If we are allowing the operator to confirm the embedment depth through visual means...
+// 			IF pNVM3^.MANUAL_DEPTH AND NOT trussUsingGPS_alwaysTrue() AND
+// 				(
+// 					(AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR <= CROWD_EMBED_ENDPOINT) OR
+// 					 (
+// 						(pNVM3^.EMBED_REDUCTION_ENABLED OR
+// 						(pNVM4^.HMI_BOOLS[SCREW_PARAMS_SOURCE_IS_PNEZD] AND 
+// 						 SCREW_PARAMETERS_CURRENT.IE_MIN_HAMMER <> NA AND 
+// 						 SCREW_PARAMETERS_CURRENT.IE_MIN_EMBED <> NA)) 
+// 				
+// 						AND
+// 						(
+// 							//DRIVE_CURRENT_EMBEDMENT >= SCREW_PARAMETERS_CURRENT.IE_MIN_EMBED AND
+// 							EMBED_REDUCTION_DETECTED AND NOT
+// 							(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+// 						) 
+// 					)
+// 				)
+// 				THEN
+// 				// Look for the operator to press the Aux button to confirm depth...
+// 				setWaitingStrings('Aux button', 'Aux button');
+// 				f2MonitorStart();
+// 				IF f2Requested() THEN
+// 					// This will alert the lower crowd that we are done, and that logic will complete, causing us
+// 					//	to transition out of screw drive the next time through this code.
+// 					SCREW_EMBEDDED_VISUAL := TRUE;
+// 				END_IF
+// 			END_IF
+		END_IF
+
+	SCREW_STATE_CLEAR_SPOILS:
+		// Just going to put the UC in the "clear spoils position" momentarily.  This happens in soft soil only!
+		//	Upon exiting this state, the drill will immediately return to either SS creating a plug, or SS retracted
+		//	before the end of screw drive. 
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_CLEAR_SPOILS THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_CLEAR_SPOILS, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+		END_IF
+		
+		IF AXES[AXIS_UPPER_CROWD].PROFILER.STATE = eTrapezoidStates.HOLD AND UPPER_CROWD_SETTLE_START = 0 THEN
+			UPPER_CROWD_SETTLE_START := MSTIME;
+		ELSE
+			UPPER_CROWD_SETTLE_START := 0;
+		END_IF
+
+		IF AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED
+			OR (
+				AXES[AXIS_UPPER_CROWD].PROFILER.STATE = eTrapezoidStates.HOLD
+				AND ((MSTIME - UPPER_CROWD_SETTLE_START) > 2000)
+			)
+			THEN
+			// With typical settings, we are attempting to drill outside of the bottom of the screw.  This should normally
+			//	eject spoils and allow the upper crowd to reach its target position.
+			//
+			// However, this can also cause stells of the upper crowd coming down for at least a couple of reasons:
+			//
+			//	1) Bottom of the screw is on a rock or rock shelf, and this requires the hammer to get through.  We don't
+			//		allow the hammer when the bit is inside the screw.
+			//	2) Bottom of the screw has collapsed, and the drill bit cannot get out.
+			//
+			// In any case, if the upper crowd isn't positioning, we are not just clearing spoils, something else is
+			//	happening.  Chalk up one retry on the clear spoils, and return to screw drive.
+			//
+			(*
+			LC_ADVANCE_AFTER_CLEAR := LC_START_AFTER_CLEAR - AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+			IF LC_ADVANCE_AFTER_CLEAR > pNVM4^.SS_CLEAR_SPOILS THEN
+				// Don't count this retry, we are making good progress.
+				IF UPPER_CROWD_DONE_REVEALING THEN
+					LC_REVEAL_STALL_COUNT := LC_REVEAL_STALL_COUNT - 1;
+				ELSE
+					LC_STALL_COUNT := LC_STALL_COUNT - 1;
+				END_IF
+			ELSIF LC_ADVANCE_AFTER_CLEAR < (pNVM4^.SS_CLEAR_SPOILS / 3) THEN
+				IF UPPER_CROWD_DONE_REVEALING THEN
+					LC_REVEAL_STALL_COUNT := REVEAL_MAX_STALLS;
+				ELSE
+					LC_STALL_COUNT := SOFT_SOIL_MAX_STALLS;
+				END_IF
+			END_IF
+			*)
+			setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+		ELSIF UR_STALL_DETECTED = 1 THEN
+			// Drill has stopped functioning, probably due to spoils buildup in screw.  Reverse UC with air on
+			//	to allow spoils to clear before proceeding.
+			RELIEVE_SPOILS_PRESSURE_FROM := SCREW_STATE_CLEAR_SPOILS;
+			setScrewModeState(SCREW_STATE_RELIEVE_SPOILS_PRESSURE);
+		ELSIF NOT AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+	SCREW_STATE_DRILL_TO_SCREW_END:
+		// We've detected hard soil, so we want to run the drill down until the tip of the bit is aligned with the tip
+		//	of the screw.
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_DRILL_TO_SCREW_END THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_DRILL_TO_SCREW_END, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+		END_IF
+		
+		// @TODO: no exit to assist here.  It is too difficult to track everything required to do the restart.
+		IF AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			setScrewModeState(SCREW_STATE_LC_REWIND);
+		ELSIF UR_STALL_DETECTED = 1 THEN
+			// Drill has stopped functioning, probably due to spoils buildup in screw.  Reverse UC with air on
+			//	to allow spoils to clear before proceeding.
+			RELIEVE_SPOILS_PRESSURE_FROM := SCREW_STATE_DRILL_TO_SCREW_END;
+			setScrewModeState(SCREW_STATE_RELIEVE_SPOILS_PRESSURE);
+		ELSIF NOT AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+	SCREW_STATE_RELIEVE_SPOILS_PRESSURE:
+		// This gets called when we stall the UR with the bit inside the screw.  We just pull the UC up briefly to attempt
+		//	to get the drill moving again.
+
+		// Waiting for the UC to move up a bit to clear spoils.  We will just bounce back and forth between this and DRILL_TO_SCREW_END
+		//	as the drill stalls and unstalls and we work our way down the packed screw.
+		IF AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			IF RELIEVE_SPOILS_PRESSURE_FROM = SCREW_STATE_DRILL_TO_SCREW_END THEN
+				setScrewModeState(SCREW_STATE_DRILL_TO_SCREW_END);
+			ELSIF RELIEVE_SPOILS_PRESSURE_FROM = SCREW_STATE_CLEAR_SPOILS THEN
+				setScrewModeState(SCREW_STATE_CLEAR_SPOILS);
+			ELSE
+				setScrewModeState(SCREW_STATE_LC_REWIND);
+			END_IF
+		ELSIF NOT AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+	SCREW_STATE_LC_REWIND:
+		// Here we just want to wait until lower crowd is pulled back enough to reveal the wings on the bit.
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_LC_REWIND THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_LC_REWIND, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+		END_IF
+
+		// @TODO: confirm this works.  It has not been tested at all.
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		END_IF
+
+		// @TODO: no exit to assist here.  It is too difficult to track everything required to do the restart.
+		IF AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED AND
+			AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED
+			THEN
+			// We are no longer setup for soft soil drilling.
+			DRILL_SETUP_SOFT_SOIL := 0;
+			setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+		ELSIF UR_STALL_DETECTED = 1 THEN
+			RELIEVE_SPOILS_PRESSURE_FROM := SCREW_STATE_LC_REWIND;
+			setScrewModeState(SCREW_STATE_RELIEVE_SPOILS_PRESSURE);
+		ELSIF NOT AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Lower crowd', 'Lower crowd');
+		ELSIF NOT AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED THEN
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+	SCREW_STATE_DRILL_REVERSE:
+		// We want to reverse the drill by moving the upper crowd.
+
+		// Operator can always exit to ASSIST. 
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			IF UR_STALL_DETECTED = 0 THEN
+				// Drill is spinning freely, move on to start running the drill down.
+				setScrewModeState(SCREW_STATE_DRILL_AHEAD);
+			ELSE
+				IF UC_LAST_STATE <> HOLD AND AXES[AXIS_UPPER_CROWD].PROFILER.STATE = HOLD THEN
+					// Recording when we enter hold state.
+					DRILL_REVERSE_HOLDING := TIME_SECONDS_FLOAT;
+				END_IF
+				UC_LAST_STATE := AXES[AXIS_UPPER_CROWD].PROFILER.STATE;
+				
+				IF (
+						(
+						ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5 AND
+						TIME_SECONDS_FLOAT > DRILL_REVERSE_SETTLED + 5
+						)
+						OR
+						(
+						// Profiler has completed and time has passed
+						AXES[AXIS_UPPER_CROWD].PROFILER.STATE = HOLD AND
+						TIME_SECONDS_FLOAT > DRILL_REVERSE_HOLDING + 5
+						)
+					) THEN
+					// If the upper crowd stops moving, but the drill is not spinning, we are still
+					//	stalled.  Flick the hammer .
+					BRIEF_HAMMER_START := TIME_SECONDS_FLOAT;
+					setScrewModeState(SCREW_STATE_BRIEF_HAMMER);
+				ELSIF NOT (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+					// We want the timeout to be from the time the upper crowd finally settles, so continually
+					//	reset the start time when it has not settled.
+					DRILL_REVERSE_SETTLED := TIME_SECONDS_FLOAT;
+					setWaitingStrings('Upper crowd', 'Upper crowd');
+				END_IF
+			END_IF
+		END_IF
+	SCREW_STATE_BRIEF_HAMMER:
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			IF (TIME_SECONDS_FLOAT - BRIEF_HAMMER_START) > 5 THEN
+				// Every time we hammer, re-attempt to reverse the drill.
+				setScrewModeState(SCREW_STATE_DRILL_REVERSE);
+			ELSIF UR_STALL_DETECTED = 0 THEN
+				// Drill is spinning freely, move on to start running the drill down.
+				setScrewModeState(SCREW_STATE_DRILL_AHEAD);
+			END_IF
+		END_IF
+	SCREW_STATE_DRILL_AHEAD:
+		// Just drilling ahead slowly as far as we can.
+
+		// Operator can always exit to ASSIST. 
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			IF UR_STALL_DETECTED = 1 THEN
+				// Stalled again, ask the operator for assistance.
+				setScrewModeState(SCREW_STATE_DRILL_REVERSE);
+			ELSE
+				IF (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+					// If the upper crowd stops moving, we have completed drilling ahead.  Return the drill to its nominal
+					//	drilling position.
+					setScrewModeState(SCREW_STATE_DRILL_RETURN);
+				ELSIF NOT (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+					setWaitingStrings('Upper crowd', 'Upper crowd');
+				END_IF
+			END_IF
+		END_IF
+	SCREW_STATE_DRILL_RETURN:
+		// We want to return to normal drilling configuration.
+
+		// Operator can always exit to ASSIST. 
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			(* The operator has requested going to manual assist for screw drive. *)
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			IF (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+				setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+			ELSIF NOT (ABS(AXES[AXIS_UPPER_CROWD].LOOP_PID.PERR_ENGR) < 0.5) THEN
+				setWaitingStrings('Upper crowd', 'Upper crowd');
+			END_IF
+		END_IF
+	SCREW_STATE_DRIVE_ASSIST:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_DRIVE_ASSIST THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_DRIVE_ASSIST, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+		END_IF
+
+		setWaitingStrings('Operator', 'Operator');
+
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			setScrewModeState(SCREW_STATE_RETURN_TO_DRIVE);
+		END_IF
+		
+	SCREW_STATE_RETURN_TO_DRIVE:
+		(* In case the upper crowd stalls going back to position, the operator needs to be able to return to DRIVE ASSIST. *)
+		confirmMonitorStart();
+		IF confirmRequested() THEN
+			setScrewModeState(SCREW_STATE_DRIVE_ASSIST);
+		ELSE
+			IF isPauseRequested() THEN
+				(* Just change the pause/continue state here *)
+				setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+			END_IF
+	
+			(* Wait for the upper crowd to return to the correct position. *)
+			IF AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED = TRUE THEN
+				setScrewModeState(SCREW_STATE_DRIVE_SCREW);
+			ELSIF NOT (AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Upper crowd', 'Upper crowd');
+			END_IF
+			
+			IF isContinueRequested() THEN
+				(* Just change the pause/continue state here *)
+				setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+			END_IF
+		END_IF
+
+	SCREW_STATE_UNLOAD_SCREW:
+		(* We have completed driving the screw, but the screw is still engaged with
+			the chuck and the drill is in the screw. *)
+		IF (TIME_SECONDS_FLOAT - DELAY_TIME_START > 0.5) AND UPPER_CROWD_DONE_REVEALING THEN
+			MAST_SLIDE_AT_GROUND := AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR;
+			LOWER_CROWD_AT_GROUND := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+			setCycletimeData(eCycleSteps.CYCLE_STEP_RETRACT_AFTER_DRIVE, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+			setScrewModeState(SCREW_STATE_RETRACT_AFTER_DRIVE);
+			RETRACT_START_TIME := TIME_SECONDS_FLOAT;
+		ELSE
+			setWaitingStrings('Upper crowd', 'Upper crowd');
+		END_IF
+		
+		
+	SCREW_STATE_RETRACT_AFTER_DRIVE:
+		IF isPauseRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+
+		IF NOT SCREW_MODE_PAUSED THEN
+			(* Before we move the rotator, we want to make sure the mandrel is out of the screw
+				and the chuck is disengaged from the screw.  So wait for the chuck to clear by waiting
+				for the lower crowd and/or mast slide to go up a small amount.  Then, we need the tip of the mandrel
+				to be out of the screw, which means that the combination of lower crowd, upper crowd
+				and mast slide upward motion is greater than the length of the screw. *)
+			MAST_SLIDE_RETRACT := AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR - MAST_SLIDE_AT_GROUND;
+			LOWER_CROWD_RETRACT := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR - LOWER_CROWD_AT_GROUND;
+			UPPER_CROWD_RETRACT := AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR - UPPER_CROWD_DRIVE_END_POS;
+			(* This time must be matched to the mast slide delay time in this state!!! Add a small amount of time
+				to make sure the mast slide has started. *)
+			IF ((TIME_SECONDS_FLOAT - RETRACT_START_TIME) > (MAST_SLIDE_RETRACT_DELAY_SEC + 0.5))
+				//AND(ABS(AXES[AXIS_MAST_SLIDE].LoopPI.PERR_ENGR) < 5)
+				(* Mast foot has to get off the ground before rotator runs. *)
+				AND (
+					AXES[AXIS_MAST_SLIDE].LOOP_PID.SETTLED OR
+					//((AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR - MAST_SLIDE_AT_GROUND) > 50 ) //(CENTRALIZER_WIDTH / 2.0) * ABS(SIN_DEG(AXES[AXIS_ROTATOR].FEEDBACK.POSITION_ENGR)))
+					((AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR - MAST_SLIDE_AT_GROUND) > 70 ) // TODO - try 60 after confirm desired effect - mast foot clears ground 
+					)
+				AND (LOWER_CROWD_RETRACT + MAST_SLIDE_RETRACT > 10.0)
+				
+				AND ((UPPER_CROWD_RETRACT + LOWER_CROWD_RETRACT + MAST_SLIDE_RETRACT) > (SCREW_PARAMETERS_CURRENT.SCREW_LENGTH + pNVM1^.DRILL_BIT_DRIVE_PROTRUSION)) //** screw params**
+				//AND ((UPPER_CROWD_RETRACT + LOWER_CROWD_RETRACT + MAST_SLIDE_RETRACT) > (SCREW_LENGTH_CM + pNVM1^.DRILL_BIT_DRIVE_PROTRUSION))
+				
+				THEN
+					IF NOT isNXTmotorThirdLeg_perLatch() OR AXES[AXIS_MAST_SLIDE].LOOP_PID.SETTLED OR ((AXES[AXIS_MAST_SLIDE].FEEDBACK.POSITION_ENGR - MAST_SLIDE_AT_GROUND) > 100 ) THEN 
+						setScrewModeState(SCREW_STATE_CONFIRM_MAST_CLEAR);					
+					END_IF
+					
+			(* This gets the mast slide close enough to the workpoint position so rotator motion doesn't drag centralizer. *)
+			ELSIF NOT (AXES[AXIS_MAST_SLIDE].LOOP_PID.SETTLED) THEN
+				setWaitingStrings('Mast slide', 'Mast slide');
+			ELSIF NOT (LOWER_CROWD_RETRACT + MAST_SLIDE_RETRACT > 10.0) THEN
+				setWaitingStrings('Chuck back from screw', 'Chuck back');
+				
+			ELSIF NOT ((UPPER_CROWD_RETRACT + LOWER_CROWD_RETRACT + MAST_SLIDE_RETRACT) > (SCREW_PARAMETERS_CURRENT.SCREW_LENGTH + pNVM1^.DRILL_BIT_DRIVE_PROTRUSION)) THEN 
+				setWaitingStrings('Mandrel tip from ground', 'Mandrel tip');
+			END_IF
+		ELSE
+			(* Pause comes here, no action. *)
+			;
+		END_IF
+
+		IF isContinueRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+
+	SCREW_STATE_CONFIRM_MAST_CLEAR:
+		(* Operator confirms that the mast is clear to rotate. *)
+		setScrewModeState(SCREW_STATE_MAST_TO_VERTICAL);
+		setCycletimeData(eCycleSteps.CYCLE_STEP_MAST_TO_VERTICAL, 0, pNVM1^.SCREW_NUMBER, SCREW_SIDE_LATCH, TRUSS_TYPE_LATCH);
+	SCREW_STATE_MAST_TO_VERTICAL:
+		IF isPauseRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+		 
+		IF NOT SCREW_MODE_PAUSED THEN
+			(* Wait for the axes to complete moving to the load position. *)
+			IF (AXES[AXIS_ROTATOR].LOOP_PID.SETTLED = TRUE)
+				AND (AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED = TRUE)
+				AND (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) AND
+				(
+					( NOT isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH))
+					OR
+					(
+						// Several axes are used on the NXT 3 legged motor truss EW screws:
+						//	- Pitch only moves on NS screw
+						//	- X slide and boom swing only move on EW screws
+						//	- Z slide movoes both on NS and EW screws
+						// After we drive the left screw, we need to precision locate because we are going
+						//	into crimp mode.
+						(AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED) AND // OR SCREW_SIDE_LATCH <> eScrewSide.SCREW_LEFT) AND
+						(AXES[AXIS_YAW].LOOP_PID.SETTLED) AND // OR SCREW_SIDE_LATCH <> eScrewSide.SCREW_LEFT) AND
+						(AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED) AND // OR SCREW_SIDE_LATCH <> eScrewSide.SCREW_LEFT) AND
+						(AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED)  // OR SCREW_SIDE_LATCH <> eScrewSide.SCREW_LEFT)
+					)
+				)
+				AND
+				( 
+					NOT HMI_BOOLS_VALUES[PRELOAD_AUTO_MAST_LEAN_COMPENSATION] OR 
+					(
+						(AXES[AXIS_PITCH].LOOP_PID.SETTLED AND
+						AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED)
+					)
+				)
+				THEN
+				IF 	(WP_HEIGHT_LATCH = WP_NONE) 
+					OR
+					(AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED = TRUE AND
+						AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) 
+				THEN
+					(* Normal workpoint turns the rotator only, doesn't orient it in Y and Z. *)
+					IF SCREW_SIDE_LATCH = SCREW_LEFT THEN
+						(* Always go to assemble mode after left screw completes. *)
+						setScrewModeState(SCREW_STATE_CLEAR_TRUSS_CAP);
+						FIRST_IN_LEVEL := TRUE;
+					ELSE
+						setScrewModeState(SCREW_STATE_SELECT_OPERATION);
+					END_IF
+// 				ELSE
+// 					(* Low or High workpoint orients as well as turns the rotator. *)
+// 					IF (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED = TRUE AND
+// 						AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE)
+// 						THEN
+// 							IF SCREW_SIDE_LATCH = SCREW_LEFT THEN
+// 								(* Always go to assemble mode after left screw completes. *)
+// 								setScrewModeState(SCREW_STATE_CLEAR_TRUSS_CAP);
+// 								FIRST_IN_LEVEL := TRUE;
+// 							ELSE
+// 								setScrewModeState(SCREW_STATE_SELECT_OPERATION);
+// 							END_IF
+// 					END_IF
+				END_IF
+			ELSIF NOT (AXES[AXIS_ROTATOR].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Rotator', 'Rotator');
+			ELSIF NOT (AXES[AXIS_UPPER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Upper crowd', 'Upper crowd');
+			ELSIF NOT (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Lower crowd', 'Lower crowd');
+			ELSIF NOT (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED = TRUE) AND ( NOT isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) THEN
+				setWaitingStrings('Boom swing', 'Boom swing');
+			ELSIF NOT (AXES[AXIS_YAW].LOOP_PID.SETTLED = TRUE) AND ( NOT isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) THEN
+				setWaitingStrings('Yaw', 'Yaw');
+			ELSIF NOT (AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED = TRUE) AND ( NOT isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) THEN
+				setWaitingStrings('X slide', 'X slide');
+			ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) AND ( NOT isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) THEN
+				setWaitingStrings('Z slide', 'Z slide');
+			END_IF
+		ELSE
+			(* Pause comes here, no action. *)
+			;
+		END_IF
+
+		IF isContinueRequested() THEN
+			(* Just change the pause/continue state here *)
+			setPaused(NOT SCREW_MODE_PAUSED, ADR(SCREW_MODE_PAUSED), ADR(SCREW_MODE_PAUSED_CHANGE));
+		END_IF
+		
+	// raise lower crowd to allow room for truss cap and legs to be assembled
+	SCREW_STATE_CLEAR_TRUSS_CAP:
+		 
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+		// one of these should be moving, just wait until they get to destination
+		ELSIF SettledWithin(ADR(AXES[AXIS_LOWER_CROWD].LOOP_PID), 1) AND 
+			( 	(SettledWithin(ADR(AXES[AXIS_Z_SLIDE].LOOP_PID), 1)) 
+				OR
+			  	(pNVM3^.PRODUCT_INSTALL <> eProductType.PRODUCT_ATI) 
+				OR 
+				(TRUSS_TYPE_LATCH <> eTrussType.TRUSS_TYPE_CENTER_STRUCTURE)
+			)
+			THEN
+			//(SettledWithin(ADR(AXES[AXIS_Z_SLIDE].LOOP_PID), 1) OR NOT isNxt3lmSideLeg() ) THEN
+			 //SettledWithin(ADR(AXES[AXIS_Z_SLIDE].LOOP_PID), 1) THEN
+			setScrewModeState(SCREW_STATE_ASSEMBLE);
+			FIRST_IN_LEVEL := TRUE;
+		ELSIF NOT (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Lower crowd', 'Lower crowd');
+		//ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) AND isNxt3lmSideLeg() THEN
+		ELSIF (pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI) AND (TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) 
+			AND NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Z slide', 'Z slide');
+		END_IF
+		
+	(* operator has truss cap and legs attached and brings truss cap down to connect with legs*)
+	SCREW_STATE_ASSEMBLE:
+		(* When we go into crimp mode, we want to be sure we don't come down on the BA holder
+			when we enter track mode.
+			We want the wp below the target gps point - Z Slide should be at Z_SLIDE_AT_WP, LC below LC at WP *)
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+			TRACK_BACK_REQUIRED := TRUE;
+			FWP_FIRST_GPS_ATTEMPT := TRUE;
+			setWaitingStrings('Operator', 'Operator');
+			TRUSS_BEING_ASSEMBLED := TRUE;
+		END_IF
+		confirmMonitorStart();
+		
+		// operator has lowered LC to near WP, advance to FWP
+		IF 	(AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR <= (LOWER_CROWD_AT_WP - 1))
+			OR
+				confirmRequested() 
+			THEN
+				setScrewModeState(SCREW_STATE_FWP);
+		END_IF
+
+		// Always start from the idle state!
+		xyzTrueMotion_01.changeState(eXyzTrueMotionStates.IDLE);
+
+	// manually find WP with x-slide, z-slide, yaw, boom swing
+	SCREW_STATE_FWP:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_LOCATE_FWP THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_LOCATE_FWP, 0, 0, -1, -1);
+			
+			// Always start from the idle state!
+			xyzTrueMotion_01.changeState(eXyzTrueMotionStates.IDLE);
+			FWP_FIRST_GPS_ATTEMPT := TRUE;
+			FWP_SECOND_GPS_ATTEMPT := TRUE;
+		ELSIF FIRST_IN_LEVEL AND NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS  THEN
+			FWP_FIRST_GPS_ATTEMPT := TRUE;
+		END_IF
+		(* When we go into crimp mode, we want to be sure we don't come down on the BA holder
+			when we enter track mode.  This is done in assemble state, but if there is a direct path
+			to crimp state we need to have this here! *)
+		//TRACK_BACK_REQUIRED := TRUE;
+		setWaitingStrings('Operator', 'Operator');
+		
+		(* Move on to crimp mode, where no motion is allowed. *)
+		confirmMonitorStart();
+		
+		// use of GPS automation (forces confirmation WP is on target before going to crimp):
+	
+		f2MonitorStart();
+		
+		IF FWP_SECOND_GPS_ATTEMPT AND NOT FWP_FIRST_GPS_ATTEMPT THEN
+			FWP_SECOND_GPS_ATTEMPT := FALSE;
+			FIRST_IN_LEVEL := TRUE;
+			setScrewModeState(SCREW_STATE_GPS_FWP_AUTOTARGET_GPS);
+		END_IF
+		// confirm on target before going to crimp, unless we are using laser for y and z, then just confirm heading and x
+		IF confirmRequested() AND NOT FWP_FIRST_GPS_ATTEMPT THEN
+			//stricter for laser mount trusses because they set the baseline (laser) for the row
+			IF (GpsAutoAxesNearTarget(TRUE, FALSE, 
+					0.9 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR])) 
+				THEN
+				setScrewModeState(SCREW_STATE_CRIMP);
+				GPS_TRUSS_CYCLE := GPS_NO_MOVE; // ensure gps axes are turned off		
+			END_IF
+		ELSIF f2Requested() THEN
+			// disallow autotarget if truss cap not assembled
+			//IF (NOT GpsAutoAxesNearTarget(FALSE, FALSE, 1, 7)) THEN
+			
+			IF FWP_FIRST_GPS_ATTEMPT OR NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN
+				IF 		((AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR < Z_SLIDE_AT_WP) 
+					OR 	(GPS_AXES[GPS_Z].OFFSET > 5)) 
+					OR 
+						// for ati motor LC is used to position z and z slide moved up, so check that lc is low enough that truss cap must be in legs
+						(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE AND //(ABS(GPS_AXES[GPS_Z].OFFSET) < 15)) THEN 
+						// z slide will not move up in ati center, so ensure lc only moves up, not down: 
+						(AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR <= (LOWER_CROWD_AT_WP + 15 - Z_SLIDE_ATI_CS_CLEARANCE)))
+				THEN
+					FWP_FIRST_GPS_ATTEMPT := FALSE;
+					FIRST_IN_LEVEL := TRUE;
+					IF pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_ATI AND TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE THEN
+						setScrewModeState(SCREW_STATE_GPS_FWP_AUTOTARGET_GPS); // don't adjust LC position, just go to GPS target
+					ELSE
+						setScrewModeState(SCREW_STATE_GPS_FWP_RETURN_TO_WP);
+					END_IF
+				ELSE
+					GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+				END_IF
+			// adjust toward current gps target
+			ELSIF (GPS_AXES[GPS_Z].OFFSET > -5) THEN
+				setScrewModeState(SCREW_STATE_GPS_FWP_AUTOTARGET_GPS);
+				FIRST_IN_LEVEL := TRUE;	
+			END_IF
+		// if not using gps on this truss this is the non-automated behavior
+		ELSE
+			IF confirmRequested() THEN
+				setScrewModeState(SCREW_STATE_CRIMP);
+			END_IF
+		END_IF
+		(* Levers should provide true motion. *)
+		xyzTrueMotion_01();
+	
+	// go to rwp known gps target positions first
+	SCREW_STATE_GPS_FWP_RETURN_TO_WP:
+	IF NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN
+// 		IF SettledWithin(ADR(AXES[AXIS_LOWER_CROWD].LOOP_PID), 0.7) THEN
+		IF AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED THEN
+			setScrewModeState(SCREW_STATE_FWP);
+			FIRST_IN_LEVEL := TRUE;
+		END_IF
+	ELSE
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+			GPS_TRUSS_CYCLE := GPS_SLOW_TRAPEZOID_MOVE;
+			GPS_AUTOTARGET_ACTUATE := TRUE;
+			Z_SLIDE_POS_ENTERING_RETURN_TO_WP := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR;
+			LOWER_CROWD_POS_ENTERING_RETURN_TO_WP := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+		ELSE
+			GPS_FWP_AUTOTARGET_TIMER(IN := NOT GPS_AUTOTARGET_ACTUATE, PT := T#7S);
+			GPS_AUTOTARGET_ACTUATE := FALSE;
+			IF 	GPS_FWP_AUTOTARGET_TIMER.Q OR 
+				(GpsAxesSettled(0) AND 
+				(SettledWithin(ADR(AXES[AXIS_LOWER_CROWD].LOOP_PID), 0.7))) THEN
+// 			IF (GPS_FWP_AUTOTARGET_TIMER.Q OR GpsAxesSettled(0)) AND (ABS(AXES[AXIS_LOWER_CROWD].LOOP_PID.PERR_ENGR) < 0.5)  THEN
+// 				IF 
+// 						GpsAutoAxesNearTarget(TRUE, TRUE, 2, 0.4 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR])
+// 					OR
+// 					(
+// 						NOT trussHasLaserMount()
+// 						AND GpsAxisNearTarget(GPS_HEADING, FALSE, FALSE, TRUE, 0.6 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR])
+// 						AND GpsAxisNearTarget(GPS_X, FALSE, TRUE, TRUE, 0.6 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR])
+// 					) 
+// 					OR
+// 					(
+// 						GpsAutoAxesNearTarget_TLM(FALSE, FALSE, 0.4) AND NOT HMI_BOOLS_VALUES[FWP_Z_AUTOTARGET]  
+// 					)
+// 					THEN
+// 					GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+// 					SetYawSquareToTargetHeading();
+// 					setScrewModeState(SCREW_STATE_FWP);
+// 				ELSE
+					FIRST_IN_LEVEL := TRUE;
+					setScrewModeState(SCREW_STATE_GPS_FWP_AUTOTARGET_GPS);	
+					
+			ELSIF  NOT (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Lower crowd', 'Lower crowd');
+			ELSIF NOT (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Boom Swing', 'Boom Swing');
+			ELSIF  NOT (AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('X slide', 'X slide');
+			ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Z slide', 'Z slide');
+			ELSIF NOT (AXES[AXIS_YAW].LOOP_PID.SETTLED = TRUE) THEN
+				setWaitingStrings('Yaw', 'Yaw');
+			END_IF
+		END_IF
+	END_IF	
+	// move toward current gps target
+	SCREW_STATE_GPS_FWP_AUTOTARGET_GPS:
+		IF FIRST_IN_LEVEL THEN
+			FIRST_IN_LEVEL := FALSE;
+			GPS_TRUSS_CYCLE := GPS_FINE_SLOW_FEEDBACK_MOVE;
+			GPS_AUTOTARGET_ACTUATE := TRUE;
+		ELSE
+			GPS_FWP_AUTOTARGET_TIMER(IN := NOT GPS_AUTOTARGET_ACTUATE, PT := T#8S);
+			GPS_AUTOTARGET_ACTUATE := FALSE;
+			// stop moving if target found or this move times out
+			
+			IF  (GpsAutoAxesNearTarget(FALSE, TRUE, 0.4 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR]))
+				OR
+				(GpsAutoAxesNearTarget_TLM(FALSE, TRUE, 0.4 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR]) AND NOT HMI_BOOLS_VALUES[FWP_Z_AUTOTARGET] )
+				OR
+				(
+					GPS_FWP_AUTOTARGET_TIMER.Q 
+					AND 
+					(GpsAutoAxesNearTarget(FALSE, TRUE,  0.7 * pNVM4^.GPS_GENERAL_SETTINGS[GPS_TRANSITION_TO_CRIMP_FACTOR]) 
+					OR 
+					// if autotargeting taking too long for some reason
+					confirmRequested() ) 
+				)
+			THEN
+				GPS_TRUSS_CYCLE := GPS_NO_MOVE;
+				SetYawSquareToTargetHeading();
+				setScrewModeState(SCREW_STATE_FWP);
+			ELSE	
+				IF NOT (AXES[AXIS_BOOM_SWING].LOOP_PID.SETTLED = TRUE) THEN
+					setWaitingStrings('Boom swing', 'Boom swing');
+				ELSIF NOT (AXES[AXIS_YAW].LOOP_PID.SETTLED = TRUE) THEN
+					setWaitingStrings('Yaw', 'Yaw');
+				ELSIF NOT (AXES[AXIS_X_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+					setWaitingStrings('X slide', 'X slide');
+				ELSIF NOT (AXES[AXIS_Z_SLIDE].LOOP_PID.SETTLED = TRUE) THEN
+					setWaitingStrings('Z slide', 'Z slide');
+				END_IF
+			END_IF
+		END_IF
+		
+	SCREW_STATE_CRIMP:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_CRIMP THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_CRIMP, 0, 0, -1, -1);
+		END_IF
+		// The crimper buttons are enabled in this state.
+		
+		(* No exit from here except mode switch!  Indicate to the operator they need to take action. *)
+		confirmMonitorStart();
+		IF TRUSS_COMPLETED THEN
+			TRACK_BACK_REQUIRED := TRUE;
+		END_IF
+	SCREW_STATE_LC_CLEAR:
+		IF CYCLE_STEP <> eCycleSteps.CYCLE_STEP_LC_CLEAR THEN
+			setCycletimeData(eCycleSteps.CYCLE_STEP_LC_CLEAR, 0, 0, -1, -1);
+		END_IF
+		IF (AXES[AXIS_LOWER_CROWD].LOOP_PID.SETTLED = TRUE) THEN
+			setWaitingStrings('Operator', 'Operator');
+			// Nothing for the code to do here.  We hit the confirm monitor here to give indication to the operator the move is done. 
+			confirmMonitorStart();
+		ELSE
+			setWaitingStrings('Lower Crowd', 'Lower Crowd');
+		END_IF
+		;
+	SCREW_STATE_EXIT:
+		(* Any cleanup when exiting this state comes here. *)
+		;
+END_CASE

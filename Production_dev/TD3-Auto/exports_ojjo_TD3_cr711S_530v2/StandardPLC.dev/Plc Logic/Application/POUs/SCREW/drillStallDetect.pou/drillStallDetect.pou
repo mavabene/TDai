@@ -1,0 +1,198 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK drillStallDetect
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+
+VAR CONSTANT
+	// We need a buffer for upper rotary pressure readings that handles the longest amount of time that
+	//	for which the user configures the pressure monitoring for stall.
+	UR_STALL_WINDOW: INT := TO_INT(CONTROL_FREQ_HZ * UR_STALL_WINDOW_MAX);
+END_VAR
+
+VAR
+	UR_STALL_P: ARRAY[1..UR_STALL_WINDOW] OF REAL;
+	UR_STALL_P_HEAD: INT;
+	UR_STALL_P_FILLED: BOOL := FALSE;
+	// Number of readings on which the UR stall detection is based.
+	UR_STALL_P_SAMPLES: INT;
+	// Maximum pressure within the current window.
+	UR_STALL_P_MAX: REAL;
+	// Number of values in the window that are within a short distance of the max pressure value.
+	UR_STALL_P_FRACTION: REAL;
+	
+	UR_STALL_P_AVG: REAL;
+	
+	UR_STALL_V: ARRAY[1..UR_STALL_WINDOW] OF REAL;
+	UR_STALL_V_HEAD: INT;
+	UR_STALL_V_FILLED: BOOL := FALSE;
+	// Number of readings on which the UR stall detection is based.
+	UR_STALL_V_SAMPLES: INT;
+	// Minimum velocity within the current window.
+	UR_STALL_V_MIN: REAL;
+	// Number of values in the window that are within a short distance of the max pressure value.
+	UR_STALL_V_FRACTION: REAL;
+	
+	DEBUG_TIMER: TON;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+(******* UPPER ROTARY STALL CODE HERE *********************)
+IF pNVM3^.UR_STALL_ENABLED THEN
+	IF isScrewModeStateChange() AND (SCREW_STATE = SCREW_STATE_LOAD_SCREW) THEN
+		// Every time we start a new screw drive operation, reset these state variables.
+		UR_STALL_RECOVERY := FALSE;
+		UR_STALL_FURTHEST_EXTENT := LARGEST_REAL;
+	ELSIF isScrewModeStateChange() AND
+		(
+			SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+			SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+			SCREW_STATE = SCREW_STATE_DRILL_REVERSE OR
+			SCREW_STATE = SCREW_STATE_BRIEF_HAMMER OR
+			SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE OR
+			SCREW_STATE = SCREW_STATE_CLEAR_SPOILS OR
+			SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END
+		) THEN
+		// Entering screw drive, start logic looking for upper rotary stall.  First, reset dynamic information.
+		UR_STALL_P_HEAD := 1;
+		UR_STALL_P_FILLED := FALSE;
+		UR_STALL_P_FRACTION := 0;
+	
+		UR_STALL_V_HEAD := 1;
+		UR_STALL_V_FILLED := FALSE;
+		UR_STALL_V_FRACTION := 0;
+		
+		// Only respect this when a new screw drive starts.
+		IF SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+			SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+			SCREW_STATE = SCREW_STATE_CLEAR_SPOILS OR
+			SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END
+			THEN
+			UR_STALL_P_SAMPLES := TO_INT(pNVM3^.UR_STALL_P_TIME * CONTROL_FREQ_HZ);
+			UR_STALL_V_SAMPLES := TO_INT(pNVM3^.UR_STALL_V_TIME * CONTROL_FREQ_HZ);
+		ELSE
+			// Don't use the LC velocity constraint when retracting the drill.
+			UR_STALL_P_SAMPLES := TO_INT(1 * CONTROL_FREQ_HZ);
+		END_IF
+		
+		// We don't know if the UR is stalled here.
+		UR_STALL_DETECTED := -1;
+	ELSIF (
+			SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+			SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+			SCREW_STATE = SCREW_STATE_CLEAR_SPOILS OR
+			SCREW_STATE = SCREW_STATE_DRILL_TO_SCREW_END
+		) THEN
+		// When we are in screw drive state, always check to see if the upper rotary has stalled.  This
+		//	is a pretty tight constraint on the high rail, as we want to limit the false positives as much
+		//	as possible.  We give up some additional dry-firing of the hammer as a result.
+		withinAdaptiveBand(
+			DATA := UR_STALL_P, 
+			CURRENT := UPPER_ROTARY_PRESSURE,
+			pHEAD := ADR(UR_STALL_P_HEAD), 
+			pFILLED := ADR(UR_STALL_P_FILLED), 
+			SAMPLES := UR_STALL_P_SAMPLES, 
+			pMIN_OR_MAX_OR_AVG := ADR(UR_STALL_P_MAX), 
+			pFRACTION_IN_BAND := ADR(UR_STALL_P_FRACTION), 
+			BAND_SIZE := pNVM3^.UR_STALL_P_BAND, 
+			LIM_USED := FALSE, 
+			LIM := 0.0, 
+			FUNC := eAdaptiveBandFunc.FUNCTION_MAX);
+			
+		withinAdaptiveBand(
+			DATA := UR_STALL_V,
+			CURRENT := -AXES[AXIS_LOWER_CROWD].FEEDBACK.VELOCITY_ENGR,
+			pHEAD := ADR(UR_STALL_V_HEAD), 
+			pFILLED := ADR(UR_STALL_V_FILLED), 
+			SAMPLES := UR_STALL_V_SAMPLES, 
+			pMIN_OR_MAX_OR_AVG := ADR(UR_STALL_V_MIN), 
+			pFRACTION_IN_BAND := ADR(UR_STALL_V_FRACTION), 
+			BAND_SIZE := pNVM3^.UR_STALL_V_BAND, 
+			LIM_USED := TRUE,
+			LIM := 0.0,
+			FUNC := eAdaptiveBandFunc.FUNCTION_MIN);
+
+// 		UR_MOTOR_WARNING := FALSE;
+		DEBUG_TIMER(IN := DEBUG_UR_STALL_DETECTED, PT := T#5S);
+		IF DEBUG_UR_STALL_DETECTED THEN
+			
+			initiateDrillStallRecovery();
+			IF DEBUG_TIMER.Q THEN
+				DEBUG_UR_STALL_DETECTED := FALSE;
+			END_IF
+			
+		ELSIF (NOT UR_STALL_P_FILLED) OR (NOT UR_STALL_V_FILLED) THEN
+			UR_STALL_DETECTED := -1;
+		ELSIF (UR_STALL_P_FILLED AND
+			UR_STALL_V_FILLED AND
+			//(UR_STALL_P_FRACTION >= TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+			(UR_STALL_P_FRACTION >= 0.95) AND //TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+
+			(UR_STALL_P_MAX >= pNVM3^.UR_STALL_P_MIN) AND
+			//(UR_STALL_V_FRACTION >= TO_INT(0.95 * UR_STALL_V_SAMPLES)) AND
+			(UR_STALL_V_FRACTION >= 0.95) AND //TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+			(UR_STALL_V_MIN <= pNVM3^.UR_STALL_V_MAX))
+			THEN
+			initiateDrillStallRecovery();
+// 		ELSIF (UR_STALL_P_FILLED AND
+// 			//(UR_STALL_P_FRACTION >= TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+// 			(UR_STALL_P_FRACTION >= 0.95) AND //TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+// 			(UR_STALL_P_MAX >= STALL_MINIMUM_PRESSURE AND UR_STALL_P_MAX < pNVM3^.UR_STALL_P_MIN))
+// 			THEN
+// 			// We've hit a rail on pressure, but the rail is lower than the level required by the
+// 			//	stall detect code.  This typically means that the upper rotary motor is blown, and has
+// 			//	enough bypass flow to prevent the compensator from pressuring up, or the compensator is
+// 			//	set wrong.
+// // 			UR_MOTOR_WARNING := TRUE;
+		ELSE
+			UR_STALL_DETECTED := 0;
+// 			UR_MOTOR_WARNING := FALSE;
+		END_IF
+	ELSIF
+		(
+			SCREW_STATE = SCREW_STATE_DRILL_REVERSE OR
+			SCREW_STATE = SCREW_STATE_BRIEF_HAMMER OR
+			SCREW_STATE = SCREW_STATE_RELIEVE_SPOILS_PRESSURE
+		) THEN
+		// When retracting the drill after a stall, we want to see if the drill is spinning freely.  We have a pretty
+		//	wide pressure window for this, we just need the max to be well below the estimated pressure compensator
+		//	setting on the UR valve.
+		withinAdaptiveBand(
+			DATA := UR_STALL_P, 
+			CURRENT := UPPER_ROTARY_PRESSURE,
+			pHEAD := ADR(UR_STALL_P_HEAD), 
+			pFILLED := ADR(UR_STALL_P_FILLED), 
+			SAMPLES := UR_STALL_P_SAMPLES, 
+			pMIN_OR_MAX_OR_AVG := ADR(UR_STALL_P_MAX), 
+			pFRACTION_IN_BAND := ADR(UR_STALL_P_FRACTION), 
+			BAND_SIZE := 1500, 
+			LIM_USED := FALSE, 
+			LIM := 0.0, 
+			FUNC := eAdaptiveBandFunc.FUNCTION_MAX);
+			
+		IF NOT UR_STALL_P_FILLED THEN
+			UR_STALL_DETECTED := -1;
+		ELSIF (UR_STALL_P_FILLED AND
+			//(UR_STALL_P_SAMPLES_NEAR_RAIL >= TO_INT(0.95 * UR_STALL_P_SAMPLES)) AND
+			(UR_STALL_P_MAX >= 1500)
+			)
+			THEN
+			// In this case, what we call "stalled" is actually "not freely spinning".  In this machine state,
+			//	we want to continue pulling the upper crowd out until the drill meets very little resistance.  This
+			//	will give us full speed on the drill before we start attacking the hard ground below that caused us
+			//	to stall in the first place.
+			UR_STALL_DETECTED := 1;
+// 			UR_MOTOR_WARNING := TRUE;
+		ELSE
+			UR_STALL_DETECTED := 0;
+// 			UR_MOTOR_WARNING := FALSE;
+		END_IF
+	ELSE
+		UR_STALL_DETECTED := -1;
+	END_IF
+ELSE
+	UR_STALL_DETECTED := -1;
+END_IF

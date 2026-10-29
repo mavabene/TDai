@@ -1,0 +1,38 @@
+
+(********************** Declaration ****************************)
+FUNCTION ddt : REAL // returns new dx given desired rate of change and last x
+
+VAR_INPUT
+	TARGET_POS: REAL;
+	TARGET_LAST: REAL; // IF initiating autofeedback move, send current position, else send last targeted position
+	dxdt: REAL; // eg vel, or dv/dt acc in dx/sec
+END_VAR
+VAR
+	LOOP_MAX_DELTA_P_PER_CYCLE: REAL;
+	
+	// testing var's
+	CONTROL_FREQ_HZ: REAL := 50;
+	
+END_VAR
+
+(********************** Implementation ****************************)
+
+// maps desired max velocity to max position change / cycle
+LOOP_MAX_DELTA_P_PER_CYCLE := dxdt / CONTROL_FREQ_HZ; // GPS_VEL deg / sec * 0.020 sec / cycle = GPS_LOOP_MAX deg / this cycle
+	
+IF ABS( TARGET_POS - TARGET_LAST ) > LOOP_MAX_DELTA_P_PER_CYCLE THEN	
+	IF ( TARGET_POS - TARGET_LAST ) < 0 THEN // moving in (-) direction
+		ddt := -1 * LOOP_MAX_DELTA_P_PER_CYCLE + TARGET_LAST; // limit position change to control velocity
+	ELSE
+		ddt := LOOP_MAX_DELTA_P_PER_CYCLE + TARGET_LAST;
+	END_IF
+ELSE
+	ddt := TARGET_POS;
+END_IF
+
+(* 
+notes: 
+1) can be used to limit acceleration or jerk by layering upon itself
+2) "To meet the criteria of a comfortable driving experience, the limit value for acceleration might reasonably be set to under 0.9 m/s2, and that of jerk to 0.6 m/s3"
+  - Toward a Comfortable Driving Experience FOR a Self-Driving Shuttle Bus
+  *)

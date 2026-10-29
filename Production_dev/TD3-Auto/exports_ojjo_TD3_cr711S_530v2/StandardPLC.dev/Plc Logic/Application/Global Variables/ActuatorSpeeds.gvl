@@ -1,0 +1,53 @@
+
+(********************** Declaration ****************************)
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+	BOOM_SWING_VEL: REAL := 3.0;				(* Degrees/second *)
+	BOOM_SWING_ACCEL: REAL := 3.0;				(* Degrees/second/second *)
+
+	X_SLIDE_VEL: REAL := 4.0;
+	X_SLIDE_ACCEL: REAL := 4.0;
+
+	PITCH_VEL: REAL := 4.0;						(* Degrees/second *)
+	PITCH_ACCEL: REAL := 2.0;					(* Degrees/second/second *)
+	
+	YAW_VEL: REAL := 3.0;						(* Degrees/second *)
+	YAW_ACCEL: REAL := 3.0;						(* Degrees/second/second *)
+
+	MAST_AND_Z_SLIDE_VEL: REAL := 0;			(* cm/second *)
+	MAST_AND_Z_SLIDE_ACCEL: REAL := 0;			(* cm/second/second *)
+	
+	Z_SLIDE_VEL: REAL := 4.0;
+	Z_SLIDE_ACCEL: REAL := 4.0;
+
+	(* Mast slide and Z slide accel/velocity should be the same, so when they are
+		moving at the same time you don't risk hitting the ground!! *)
+	MAST_SLIDE_VEL: REAL := 0;
+	MAST_SLIDE_ACCEL: REAL := 0;
+
+	ROTATOR_VEL: REAL := 5;						(* Degrees/second *)
+	ROTATOR_ACCEL: REAL := 5.0;					(* Degrees/second/second *)
+
+	LOWER_CROWD_VEL: REAL := 25.0;				(* cm/second *)
+	LOWER_CROWD_ACCEL: REAL := 25.0;			(* cm/second/second *)
+
+	LOWER_ROTARY_VEL: REAL := 1.0;
+	LOWER_ROTARY_ACCEL: REAL := 1.0;
+
+	UPPER_CROWD_VEL: REAL := 30.0;				(* cm/second *)
+	UPPER_CROWD_ACCEL: REAL := 30.0;			(* cm/second/second *)
+	UPPER_CROWD_VEL_MAX: REAL := 45.0;			(* Pulling the drill out of the ground Kiewit sees as cycle time limiter. *)
+	UPPER_CROWD_ACCEL_MAX: REAL := 90.0;
+	
+	BOOM_LIFT_VEL: REAL := 1.5;
+	BOOM_LIFT_ACCEL: REAL := 2;
+	JOINT_LIFT_VEL: REAL := 2;
+	JOINT_LIFT_ACCEL: REAL := 2;
+	
+	// gps track assist self level
+	PENDULUM_VEL: REAL := 0.5;
+	PENDULUM_ACCEL: REAL := 0.5;
+	
+	TRACK_AUTO_MODE_ADVANCE_TRIGGER: REAL := 60; // speed at which auto mode advance can activate
+
+END_VAR

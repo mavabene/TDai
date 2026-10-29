@@ -1,0 +1,33 @@
+
+(********************** Declaration ****************************)
+FUNCTION StringToCharArray : BOOL
+
+VAR_INPUT
+	StringIn		: STRING;
+	PtrByteArray	: POINTER TO BYTE;
+	ByteArraySize	: INT;	(* The string length and byte array length must be the same. *)
+END_VAR
+
+VAR
+	PtrByteIn		: POINTER TO BYTE;
+	PtrByteOut		: POINTER TO BYTE;
+	IndexString		: INT;
+END_VAR
+(********************** Implementation ****************************)
+(* Initialize the byte pointers to the beginning of the string and the beginning of the
+	byte array. *)
+PtrByteIn := ADR(StringIn);
+PtrByteOut := PtrByteArray;
+
+(* Convert the entire string, one character at a time. *)
+FOR IndexString := 0 TO (ByteArraySize - 1) DO
+	(* Set the value of the byte array to the value of the string character. *)
+	PtrByteOut^ := PtrByteIn^;
+
+	(* Increment both pointers by one byte. *)
+	PtrByteOut := PtrByteOut + 1;
+	PtrByteIn := PtrByteIn + 1;
+END_FOR;
+
+(* Always return TRUE. *)
+StringToCharArray := TRUE;

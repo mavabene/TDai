@@ -1,0 +1,127 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK JOINT_LIFT
+VAR_INPUT
+	INIT: BOOL;
+	pJOINT_LIFT: POINTER TO sAxis;
+	TIME_US: DWORD;END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	TARGET_POS: REAL;
+	OUTPUT_MAX: REAL;
+	
+	CLOSED_LOOP: BOOL := FALSE;
+	PROFILER: BOOL := FALSE;
+	JOYSTICK_01: joystickToJogOutput;
+
+	VEL: REAL;
+	ACCEL: REAL;
+END_VAR
+(********************** Implementation ****************************)
+(* Operate the boom lifting axis based on the top-level state of the machine.  Some details:
+	1) The joint lift is mainly for shipping.  We just go to a position in track mode.
+*)
+
+VALID := TRUE;
+CLOSED_LOOP := FALSE;
+PROFILER := FALSE;
+
+// This is the one and only place that the A/B encoder values should be referenced!
+IF pNVM4^.HMI_SINTS[JOINT_LIFT_ENCODER_TYPE] = 1 THEN
+	// Siko WV5800
+	JOINT_LIFT_ENCODER_STATUS := JOINT_LIFT_ENCODER_B.CANopenState;
+	JOINT_LIFT_POS_RAW := JOINT_LIFT_POS_RAW_B;
+ELSE
+	// Default to IFM RM7012
+	JOINT_LIFT_ENCODER_STATUS := JOINT_LIFT_ENCODER_A.CANopenState;
+	JOINT_LIFT_POS_RAW := JOINT_LIFT_POS_RAW_A;
+END_IF
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pJOINT_LIFT^.SETPOINT.POSITION_ENGR);
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	VALID := (JOINT_LIFT_ENCODER_STATUS = 5);
+	POSITION_RAW := TO_DINT(JOINT_LIFT_POS_RAW);
+END_IF
+
+Sampled(ADR(pJOINT_LIFT^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pJOINT_LIFT);
+	RETURN;
+END_IF
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	pJOINT_LIFT^.OUTPUT.MAGNITUDE := 0;
+	pJOINT_LIFT^.OUTPUT.POSITIVE := FALSE;
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND
+	((MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_POSITION_BOOM)
+	// Removed to give the machine more workpoint height.
+	// OR (MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL)
+	) THEN
+	(* When we track from position to position, reorient the joint lift to where we operate. *)
+	IF isTrackModeStateChange() OR isRWPModeStateChange() OR isContinueRequested() THEN
+		TrapezoidStart(ADR(pJOINT_LIFT^.PROFILER), ADR(pJOINT_LIFT^.SETPOINT), TIME_US, pJOINT_LIFT^.FEEDBACK,
+			JOINT_LIFT_TRACK_POS, JOINT_LIFT_VEL, JOINT_LIFT_ACCEL);
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pJOINT_LIFT^.PROFILER), ADR(pJOINT_LIFT^.SETPOINT), TIME_US, pJOINT_LIFT^.CONFIG , pJOINT_LIFT^.FEEDBACK);
+	END_IF
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF (NOT LOAD_UNLOAD_ONLY) AND
+	(MACHINE_MODE = TRACK_MODE AND
+		((NOT AUTOMATIC) OR TRACK_STATE = TRACK_STATE_NORMAL)
+	) THEN
+	(* Allow the operator to manually adjust the joint lift. *)
+	IF nearHardStop(pJOINT_LIFT^, JS := REMOTE.V3_FB, JS_POS_IS_OUTPUT_POS := FALSE) THEN
+		OUTPUT_MAX := protectHardStop(pJOINT_LIFT^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pJOINT_LIFT^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	
+	JOYSTICK_01(JS := REMOTE.V3_FB, JS_POS_IS_OUTPUT_POS := FALSE,
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pJOINT_LIFT^.OUTPUT.MAGNITUDE, POSITIVE => pJOINT_LIFT^.OUTPUT.POSITIVE);
+
+	IF AUTOMATIC THEN	
+		// Operator can actuate boom and joint lift to hit higher or lower workpoints, but within limits.
+		IF pJOINT_LIFT^.FEEDBACK.POSITION_ENGR - JOINT_LIFT_TRACK_POS > 5 AND pJOINT_LIFT^.OUTPUT.POSITIVE THEN
+			// Joint lift is above allowable range, disable further motion.
+			pJOINT_LIFT^.OUTPUT.MAGNITUDE := 0;
+		ELSIF pJOINT_LIFT^.FEEDBACK.POSITION_ENGR - JOINT_LIFT_TRACK_POS < -5 AND NOT pJOINT_LIFT^.OUTPUT.POSITIVE THEN
+			// Joint lift is below allowable range, disable further motion.
+			pJOINT_LIFT^.OUTPUT.MAGNITUDE := 0;
+		END_IF
+	END_IF
+ELSE
+	(* Don't run yaw in most cases.  Set outputs to 0. *)
+	setOutput(ADR(pJOINT_LIFT^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF PROFILER THEN
+		TrapezoidRun(ADR(pJOINT_LIFT^.PROFILER), ADR(pJOINT_LIFT^.SETPOINT), TIME_US);
+	END_IF
+	IF CLOSED_LOOP THEN
+		(* Leave the integrator on all the time when the profiler is not being used. *)
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pJOINT_LIFT^.LOOP_PID), pOUTPUT := ADR(pJOINT_LIFT^.OUTPUT), SP := pJOINT_LIFT^.SETPOINT, FB:= pJOINT_LIFT^.FEEDBACK, CFG := pJOINT_LIFT^.CONFIG,
+			I_ENABLED := (pJOINT_LIFT^.PROFILER.STATE = HOLD));
+	ELSE
+		pJOINT_LIFT^.SETPOINT.POSITION_ENGR := pJOINT_LIFT^.FEEDBACK.POSITION_ENGR;
+		pJOINT_LIFT^.SETPOINT.POSITION_RAW := pJOINT_LIFT^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pJOINT_LIFT);
+END_IF

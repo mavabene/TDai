@@ -1,0 +1,33 @@
+
+(********************** Declaration ****************************)
+(* 	These var names correlate to HMI_SINTS array values.  
+	To add persistent SINTs, just add name here and call via HMI_SINTS[ENUM_NAME]
+	!! If you change positions, persistent memory will be affected! !!
+	** Updates here must be made in both PLC and HMI code **
+*)
+TYPE eHMI_SettingsSints :
+(
+	
+	eHMI_SettingsSints_RESERVED_1 := 1, // converted from bool in sPersistent 3, default is -1 to trigger bringing over old value to new location
+	SOFT_SOIL_CONE_TIP_PROTRUSION := 2,
+	LC_REWIND_LAG := 3,
+	SCREW_DRIVE_MAN_AUTO_DELAY := 4,
+	// encoder types
+	BOOM_LIFT_ENCODER_TYPE  := 5,
+    BOOM_SWING_ENCODER_TYPE  := 6,
+    JOINT_LIFT_ENCODER_TYPE  := 7,
+    UPPER_CROWD_ENCODER_TYPE  := 8,
+    YAW_ENCODER_TYPE := 9,
+	LC_STALL_DETECT_MODE := 10,
+    eHMI_SettingsSints_RESERVED_11 := 11,
+    eHMI_SettingsSints_RESERVED_12 := 12,
+    eHMI_SettingsSints_RESERVED_13 := 13,
+    eHMI_SettingsSints_RESERVED_14 := 14,
+    eHMI_SettingsSints_RESERVED_15 := 15,
+    eHMI_SettingsSints_RESERVED_16 := 16,
+    eHMI_SettingsSints_RESERVED_17 := 17,
+    eHMI_SettingsSints_RESERVED_18 := 18,
+    eHMI_SettingsSints_RESERVED_19 := 19,
+	eHMI_SettingsSints_RESERVED_20 := 20
+);
+END_TYPE

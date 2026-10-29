@@ -1,0 +1,123 @@
+
+(********************** Declaration ****************************)
+FUNCTION GpsSetTargets: BOOL
+VAR_INPUT
+	// leave as input in case we want to control to a different point, eg 3rd leg motor
+	X_OFFSET_BEGIN: REAL := 0; // offsets from WP given by gps, in TD frame, + is forward of operator
+	Y_OFFSET_BEGIN: REAL := 0; // + is to the right of operator (facing forward at rear [mast end] of TD)
+	YAW_OFFSET_BEGIN: REAL := 0; // heading offset to rotate by as given by gps, + is moving mast to the right (CCW) of operator
+	Z_OFFSET_BEGIN: REAL := 0; // + is up
+END_VAR
+VAR
+	X_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	Y_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	YAW_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	BS_ANGLE_NS_DELTA: REAL := 0;
+	BS_ANGLE_WORLD_NS: REAL := 0;
+	BS_ANGLE_NS_TO_Y_TARGET_DELTA: REAL := 0;
+	YAW_ARM_LENGTH: REAL := 135; // 135 for TD3 with x slide at 0
+	
+	X_ADJUST_FINAL: REAL := 0; // final x adjust used to find new position
+	Z_ADJUST_FINAL: REAL := 0; // final x adjust used to find new position
+	
+END_VAR
+(********************** Implementation ****************************)
+(*
+IF  AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_WAIT_LEVEL AND PITCH_ANGLE > 6 THEN // adjust offsets for pitch during tracking
+	X_OFFSET_BEGIN := GPS_AXES[GPS_X].OFFSET - COS_DEG ( GPS_AXES[GPS_HEADING].OFFSET ) * 54 ;		 
+	Y_OFFSET_BEGIN := GPS_AXES[GPS_Y].OFFSET - SIN_DEG ( GPS_AXES[GPS_HEADING].OFFSET ) * 54 ;
+	Z_OFFSET_BEGIN := Z_OFFSET_BEGIN + 45;
+END_IF
+*)	
+
+X_OFFSET_BEGIN := X_OFFSET_BEGIN / 10; // convert mm to cm
+Y_OFFSET_BEGIN := Y_OFFSET_BEGIN / 10; // convert mm to cm
+//YAW_OFFSET_BEGIN := YAW_OFFSET_BEGIN; // deg to deg
+Z_OFFSET_BEGIN := Z_OFFSET_BEGIN / 10; // convert mm to cm
+YAW_ARM_LENGTH := YAW_PIVOT_TO_DRILL_ROD + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;
+//(* 
+// * WP frame - origin at WP *
+//  (if 3d have to first rotate at wp to get pitch and roll aligned with yaw arm)
+// 1) translate origin to reference yaw pivot (translation)
+
+X_OFFSETS[1] := X_OFFSET_BEGIN - YAW_ARM_LENGTH;
+Y_OFFSETS[1] := Y_OFFSET_BEGIN;
+
+// * WP frame - origin at yaw pivot *
+// 2) rotate origin at yaw pivot to match bs frame (rotation)
+// YAW_ROTATION := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR; // offset from Boom Swing
+
+X_OFFSETS[2] := X_OFFSETS[1] * COS_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR) - Y_OFFSETS[1] * SIN_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR); // rotate origin at yaw pivot by gps heading offset
+Y_OFFSETS[2] := X_OFFSETS[1] * SIN_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR) + Y_OFFSETS[1] * COS_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR);
+
+// * BS frame - origin AT yaw pivot *
+// 3) translate origin to bs pivot
+
+X_OFFSETS[3] := X_OFFSETS[2] - BS_PIVOT_TO_YAW_PIVOT;
+Y_OFFSETS[3] := Y_OFFSETS[2];
+
+// * BS frame - origin at BS pivot *
+// 4) rotate origin at bs pivot to world frame
+//	- rotate by BS_ANGLE_NS_DELTA
+BS_ANGLE_NS_DELTA := YAW_OFFSET_BEGIN + -1 * AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR; //(Yaw is opposite sign)
+BS_ANGLE_WORLD_NS := BS_ANGLE_NS_DELTA + AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR;
+
+X_OFFSETS[4] := X_OFFSETS[3] * COS_DEG(BS_ANGLE_NS_DELTA) - Y_OFFSETS[3] * SIN_DEG(BS_ANGLE_NS_DELTA); // rotate origin at yaw pivot by gps heading offset
+Y_OFFSETS[4] := X_OFFSETS[3] * SIN_DEG(BS_ANGLE_NS_DELTA) + Y_OFFSETS[3] * COS_DEG(BS_ANGLE_NS_DELTA);
+
+// * WORLD frame - origin at BS pivot *
+// 5) calculate bs angle to move BS by to get WORLD_Y to 0 in WORLD frame      																** MOVE BS **
+BS_ANGLE_NS_TO_Y_TARGET_DELTA := ASIN_DEG ( Y_OFFSETS[4] / BS_PIVOT_TO_YAW_PIVOT );
+GPS_AXES[GPS_Y].TARGET_POSITION  := BS_ANGLE_WORLD_NS + BS_ANGLE_NS_TO_Y_TARGET_DELTA;
+// 6) move origin to yaw pivot: translate in x and y (and z if 3d) to move origin to yaw pivot (translation)
+// - x translation := COS_DEG ( BS_ANGLE_NS_TO_Y_TARGET_DELTA ) * BS_LENGTH
+X_OFFSETS[5] := X_OFFSETS[4] + COS_DEG ( BS_ANGLE_NS_TO_Y_TARGET_DELTA ) * BS_PIVOT_TO_YAW_PIVOT;
+// y translation := SIN_DEG ( BS_ANGLE_NS_TO_Y_TARGET_DELTA ) * BS_LENGTH
+Y_OFFSETS[5] := Y_OFFSETS[4] - SIN_DEG ( BS_ANGLE_NS_TO_Y_TARGET_DELTA ) * BS_PIVOT_TO_YAW_PIVOT; // y offset should = 0 at this point
+
+// * WORLD frame - origin at yaw pivot *
+// 7) rotate yaw to align with world NS 													
+
+YAW_OFFSETS[1] := YAW_OFFSET_BEGIN - ( GPS_AXES[GPS_Y].TARGET_POSITION - AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR );
+
+GPS_AXES[GPS_HEADING].TARGET_POSITION := -1 * YAW_OFFSETS[1] + AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR; //original heading offset + bs move		** MOVE YAW **
+
+(* don't do this because coordinates are already in world frame.  Just translate along yaw arm to wp
+X_OFFSETS[6] := X_OFFSETS[5] * COS_DEG(BS_ANGLE_NS_DELTA) - Y_OFFSETS[5] * SIN_DEG(BS_ANGLE_NS_DELTA); // rotate origin at yaw pivot by gps heading offset
+Y_OFFSETS[6] := X_OFFSETS[5] * SIN_DEG(BS_ANGLE_NS_DELTA) + Y_OFFSETS[5] * COS_DEG(BS_ANGLE_NS_DELTA);
+*)
+
+// 8) translate origin to wp
+
+X_OFFSETS[6] := X_OFFSETS[5] + YAW_ARM_LENGTH;
+Y_OFFSETS[6] := Y_OFFSETS[5];
+
+(*
+// adjust 3rd leg adjustment becuase mast is pitched, so z slide has to move further
+IF isNxt3lmNsScrew() AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_MAST_TO_TARGET THEN
+	Z_OFFSET_BEGIN := Z_OFFSET_BEGIN / COS_DEG(MIN(89, pNVM4^.NXT_TLM_T_ANGLE)) - X_OFFSETS[6] * SIN_DEG(pNVM4^.NXT_TLM_T_ANGLE) ; // don't divide by 0!
+	X_ADJUST_FINAL := X_OFFSETS[6] - SIN_DEG(pNVM4^.NXT_TLM_T_ANGLE) * Z_ADJUST_FINAL;
+ELSE //*)
+IF TRUE THEN
+	// TODO: confirm signs on this:
+	Z_OFFSET_BEGIN := Z_OFFSET_BEGIN / COS_DEG(MIN(89, pNVM1^.TORQUE_TUBE_PITCH)) - X_OFFSETS[6] * SIN_DEG(pNVM1^.TORQUE_TUBE_PITCH); // don't divide by 0!
+	X_ADJUST_FINAL := X_OFFSETS[6] - SIN_DEG(pNVM1^.TORQUE_TUBE_PITCH) * Z_ADJUST_FINAL;
+ELSE
+	//Z_OFFSET_BEGIN := Z_OFFSET_BEGIN;
+	X_ADJUST_FINAL := X_OFFSETS[6];
+END_IF
+	
+//END_IF
+
+// * WORLD frame - origin at WP * 
+// 9) move x-slide to put WP at 0 x
+
+// subtract delta between AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR and Z_SLIDE_AT_WP * SIN_DEG(pNVM4^.NXT_TLM_T_ANGLE) 
+
+GPS_AXES[GPS_X].TARGET_POSITION := AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR + ( -1 * X_ADJUST_FINAL);	// x-slide moves opposite direction of offset
+// * WORLD frame - origin at WP * * WP frame - origin AT WP * ( should be the same now )													** MOVE X-SLIDE **
+ 
+// get z_slide 2d
+GPS_AXES[GPS_Z].TARGET_POSITION := AXES[AXIS_Z_SLIDE].FEEDBACK.POSITION_ENGR + Z_OFFSET_BEGIN;	// 											** MOVE Z-SLIDE **			
+ 
+//*)

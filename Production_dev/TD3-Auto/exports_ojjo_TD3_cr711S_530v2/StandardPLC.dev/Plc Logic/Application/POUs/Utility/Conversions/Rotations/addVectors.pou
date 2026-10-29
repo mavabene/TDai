@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION addVectors : vector3D
+VAR_INPUT
+	vectorA : Vector3D;
+	vectorB : Vector3D;
+END_VAR
+VAR
+	i : USINT;
+END_VAR
+
+(********************** Implementation ****************************)
+FOR i := 1 TO 3 DO
+	addVectors[i] := vectorA[i] + vectorB[i];
+END_FOR

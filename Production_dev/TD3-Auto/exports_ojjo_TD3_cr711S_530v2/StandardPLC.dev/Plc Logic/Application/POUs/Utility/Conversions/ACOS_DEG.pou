@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION ACOS_DEG: REAL
+VAR_INPUT
+	VALUE: REAL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+//ACOS_DEG := (180 * ACOS(VALUE)) / 3.14159;
+
+IF ABS(VALUE) > 1 THEN // prevent killing PLC with a NaN if bad value sent
+	VALUE := MAX(MIN(VALUE, -1),1);
+END_IF
+
+ACOS_DEG := (180 * ACOS(VALUE)) / Pi;

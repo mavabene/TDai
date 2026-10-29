@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION COS_DEG_LREAL : LREAL
+VAR_INPUT
+	DEGREES: LREAL;
+END_VAR
+VAR
+	RADIANS: LREAL;
+END_VAR
+(********************** Implementation ****************************)
+
+//RADIANS := (3.14159 * DEGREES / 180.0);
+RADIANS := (Pi * DEGREES / 180.0);
+COS_DEG_LREAL := COS(RADIANS);
+
+

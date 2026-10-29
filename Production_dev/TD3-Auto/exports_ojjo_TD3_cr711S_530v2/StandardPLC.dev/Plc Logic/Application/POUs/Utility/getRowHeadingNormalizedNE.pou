@@ -1,0 +1,29 @@
+
+(********************** Declaration ****************************)
+// allow alternate row headings, normalize to N, S, E, W
+
+FUNCTION getRowHeadingNormalizedNE : REAL
+VAR_INPUT
+	TOLERANCE: REAL := 10; // must be < 45 to work
+END_VAR
+VAR
+	
+END_VAR
+
+(********************** Implementation ****************************)
+getRowHeadingNormalizedNE := GPS_ABSOLUTE_HEADING - GPS_AXES[GPS_HEADING].OFFSET; 
+
+TOLERANCE := MIN(TOLERANCE, 45);
+
+IF ABS(getRowHeadingNormalizedNE) < TOLERANCE THEN 
+	getRowHeadingNormalizedNE := 0;
+ELSIF (ABS(getRowHeadingNormalizedNE) >= (90 - TOLERANCE)) AND (ABS(getRowHeadingNormalizedNE) <= (90 + TOLERANCE)) THEN
+	getRowHeadingNormalizedNE := 90;
+ELSIF (ABS(getRowHeadingNormalizedNE) >= (180 - TOLERANCE)) AND (ABS(getRowHeadingNormalizedNE) <= (180 + TOLERANCE)) THEN
+	getRowHeadingNormalizedNE := 0;
+ELSIF (ABS(getRowHeadingNormalizedNE) >= (270 - TOLERANCE)) AND (ABS(getRowHeadingNormalizedNE) <= (270 + TOLERANCE)) THEN
+	getRowHeadingNormalizedNE := 90;
+ELSIF (ABS(getRowHeadingNormalizedNE) >= (360 - TOLERANCE)) AND (ABS(getRowHeadingNormalizedNE) <= (360 + TOLERANCE)) THEN
+	getRowHeadingNormalizedNE := 0;
+END_IF
+	

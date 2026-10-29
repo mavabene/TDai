@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+FUNCTION isOperatorAtMachine : BOOL  // used to prevent movement of actuators when operator near machine
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF (* crimp mode or loading screw or . . . ? *) 
+	AUTOMATIC AND AUTOMATIC_ALLOWED AND 
+		(MACHINE_MODE = SCREW_MODE AND
+			(
+				SCREW_STATE = SCREW_STATE_LOAD_SCREW OR
+				SCREW_STATE = SCREW_STATE_CRIMP OR
+				SCREW_STATE = SCREW_STATE_ASSEMBLE
+			)	
+		)
+THEN
+	isOperatorAtMachine := TRUE;
+ELSE
+	isOperatorAtMachine := FALSE;
+END_IF

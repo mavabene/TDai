@@ -1,0 +1,196 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK operateHammer
+VAR_INPUT
+END_VAR
+VAR
+	CONTROL_PRESSURE: REAL;
+	HAMMER_DIAG: ifmTypes.DIAG_INFO;
+	HAMMER_ERROR: BOOL;
+	HAMMER_ACTIVATED: BOOL;
+	HAMMER_PREPARED: BOOL;
+	
+	ON_POSITION: REAL;
+	OFF_POSITION: REAL;
+	
+	//ForceTimer : TON;
+	AIR_OFF_LATCH : BOOL := FALSE; // make this true if operator turns air off to induce hammer
+	LC_STALL_HAMMER_LATCH: BOOL := FALSE; // start hammer on LC stall if Hammer stall selected, but only run once per stall
+	LC_STALL_HAMMER_END: REAL;
+	LC_HAMMER_COUNT: SINT := 0;
+	LC_HAMMER_COUNT_LIMIT: SINT := 3;
+	HAMMER_COOLDOWN_TIME: REAL := 4;
+	
+END_VAR
+(********************** Implementation ****************************)
+
+IF pNVM1^.HAMMER_ENABLED AND MACHINE_MODE = SCREW_MODE THEN
+	IF pNVM1^.HAMMER_CONTROL_SOURCE = 1 THEN
+		CONTROL_PRESSURE := UPPER_ROTARY_PRESSURE;
+	ELSE
+		CONTROL_PRESSURE := LOWER_CROWD_PRESSURE;
+	END_IF
+
+	
+	(* Turn hammer on if pressure is too high. *)
+	IF (AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		// We never want to turn the hammer on with the bit wings inside the screw.
+		(
+			// Wingless bit can hammer in the screw.
+			pNVM3^.DRILL_BIT_WING_POSITION <= 0.0 OR
+			(AXES[AXIS_UPPER_CROWD].FEEDBACK.POSITION_ENGR <
+				UPPER_CROWD_DRILL_TIP_FLUSH - (pNVM1^.DRILL_BIT_LENGTH - pNVM3^.DRILL_BIT_WING_POSITION))
+		)
+		AND
+		(
+			// We originally didn't want the hammer running when the drill bit was pulling out before the end of the
+			//	drive.  However, with soft soil code, we sometimes have to put the bit back into the ground after this
+			//	bit reveal is done, as the screw stalls.  In this case, we need to run the hammer if UR pressure deems it
+			//	necessary.
+			SCREW_STATE = SCREW_STATE_DRIVE_SCREW OR
+			SCREW_STATE = SCREW_STATE_DRIVE_ASSIST OR
+			SCREW_STATE = SCREW_STATE_POSITION_MAST_SLIDE OR
+			SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE OR
+			SCREW_STATE = SCREW_STATE_DRILL_AHEAD OR
+			SCREW_STATE = SCREW_STATE_DRILL_EXTEND OR
+			SCREW_STATE = SCREW_STATE_LC_REWIND OR
+			SCREW_STATE = SCREW_STATE_BRIEF_HAMMER
+		)
+		) THEN
+		
+		IF (LC_STALL_DETECTED = LcStallRecovery.LC_STALLED_RECOVER_WITH_HAMMER) AND TIME_SECONDS_FLOAT > (LC_STALL_HAMMER_END + HAMMER_COOLDOWN_TIME) AND NOT LC_STALL_HAMMER_LATCH AND (LC_HAMMER_COUNT < LC_HAMMER_COUNT_LIMIT) THEN
+			LC_STALL_HAMMER_LATCH := TRUE;
+			BRIEF_HAMMER_START := TIME_SECONDS_FLOAT;
+			LC_HAMMER_COUNT := LC_HAMMER_COUNT + 1;
+		ELSIF CONTROL_PRESSURE < pNVM1^.HAMMER_OFF_PRESSURE AND NOT LC_STALL_HAMMER_LATCH THEN
+			(* Turn off top hammer *)
+			HAMMER_CMD := 0;
+		ELSIF (CONTROL_PRESSURE > pNVM1^.HAMMER_ON_PRESSURE) OR LC_STALL_HAMMER_LATCH THEN
+			(* Turn on top hammer *)
+			HAMMER_CMD := 1;
+		ELSE
+			(* In hysteresis band between on and off pressure, do nothing. *)
+			;
+		END_IF
+		
+		// reset hammer count upon crowd stall clear
+		IF LC_HAMMER_COUNT > 0 AND (LC_STALL_DETECTED = LcStallRecovery.NO_LC_STALL) THEN
+			LC_HAMMER_COUNT := 0;
+		END_IF
+		
+		// debug
+		IF SIMULATED_HAMMER THEN
+			HAMMER_CMD := 1;
+		END_IF
+		
+		// In the brief hammer state we only operate the hammer right at the start.
+		IF 	(SCREW_STATE = SCREW_STATE_BRIEF_HAMMER AND (TIME_SECONDS_FLOAT - Ojjo_TD.BRIEF_HAMMER_START > 0.5 )) OR 
+			(SCREW_STATE = SCREW_STATE_DRIVE_SCREW AND LC_STALL_HAMMER_LATCH AND ((TIME_SECONDS_FLOAT - BRIEF_HAMMER_START) > pNVM4^.HMI_REALS[LC_STALL_HAMMER_TIME])) 
+			THEN
+				HAMMER_CMD := 0;
+				LC_STALL_HAMMER_LATCH := FALSE;
+				LC_STALL_HAMMER_END := TIME_SECONDS_FLOAT;
+		END_IF
+		
+		CURRENT_EXTENT := AXES[AXIS_LOWER_CROWD].FEEDBACK.POSITION_ENGR;
+		
+		CASE HAMMER_STATE OF
+			0:
+				IF HAMMER_CMD <> 0 THEN
+					HAMMER_STATE := 1;
+					ON_POSITION := CURRENT_EXTENT;
+				END_IF
+			1:
+				IF CURRENT_EXTENT < FURTHEST_EXTENT THEN // air must not be turned off to accumulate Hammer Distance for embedment purposes
+					// Accummulate the hammer distance if hammer is on.
+					// TEST_EMBED_REDUCTION_MIN_HAMMER is for testing only, default is 0
+					HAMMER_DISTANCE := HAMMER_DISTANCE + (FURTHEST_EXTENT - CURRENT_EXTENT);
+					HAMMER_DISTANCE_LATCH := HAMMER_DISTANCE;
+				END_IF
+				
+				IF HAMMER_CMD = 0 THEN
+					HAMMER_STATE := 2;
+					IF CURRENT_EXTENT < FURTHEST_EXTENT THEN
+						OFF_POSITION := CURRENT_EXTENT;
+					ELSE
+						OFF_POSITION := FURTHEST_EXTENT;
+					END_IF
+				END_IF
+			2:
+				IF HAMMER_CMD <> 0 THEN
+					// Hammer was off, then turned back on.
+					HAMMER_STATE := 1;
+					ON_POSITION := CURRENT_EXTENT;
+					
+					// Accummulate the delta as "hammer on" distance if the distance moved between the hammering
+					//	points is less than the hysteresis values.
+					IF CURRENT_EXTENT < FURTHEST_EXTENT THEN // air must not be turned off to accumulate Hammer Distance for embedment purposes
+						HAMMER_DISTANCE := HAMMER_DISTANCE + (OFF_POSITION - CURRENT_EXTENT);
+					END_IF
+				ELSIF (OFF_POSITION - CURRENT_EXTENT) > pNVM3^.EMBED_REDUCTION_HYSTERESIS THEN
+					// Hammer was off, but we passed hysteresis distance before turning back on.
+					HAMMER_STATE := 0;
+				END_IF
+		END_CASE
+		
+		//debug
+		TestVar2 := HAMMER_DISTANCE;;
+		// prevent operators from cycling air to cause hammering
+		IF NOT (REMOTE.RTCB2_UP OR REMOTE.RTCB2_DN) THEN
+			AIR_OFF_LATCH := TRUE;
+		END_IF
+		IF AIR_OFF_LATCH THEN
+			HAMMER_DISTANCE := 0;
+		END_IF
+		
+		// We are breaking new ground here...  note that as embedment increases, lower crowd position decreases, so
+		//	watch signs here!
+		IF CURRENT_EXTENT < FURTHEST_EXTENT THEN
+			TestVar2 := HAMMER_DISTANCE;
+			TestVar3 := DRIVE_CURRENT_EMBEDMENT;
+			IF HAMMER_DISTANCE > SCREW_PARAMETERS_CURRENT.IE_MIN_HAMMER
+			AND DRIVE_CURRENT_EMBEDMENT >= SCREW_PARAMETERS_CURRENT.IE_MIN_EMBED 
+			THEN
+				EMBED_REDUCTION_DETECTED := TRUE;
+			END_IF
+			// In any event, we have gone further, so update the furthest extent.
+			FURTHEST_EXTENT := CURRENT_EXTENT;
+		END_IF
+		DELTA_EXTENT := FURTHEST_EXTENT - CURRENT_EXTENT;
+	ELSE
+		// Never hammers in these states.
+		HAMMER_CMD := 0;
+		
+		// Reset the state variables for the embedment reduction code.
+		HAMMER_STATE := 0;
+		
+		// reset latch for another screw drive
+		IF (SCREW_STATE = SCREW_STATE_LOAD_SCREW) THEN
+			AIR_OFF_LATCH := FALSE;
+		END_IF
+	END_IF
+	
+ELSE
+	HAMMER_CMD := 0;
+	AIR_OFF_LATCH := FALSE;
+END_IF
+
+IF HAMMER_FORCE.FORCED THEN
+	HAMMER_CMD := TO_UINT(HAMMER_FORCE.DOUT_STATE);
+END_IF
+
+TestVar4 := TO_BOOL(HAMMER_CMD);
+	//HAMMER_CMD := 0;
+IF HAMMER_CMD <> 0 THEN
+	IF SIMULATED_HAMMER THEN
+		hornRequest(2, T#150MS, T#150MS); // simulate hammer with horn, comment out line below
+	ELSE
+		// Setting is in percent, valve command in millepercent.
+		setOutput(ADR(AXES[AXIS_HAMMER].OUTPUT), 10 * pNVM4^.HAMMER_SPEED, TRUE);
+	END_IF
+ELSE
+	setOutput(ADR(AXES[AXIS_HAMMER].OUTPUT), 0, TRUE);
+END_IF
+HaweOutput(ADR(AXES[AXIS_HAMMER]));	
+
+

@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION VectorScale : vector3D
+VAR_INPUT
+	vectorA : Vector3D;
+	scalar: LREAL;
+END_VAR
+VAR
+	i : USINT;
+END_VAR
+
+(********************** Implementation ****************************)
+FOR i := 1 TO 3 DO
+	VectorScale[i] := vectorA[i] * scalar;
+END_FOR

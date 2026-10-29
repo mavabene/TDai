@@ -1,0 +1,270 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK hardwareInit
+VAR_INPUT
+	INIT: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	// TODO: implement this!
+	SYS_INFO_DONE: BOOL := TRUE;
+	GetInfo_01: ifmSysInfo.GetInfo;
+	
+	VV_0: UINT;
+	GV_0: UINT;
+	D1_0: DINT;
+	XE_0: BOOL := TRUE;
+	XP_0: BOOL := FALSE;
+
+	VV_1: UINT;
+	GV_1: UINT;
+	D1_1: DINT;
+	XE_1: BOOL := TRUE;
+	XP_1: BOOL := FALSE;
+
+	VV_2: UINT;
+	GV_2: UINT;
+	D1_2: DINT;
+	XE_2: BOOL := TRUE;
+	XP_2: BOOL := FALSE;
+
+	OUT_GROUP_00: ifmOutGroup.OutputGroup;
+	OUT_GROUP_01: ifmOutGroup.OutputGroup;
+	OUT_GROUP_02: ifmOutGroup.OutputGroup;
+
+	INDEX: INT;
+	
+	FAN_DIAG: ifmTypes.DIAG_INFO;
+	FAN_ERROR: BOOL;
+	FAN_ACTIVATED: BOOL;
+	FAN_PREPARED: BOOL := FALSE;
+	FAN_STATE: BOOL;
+	FAN_CURRENT: UINT;
+	
+	FLIP_COUNTER: INT := 1;
+
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* Get information about the control system to display on the UI. *)
+IF NOT SYS_INFO_DONE THEN
+	GetInfo_01(xExecute := NOT SYS_INFO_DONE, xDone => SYS_INFO_DONE);
+	
+	FOR INDEX := 1 TO TO_INT(SIZEOF(ifmSysInfo.GVL.aSysInfoList)) DO
+		IFM_GET_INFO[INDEX].sName := ifmSysInfo.GVL.aSysInfoList[INDEX].sName;
+		IFM_GET_INFO[INDEX].sValue := ifmSysInfo.GVL.aSysInfoList[INDEX].sValue;
+	END_FOR
+END_IF
+
+(* ********************************* I/O Initialization here *********************************** *)
+
+// There is something weird in powering up the PWM output, it requires several calls through to
+//	give the perpared signal back as true.
+IF NOT FAN_PREPARED THEN
+	// Hit the reset error first time through, then not again.
+	PWM_FAN(xResetError := INIT,
+		uiChannel := AIR_COMPRESSOR_FAN_POINT,
+		eMode := ifmOutPWM.MODE_PWM.OUT_PWM_CSO,
+		uiFrequency := 100,
+		uiValue := 0,
+		xError => FAN_ERROR,
+		eDiagInfo => FAN_DIAG,
+		xPrepared => FAN_PREPARED,
+		uiOutCurrent => FAN_CURRENT,
+		xOutState => FAN_STATE
+		);
+	IF FAN_PREPARED THEN
+		PWM_FAN(xResetError := 0);
+	END_IF
+END_IF
+
+IF INIT THEN
+
+	OUT_AIR_COMPRESSOR_REQUEST(uiChannel := AIR_COMPRESSOR_REQUEST_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_AIR_COMPRESSOR_SUPPLY(uiChannel := AIR_COMPRESSOR_SUPPLY_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_TRAVEL_ALARM(uiChannel := TRAVEL_ALARM_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_HORN1(uiChannel := HORN1_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_HORN2(uiChannel := HORN2_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_PENDULUM(uiChannel := PENDULUM_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_LIGHT_1(uiChannel := LIGHT_1_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_LIGHT_2(uiChannel := LIGHT_2_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	IF pNVM3^.MACHINE_VERSION >= 1 THEN
+		// TD-3.1+ here.
+		OUT_COOLER_SOLENOID(uiChannel := COOLER_SOLENOID_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+		OUT_ENGINE_REV_UP(uiChannel := ENGINE_REV_UP_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+		OUT_ENGINE_REV_DOWN(uiChannel := ENGINE_REV_DOWN_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	END_IF
+	IF  pNVM4^.MACHINE_COMPRESSOR = 1 THEN 
+		OUT_AIR_COMPRESSOR_UNLOAD(uiChannel := AIR_COMPRESSOR_UNLOAD_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	END_IF
+	
+	setScrewParameters();
+	// Outputs common to TD-2 and all TD-3 machines come here.
+	OUT_RED_LIGHT(uiChannel := RED_LIGHT_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_YELLOW_LIGHT(uiChannel := YELLOW_LIGHT_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_GREEN_LIGHT(uiChannel := GREEN_LIGHT_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_BLUE_LIGHT(uiChannel := BLUE_LIGHT_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO,	uiValue := 0);
+	OUT_E_STOP(uiChannel := E_STOP_OUT_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO,	uiValue := 0);
+	OUT_SPARE_2(uiChannel := SPARE_OUT_2_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_SPARE_3(uiChannel := SPARE_OUT_3_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_X_LASER(uiChannel := X_LASER_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_PROXIMITY_SENSOR_ALARM_MUTE(uiChannel := PROXIMITY_SENSOR_ALARM_MUTE_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	OUT_PROXIMITY_SENSOR_DISABLE(uiChannel := PROXIMITY_SENSOR_ANTENNA_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+
+	(* Enable 5V output for GPS. *)
+	OUT3000_Q.ValueDigital := TRUE;
+	
+	(* Configure analog inputs to keep the channel numbers confined to one file for hardware changes. *)
+// 	IF pNVM3^.MACHINE_FAMILY = TO_UDINT(eMachineFamily.TD2) THEN
+// 		(* 240 Ohm when empty. *)
+// 		IN_FUEL_LEVEL(
+// 			eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_12,
+// 			eMODE := ifmIOCommon.MODE_INPUT.IN_RESISTOR,
+// 			uiCHANNEL := FUEL_LEVEL_POINT,
+// 			uiValueAnalogue => FUEL_LEVEL_RAW);
+// 	END_IF
+	
+	IN_PUMP_PRESSURE(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+		uiCHANNEL := PUMP_PRESSURE_POINT,
+		uiValueAnalogue => PUMP_PRESSURE_RAW);
+
+	IN_LOWER_ROTARY_PRESSURE(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+		uiCHANNEL := LOWER_ROTARY_PRESSURE_POINT,
+		uiValueAnalogue => LOWER_ROTARY_PRESSURE_RAW);
+
+	IN_LOWER_CROWD_PRESSURE(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+		uiCHANNEL := LOWER_CROWD_PRESSURE_POINT,
+		uiValueAnalogue => LOWER_CROWD_PRESSURE_RAW);
+	
+	IN_UPPER_ROTARY_PRESSURE(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+		uiCHANNEL := UPPER_ROTARY_PRESSURE_POINT,
+		uiValueAnalogue => UPPER_ROTARY_PRESSURE_RAW);
+
+	IN_UPPER_CROWD_PRESSURE(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+		uiCHANNEL := UPPER_CROWD_PRESSURE_POINT,
+		uiValueAnalogue => UPPER_CROWD_PRESSURE_RAW);
+	
+	IF pNVM3^.MACHINE_VERSION >= 7 THEN
+		IN_HAMMER_PRESSURE(
+			eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_7,
+			eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+			uiCHANNEL := HAMMER_PRESSURE_POINT,
+			uiValueAnalogue => HAMMER_PRESSURE_RAW);
+	END_IF
+	
+	(* -40 to 120 C for 0 to 10 VDC. *)
+	IN_HYDRAULIC_TEMP(
+		eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_12,
+		eMODE := ifmIOCommon.MODE_INPUT.IN_VOLTAGE_10,
+		uiCHANNEL := HYDRAULIC_TEMP_POINT,
+		uiValueAnalogue => HYDRAULIC_TEMP_RAW);
+	
+	
+	IF pNVM4^.MACHINE_COMPRESSOR = 0 THEN
+		// TD-3.0 had the 12V air compressor.
+		IN_AIR_COMPRESSOR_STATUS(
+			eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_12,
+			eMODE := ifmIOCommon.MODE_INPUT.IN_VOLTAGE_32,
+			uiCHANNEL := AIR_COMPRESSOR_STATUS_POINT,
+			uiValueAnalogue => AIR_COMPRESSOR_STATUS_RAW);
+	ELSE
+		// TD-3.1 has the DrillBOSS compressor, partly DT and partly BOSS.
+		IN_AIR_COMPRESSOR_WET_PRESSURE(
+			eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_12,
+			eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+			uiCHANNEL := AIR_COMPRESSOR_WET_PRESSURE_POINT,
+			uiValueAnalogue => AIR_COMPRESSOR_WET_PRESSURE_RAW);
+		IN_AIR_COMPRESSOR_TEMP(
+			eFILTER := ifmIOCommon.FILTER_INPUT.FILTER_12,
+			eMODE := ifmIOCommon.MODE_INPUT.IN_CURRENT_CSI,
+			uiCHANNEL := AIR_COMPRESSOR_TEMP_POINT,
+			uiValueAnalogue => AIR_COMPRESSOR_TEMP_RAW);
+	END_IF
+	
+	IF  pNVM4^.HMI_BOOLS[PROXIMITY_SENSOR_INSTALLED] THEN
+		OUT_PROXIMITY_SENSOR_ALARM_MUTE(uiChannel := PROXIMITY_SENSOR_ALARM_MUTE_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+		OUT_PROXIMITY_SENSOR_DISABLE(uiChannel := PROXIMITY_SENSOR_ANTENNA_POINT, eMode := ifmIOCommon.MODE_OUTPUT.OUT_DIGITAL_CSO, uiValue := 0);
+	END_IF
+	
+END_IF
+
+(* The output group initializations seem to need multiple passes to get to "prepared" state. *)
+IF NOT XP_0 OR XE_0 THEN
+	OUT_GROUP_00(
+		xResetError:= XE_0, 
+		uiChannel:= 0, 
+		eMode:= ifmOutGroup.MODE_OUTPUT_GROUP.OUT_DIGITAL, 
+		eFilter:= ifmOutGroup.FILTER_OUTPUT_GROUP.FILTER_0, 
+		xValue:= TRUE, 
+		xError=> XE_0, 
+		eDiagInfo=> D1_0, 
+		xPrepared=> XP_0, 
+		xGroupState=> , 
+		uiGroupCurrent=> , 
+		uiVBBxVoltage=> VV_0, 
+		uiGroupVoltage=> GV_0);
+END_IF
+
+IF NOT XP_1 OR XE_1 THEN
+	OUT_GROUP_01(
+		xResetError:= XE_1, 
+		uiChannel:= 1, 
+		eMode:= ifmOutGroup.MODE_OUTPUT_GROUP.OUT_DIGITAL, 
+		eFilter:= ifmOutGroup.FILTER_OUTPUT_GROUP.FILTER_0, 
+		xValue:= TRUE, 
+		xError=> XE_1, 
+		eDiagInfo=> D1_1, 
+		xPrepared=> XP_1, 
+		xGroupState=> , 
+		uiGroupCurrent=> , 
+		uiVBBxVoltage=> VV_1, 
+		uiGroupVoltage=> GV_1);
+END_IF
+
+IF NOT XP_2 OR XE_2 THEN
+	OUT_GROUP_02(
+		xResetError:= XE_2, 
+		uiChannel:= 2, 
+		eMode:= ifmOutGroup.MODE_OUTPUT_GROUP.OUT_DIGITAL, 
+		eFilter:= ifmOutGroup.FILTER_OUTPUT_GROUP.FILTER_0, 
+		xValue:= TRUE, 
+		xError=> XE_2, 
+		eDiagInfo=> D1_2, 
+		xPrepared=> XP_2, 
+		xGroupState=> , 
+		uiGroupCurrent=> , 
+		uiVBBxVoltage=> VV_2, 
+		uiGroupVoltage=> GV_2);
+END_IF
+
+VBB0_SW_Q.ValueDigital:= TRUE;
+VBB1_SW_Q.ValueDigital:= TRUE;
+VBB2_SW_Q.ValueDigital:= TRUE;
+
+(* ********************************* Valve Initialization here, valves not connected to axes happens elsewhere *********************************** *)
+
+(* Handle all of the axes valve initialization here. *)
+FOR INDEX := 1 TO NUM_AXES DO
+	HaweVpocMaintain(pHAWE_VPOC := ADR(AXES[INDEX].CONFIG.HAWE_VPOC), MSTIME := MSTIME, TOGGLE := (INDEX = FLIP_COUNTER));
+END_FOR
+
+// triggers a bit flip in each valve approximately once per 400ms
+IF FLIP_COUNTER < NUM_AXES THEN
+	FLIP_COUNTER := FLIP_COUNTER + 1;
+ELSE
+	FLIP_COUNTER := 1;
+END_IF
+
+DEBUG_4TH_BIT := AXES[1].CONFIG.HAWE_VPOC.pDCW^;

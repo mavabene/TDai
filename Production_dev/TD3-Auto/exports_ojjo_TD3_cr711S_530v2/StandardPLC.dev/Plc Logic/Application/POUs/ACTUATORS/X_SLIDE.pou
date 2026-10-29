@@ -1,0 +1,289 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK X_SLIDE
+VAR_INPUT
+	INIT: BOOL;
+	pX_SLIDE: POINTER TO sAxis;
+	TIME_US: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	VALID: BOOL;
+	POSITION_RAW: DINT;
+	CLOSED_LOOP: BOOL;
+	PROFILER: BOOL;
+	JOYSTICK_01: joystickToJogOutput;
+	OUTPUT_MAX: REAL;
+	
+	TARGET_POS: REAL;
+	VEL: REAL;
+	ACCEL: REAL;
+	
+	INITIATE_GPS_AUTO_MOVE: BOOL := FALSE;
+	GPS_FINE_TUNE_SLOWDOWN_FACTOR: REAL := 0.3;
+	GPS_JS: REAL := 0;
+	RWP_WAIT_LEVEL_FIRST_ATTEMPT: BOOL := TRUE;
+	GPS_FEEDBACK_AUTOTARGET_INIT: BOOL := TRUE;
+	TARGET_LAST: REAL := 0; // 
+	GPS_VEL: REAL := 0;
+	GPS_ACCEL: REAL := 0;
+END_VAR
+
+(********************** Implementation ****************************)
+(* Operate the pitch axis based on the top-level state of the machine.   Pitch from the operator's viewpoint is positive when the
+	top is coming toward them. *)
+VALID := TRUE;
+
+(* ALWAYS begin in the actuator program by sampling the feedback and sending that into the motion system. *)
+IF SIMULATION THEN
+	POSITION_RAW := REAL_TO_DINT(pX_SLIDE^.SETPOINT.POSITION_ENGR);
+ELSE
+	(* If no valid feedback is available and we are in automatic, don't run anything. *)
+	IF X_SLIDE_CYLINDER_STATUS <> 5 THEN
+		VALID := FALSE;
+	ELSE
+		POSITION_RAW := X_SLIDE_ENCODER_RAW;
+	END_IF
+END_IF
+Sampled(ADR(pX_SLIDE^.FEEDBACK), POSITION_RAW, TIME_US, VALID);
+
+(* Disallow automatic operation when feedback isn't working. *)
+IF AUTOMATIC AND NOT VALID THEN
+	disableActuator(pX_SLIDE);
+	RETURN;
+END_IF
+
+CLOSED_LOOP := FALSE;
+PROFILER := FALSE;
+
+IF MACHINE_MODE = ERROR_MODE OR getEstopPressed() THEN
+	(* This should always put zeros on the PWMs, and should be the first statement in this IF block. *)
+	setOutput(ADR(pX_SLIDE^.OUTPUT), 0, FALSE);
+ELSIF MACHINE_NO_TOUCH OR VIS_TUNE_ENABLED THEN
+	(* Don't touch anything; the operator cycles between states with a button, and we wait briefly
+		after a state change in case the operator wants to skip a state. *)
+	;
+	CLOSED_LOOP := TRUE;
+ELSIF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS AND GPS_AXES[GPS_X].AUTOTARGET_ON AND AUTOMATIC AND AUTOMATIC_ALLOWED AND 
+		(
+			(
+				(MACHINE_MODE = RWP_MODE) AND ( (RWP_STATE = RWP_STATE_WAIT_LEVEL) OR 
+											(RWP_STATE = RWP_STATE_GPS_FAST_TARGET) OR
+											(RWP_STATE = RWP_STATE_GPS_FINE_TARGET) OR
+											(RWP_STATE = RWP_STATE_GPS_MANUAL_CYCLE)) 
+			)
+			OR
+			(	 MACHINE_MODE = SCREW_MODE AND 
+				( 	SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP OR 
+					SCREW_STATE = SCREW_STATE_GPS_FWP_AUTOTARGET_GPS OR 
+					((SCREW_STATE = SCREW_STATE_INITIAL_ROTATE) AND (WP_HEIGHT_LATCH = WP_HIGH)) OR
+					SCREW_STATE = SCREW_STATE_NXT_TL_ADJUST 	) 
+			)
+		)
+		THEN
+
+	// determine when to initiate move and move type
+	IF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE AND GPS_AUTOTARGET_ACTUATE THEN // only set reference first time
+		TARGET_LAST := AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR; // set feedback profiler first step reference
+	END_IF
+ 	
+	// execute movement
+	// set parameters for move
+	IF GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE THEN
+		GPS_VEL := X_SLIDE_VEL;
+		GPS_ACCEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * X_SLIDE_ACCEL;
+		TARGET_POS := GPS_AXES[GPS_X].LOCKED_TARGET_POSITION; // outrigger bounces antenna - use locked target before outrigger contacts ground 
+	// yaw and boom swing bounce antennas a lot, so go slow
+	ELSIF GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE THEN
+		IF ((MACHINE_MODE = SCREW_MODE) AND (SCREW_STATE = SCREW_STATE_INITIAL_ROTATE)) THEN
+			GPS_VEL := X_SLIDE_VEL;
+			GPS_ACCEL := X_SLIDE_ACCEL;
+		ELSE
+			GPS_VEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_VELOCITY_FACTOR] * X_SLIDE_VEL;
+			GPS_ACCEL := pNVM4^.GPS_GENERAL_SETTINGS[GPS_ACCEL_FACTOR] * X_SLIDE_ACCEL;
+		END_IF
+		
+		IF MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_GPS_FWP_RETURN_TO_WP THEN
+			TARGET_POS := X_SLIDE_AT_WP;
+		ELSE
+			TARGET_POS := GPS_AXES[GPS_X].FILTERED_TARGET_POSITION;
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE THEN // very slow to minimize antennas bounce and instability
+		// close, so move slow to avoid instability
+		GPS_VEL := 0.6 * GPS_TEST_VEL_FACTOR; // 0.5 * GPS_VEL;
+		GPS_ACCEL := 0.2 * GPS_TEST_ACCEL_FACTOR;// 0.5 * GPS_ACCEL;
+		// autotarget in sync with other axes:
+		TARGET_POS := GPS_AXES[GPS_X].FILTERED_TARGET_POSITION;
+	ELSIF GPS_TRUSS_CYCLE = GPS_FINISH_MOVE THEN 
+		TARGET_POS := AXES[GPS_AXES[GPS_X].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR;
+	END_IF
+	
+	// limit target position to what is possible
+	TARGET_POS := MIN(MAX (TARGET_POS, GPS_AXES[GPS_X].AXIS_RANGE_MIN), GPS_AXES[GPS_X].AXIS_RANGE_MAX);
+	
+	IF GPS_TRUSS_CYCLE = GPS_FIRST_COARSE_MOVE OR GPS_TRUSS_CYCLE = GPS_SLOW_TRAPEZOID_MOVE THEN
+		IF isPauseRequested() THEN
+			TrapezoidStop(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.CONFIG , pX_SLIDE^.FEEDBACK);
+		ELSIF GPS_AUTOTARGET_ACTUATE THEN // AND ( NOT GPS_MANUAL_CYCLE_CONTROL ) ) OR GPS_RUN_NEXT_CYCLE THEN
+			TrapezoidStart(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.FEEDBACK,
+				TARGET_POS, GPS_VEL, GPS_ACCEL);
+		END_IF
+		CLOSED_LOOP := TRUE;
+		PROFILER := TRUE;
+	ELSIF (GPS_TRUSS_CYCLE = GPS_FINE_SLOW_FEEDBACK_MOVE) OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) THEN	
+		IF isPauseRequested() OR (GPS_TRUSS_CYCLE = GPS_FINISH_MOVE) OR (NOT GPS_READY) THEN
+			setOutput(ADR(pX_SLIDE^.OUTPUT), 0, FALSE);
+		ELSE
+			setVelAccel(TARGET_POS, pX_SLIDE^.FEEDBACK.POSITION_ENGR,
+				//2 * GPS_AXES[GPS_X].TARGET_LIMIT / 10, 0.1 * GPS_AXES[GPS_X].TARGET_LIMIT / 10, // 
+				//0.5 * GPS_AXES[GPS_X].TARGET_LIMIT / 10, 0.05 * GPS_AXES[GPS_X].TARGET_LIMIT / 10, // 
+				1.0, 0.1,
+				GPS_VEL, GPS_ACCEL, ADR(VEL), ADR(ACCEL));
+			TARGET_POS := ddt(TARGET_POS, TARGET_LAST, GPS_VEL);
+			TARGET_LAST := TARGET_POS;
+			SetpointInit(ADR(pX_SLIDE^.SETPOINT), pX_SLIDE^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+			CLOSED_LOOP := TRUE;
+		END_IF
+	ELSIF GPS_TRUSS_CYCLE = GPS_NO_MOVE THEN
+		setOutput(ADR(pX_SLIDE^.OUTPUT), 0, FALSE);
+	END_IF
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND 
+	(
+		(MACHINE_MODE = TRACK_MODE AND TRACK_STATE = TRACK_STATE_NORMAL) 
+		OR
+		// recover from mast lean compensation
+		(MACHINE_MODE = SCREW_MODE AND HMI_BOOLS_VALUES[PRELOAD_AUTO_MAST_LEAN_COMPENSATION] AND 
+		(SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR SCREW_STATE = SCREW_STATE_INITIAL_ROTATE))
+	) 
+	THEN
+	IF isTrackModeStateChange() OR isContinueRequested() OR isScrewModeStateChange() THEN
+		IF MACHINE_MODE = SCREW_MODE THEN
+			TARGET_POS := X_SLIDE_AT_WP;
+		ELSIF GPS_AXES[GPS_X].AUTOTARGET_ON AND GPS_READY THEN
+			TARGET_POS := X_SLIDE_TRACK_POS_GPS;
+		ELSE
+			TARGET_POS := X_SLIDE_TRACK_POS;
+		END_IF
+		TrapezoidStart(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.FEEDBACK,
+			TARGET_POS, X_SLIDE_VEL, X_SLIDE_ACCEL);
+	ELSIF isPauseRequested() THEN
+		TrapezoidStop(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.CONFIG , pX_SLIDE^.FEEDBACK);
+	END_IF
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND (isNXTmotorThirdLeg_perLatch() OR (WP_HEIGHT_LATCH = WP_HIGH)) AND
+	(
+		MACHINE_MODE = SCREW_MODE AND
+		(
+			(SCREW_STATE = SCREW_STATE_INITIAL_ROTATE AND NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS) OR
+			SCREW_STATE = SCREW_STATE_MAST_TO_VERTICAL OR
+			(SCREW_STATE = SCREW_STATE_MAST_TO_TARGET AND NOT GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS)
+		)
+	)
+	THEN
+	TARGET_POS := X_SLIDE_AT_WP;
+	// deprecated:
+	// When installing the NXT three legged motor, we are moving the X slide in screw drive on EW screws.  So when doing
+	//	the initial rotate, we need to return to the loading position, and when we move into the screw drive state, we need
+	//	to compensate for the boom swing moving to get Y in the right position.
+	
+// 	IF SCREW_STATE = SCREW_STATE_INITIAL_ROTATE THEN
+// 		TARGET_POS := X_SLIDE_AT_WP;
+// 	ELSE
+// 		// EW screws of the NXT 3rd leg motor.  The workpoint for these trusses is above the torque tube.
+// 		//	To compensate, we move the rotator left/right to get it aligned with the screw path.  When this
+// 		//	motion happens, a machine with track base not flat in roll will pollute this.  Compensate here.
+// 		IF SCREW_SIDE_LATCH = eScrewSide.SCREW_LEFT THEN
+// 			TARGET_POS := NXT_3LM_X_SLIDE_LEFT;
+// 		ELSE
+// 			TARGET_POS := NXT_3LM_X_SLIDE_RIGHT;
+// 		END_IF
+// 	END_IF
+	
+	IF isScrewModeStateChange() OR isContinueRequested() THEN
+		TrapezoidStart(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.FEEDBACK,
+			TARGET_POS, X_SLIDE_VEL, X_SLIDE_ACCEL);
+	ELSIF isPauseRequested() THEN
+		(* Stop what we are doing. *)
+		TrapezoidStop(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US, pX_SLIDE^.CONFIG ,pX_SLIDE^.FEEDBACK);
+	END_IF
+
+	(* Prepare to run the control loop. *)
+	PROFILER := TRUE;
+	CLOSED_LOOP := TRUE;
+	
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_PRELOAD_COMPLIANCE AND NOT isNXTmotorThirdLeg_perLatch() THEN // preload compliance mast lean compensation
+	// determine when to initiate move and move type
+	IF isScrewModeStateChange() THEN // only set reference first time
+		TARGET_LAST := AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR; // set feedback profiler first step reference
+	END_IF
+	IF isPauseRequested() OR NOT PRELOAD_PLUMB_MAST THEN
+		setOutput(ADR(pX_SLIDE^.OUTPUT), 0, FALSE);
+	ELSE
+		TARGET_POS := -3 * (SCREW_PARAMETERS_CURRENT.NS_PITCH - CORRECTED_MAST_PITCH) + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;  // approximate conversion of pitch degree error to an x-slide movement
+		setVelAccel(TARGET_POS, pX_SLIDE^.FEEDBACK.POSITION_ENGR,
+			10, 1, 0.3, GPS_ACCEL, ADR(VEL), ADR(ACCEL));
+		TARGET_POS := ddt(TARGET_POS, TARGET_LAST, 0.3);
+		TARGET_LAST := TARGET_POS;
+		SetpointInit(ADR(pX_SLIDE^.SETPOINT), pX_SLIDE^.FEEDBACK, TARGET_POS, VEL, ACCEL);
+		CLOSED_LOOP := TRUE;
+	END_IF
+	
+ELSIF AUTOMATIC AND AUTOMATIC_ALLOWED AND MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP
+// 		AND
+//		(
+// 			(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP) OR
+// 			(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_ASSEMBLE)
+//		) 
+		AND
+		(xyzTrueMotion_01.STATE = eXyzTrueMotionStates.POSITION_X OR xyzTrueMotion_01.STATE = eXyzTrueMotionStates.POSITION_Y)
+	THEN
+	IF GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS THEN
+		GPS_FINE_TUNE_SLOWDOWN_FACTOR := 0.3;
+	ELSE
+		GPS_FINE_TUNE_SLOWDOWN_FACTOR := 1.0;
+	END_IF
+	 
+	SetpointInit(ADR(pX_SLIDE^.SETPOINT), pX_SLIDE^.FEEDBACK,
+		xyzTrueMotion_01.X_SLIDE_POS_SETPOINT,
+		xyzTrueMotion_01.X_SLIDE_VEL_SETPOINT * GPS_FINE_TUNE_SLOWDOWN_FACTOR,
+		0);
+	CLOSED_LOOP := TRUE;
+ELSIF (NOT AUTOMATIC AND MACHINE_MODE = RWP_MODE) OR
+	(AUTOMATIC AND AUTOMATIC_ALLOWED AND
+		(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_FWP) OR
+		(MACHINE_MODE = SCREW_MODE AND SCREW_STATE = SCREW_STATE_ASSEMBLE) OR
+		(MACHINE_MODE = RWP_MODE AND RWP_STATE = RWP_STATE_LOCATE_WP)
+	)
+	THEN
+	(* If you change JS_POS_IS_OUTPUT_POS, you must change the sign in the "true motion" code, too! *)
+	IF nearHardStop(pX_SLIDE^, JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := FALSE) THEN
+		OUTPUT_MAX := protectHardStop(pX_SLIDE^);
+	ELSE
+		(* Normal jogging. *)
+		OUTPUT_MAX := pX_SLIDE^.CONFIG.MANUAL_OUTPUT_MAX;
+	END_IF
+	JOYSTICK_01(JS := REMOTE.V4_FB, JS_POS_IS_OUTPUT_POS := FALSE, 
+		FILTER := FALSE, OUTMAX := OUTPUT_MAX,
+		MAG => pX_SLIDE^.OUTPUT.MAGNITUDE, POSITIVE => pX_SLIDE^.OUTPUT.POSITIVE);
+
+ELSE
+	setOutput(ADR(pX_SLIDE^.OUTPUT), 0, FALSE);
+END_IF
+
+IF NOT MACHINE_NO_TOUCH AND NOT VIS_TUNE_ENABLED THEN
+	IF CLOSED_LOOP THEN
+		IF PROFILER THEN
+			TrapezoidRun(ADR(pX_SLIDE^.PROFILER), ADR(pX_SLIDE^.SETPOINT), TIME_US);
+		END_IF
+		
+		LoopPID(ENABLE := TRUE, pLOOP := ADR(pX_SLIDE^.LOOP_PID), pOUTPUT := ADR(pX_SLIDE^.OUTPUT), SP := pX_SLIDE^.SETPOINT, FB:= pX_SLIDE^.FEEDBACK, CFG := pX_SLIDE^.CONFIG,
+			I_ENABLED := (pX_SLIDE^.PROFILER.STATE = HOLD));
+	ELSE
+		pX_SLIDE^.SETPOINT.POSITION_ENGR := pX_SLIDE^.FEEDBACK.POSITION_ENGR;
+		pX_SLIDE^.SETPOINT.POSITION_RAW := pX_SLIDE^.FEEDBACK.POSITION_RAW;
+	END_IF
+
+	HaweOutput(pX_SLIDE);
+END_IF

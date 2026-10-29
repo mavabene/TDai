@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_SImotorThirdLegRemote : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_SImotorThirdLegRemote :=
+		isNXTmotorTruss_perScrewParams() 
+	AND 
+		(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_SI) 
+	AND
+		(getScrewSide() = eScrewSide.SCREW_CENTER);
+		

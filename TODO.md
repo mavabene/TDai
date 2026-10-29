@@ -21,3 +21,11 @@ keep technical evidence in the linked owning record.
   - **Next action:** Establish which component vectors test mode 86 should clear
     and its expected exit behavior before proposing a correction. The earlier
     `ET2_TEST > 70` branch catches 86 and returns before the reset logic.
+
+## Active
+
+- [ ] **SP21 migration — resolve visualization libraries and compile.**
+  - **Chat:** Convert PLC code to SP21
+  - **Status:** Saved PLC 530v2 imported; extraction reviewed, compilation unverified.
+  - **Evidence:** [SP21 checkpoint](docs/verification/2026-10-29-sp21-checkpoint.md).
+  - **Next action:** Inspect Project Environment visualization profile and first compiler errors; establish a compatible dependency set for the ifm target before selecting library versions.

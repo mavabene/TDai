@@ -1,0 +1,160 @@
+
+(********************** Declaration ****************************)
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)
+
+TYPE sPersistent_4 :
+STRUCT
+	NVM4_NEEDS_INIT: UDINT := 999;
+	NVM4_FORMAT_VERSION: UDINT := 3;
+	NVM4_FORMAT_PLACEHOLDER_1: UDINT := 0;
+	NVM4_FORMAT_PLACEHOLDER_2: UDINT := 0;
+	
+	HEAVY_EMBEDMENT_CM: ARRAY [1..SCREW_LENGTHS_COUNT] OF REAL := [139.7, 111.8, 80.0];
+	
+	LEG_LENGTH_COUNT: ARRAY [1..LEG_LENGTHS_COUNT] OF UDINT := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	SCREW_LENGTH_COUNT: ARRAY [1..SCREW_LENGTHS_COUNT] OF UDINT := [0, 0, 0];
+	
+	(*
+		Interior: 0
+		Exterior: 1
+	*)
+	TRACKER_ROW_TYPE: eTrackerRow := eTrackerRow.TRACKER_ROW_SI_STANDARD;
+
+	// Currently only used for NXT SI.
+	NXT_TLM_3L_EMBEDMENT_CM: REAL := 55.0;
+	sPersistent_4_AVAIL_06: REAL := 40.0; // NXT_TLM_3L_ANGLE hardcoded
+	NXT_TLM_T_ATOL_TO_WP: REAL := 312 + 2.54;
+	NXT_TLM_3L_ATOL_TO_WP: REAL := 338.1 + 2.54;
+	
+	// Liters per minute when air is on and bit is hovering above ground.
+	WATER_HOVER_LPT: REAL := 1.0;
+	// Liters per minute when air is on and bit is just enter the ground.
+	WATER_ENTER_LPT: REAL := 1.0;
+	
+	LOAD_UNLOAD: BOOL := FALSE;
+	
+	SCREW_PITCH_CM: REAL := 5.08;
+	
+	// Start every screw assuming you've got soft soil.
+	SOFT_SOIL_ENABLED: BOOL := FALSE;
+
+	// Water flow when hammering, ratioed from normal settings.
+	WATER_HAMMER_RATIO: REAL := 0.0;
+	
+// 	MOTOR_HAS_LASER_MOUNT: BOOL := FALSE; not needed because with GPS we always locate motors as if they have a laser (with GPS)
+	sPersistent_4_AVAIL_01: BOOL := FALSE;
+
+	SS_DRIVE_VEL_HI: REAL := 4.0;
+	SS_DRIVE_VEL_LOW: REAL := 2.0;
+	LC_DRIVE_PRESSURE_HI: REAL := 2000;
+	LC_DRIVE_PRESSURE_LOW: REAL := 1500;
+	
+	// When SS code transitions from hard to soft soil, the LC is preloaded to support the machine weight while
+	//	the drill comes down.
+	SS_LC_PRELOAD: REAL := 5.0;
+	SS_BIT_PROTRUSION: REAL := 40.0;
+	SS_LC_STALL_TIME: REAL := 0.75;
+	SS_DETECT_BAND: REAL := 800;
+	SS_DETECT_TIME: REAL := 3.0;
+	
+	LR_ENCODER_RES: REAL := 4096;
+
+// 	LC_STALL_ENABLED: BOOL := FALSE; // changed to radio button with 3 options
+	sPersistent_4_AVAIL_02: BOOL := FALSE;
+	sPersistent_4_AVAIL_03: REAL := 0.25;
+	LC_STALL_LR_ADVANCE: INT := 30;
+	LC_STALL_LR_OUTPUT: INT := 15;
+	
+	(* This is the distance (in cm) before end of screw drive where the mandrel starts retracting in soft soil. *)
+	UC_END_RETRACT_SOFT: REAL := 20.0;
+	(* Distance the drill tip sticks out front of screw when clear spoils in soft soil. *)
+	SS_CLEAR_SPOILS: REAL := 5;
+	
+	PLUMB_SCREW_EMBEDMENT: REAL := 100.0;
+
+	MAX_ROLL_START: REAL := 8.0;
+	MAX_PITCH_FWD_START: REAL := 8.0;
+	MAX_PITCH_BACK_START: REAL := 6.0;
+	MAX_ROLL_CONTINUE: REAL := 9.0;
+	MAX_PITCH_FWD_CONTINUE: REAL := 9.0;
+	MAX_PITCH_BACK_CONTINUE: REAL := 7.0;
+	
+	AIR_COMPRESSOR_TEMP_MAX: REAL := -999;
+	AIR_COMPRESSOR_PRESSURE_MAX: REAL := -999;
+
+	SS_LC_STALL_PRESSURE: REAL := 1500.0;
+
+	UR_PRESSURE_INPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [0, 800, 900, 1200, 1850]; // Recipe #1 at Kiewit!
+	AIR_FLOW_OUTPUT: ARRAY [1..FLOW_TABLE_SIZE] OF REAL := [28, 28, 30, 50, 100];
+	
+	SS_LC_CONTROL_SOURCE: INT := 0;
+	
+	SS_MAX_STALLS: INT := 3;
+	SS_REVEAL_MAX_STALLS: INT := 2;
+
+	MAX_BS_START: REAL := 27.0;
+	
+	LOWER_CROWD_ENCODER_TYPE: INT := 0;
+
+	NXT_TLM_3L_HEAVY_EMBEDMENT_CM: REAL := 65.0;
+	sPersistent_4_AVAIL_04: REAL := 45.0; // NXT_TLM_3L_HEAVY_ANGLE hard coded
+	NXT_TLM_T_ANGLE: REAL := 25.0;
+	
+	HAMMER_SPEED: UINT := 100;
+	
+	// Compressor installed:
+	//	0 => compressor original hardwired controls on 2.0 and 3.0 machines from factory
+	//	1 => compressor improved software controls on 3.1 and 3.2 machines from factory
+	MACHINE_COMPRESSOR: UDINT := 0;
+	// Drifter installed:
+	//	0 => TEI 260HT
+	//	1 => Eurodrill RH 2X
+	MACHINE_DRIFTER: UDINT := 0;
+	// Lower rotary installed:
+	//	0 => Drill tech
+	//	1 => Eurodrill RH 4X
+	MACHINE_LR: UDINT := 0;
+	
+	// NXT SI
+	NXT_TLM_3L_HEAVY_ATOL_TO_WP: REAL := 338.1 + 2.54;
+	sPersistent_4_AVAIL_05: REAL := 0.0;
+	
+	// GPS
+	GPS_VENDOR: UINT := 0;
+	
+	(*                  --  GPS AUTO TARGET BOOLS:  --
+		GPS_AUTOTARGET_SELECTION.0 = WP AUTO-TARGET bool - no axis will autotarget without this set
+							 .1 - .9 = select axes Auto target bools: .1 = heading, .2 = x, .3 = y, .4 = z
+		See eGPS_Selection for full description                       *)
+	GPS_AUTOTARGET_SELECTION: UINT := 30720; // 0111 1000 0000 0000 
+	
+	(*		"GPS_AXIS_IN_RANGE" := 7			 		"GPS_AXIS_ON_TARGET" := 8
+		(+/- from midpoint of actuator range)		(+/- from target coordinates per GPS)
+		-------------------------------------		-------------------------------------
+			Heading range in deg,						Heading on target, 	
+		  	X range in cm,          		 			X target limit in mm,
+		  	Y range in deg,          	     			Y "",
+		  	Z range in cm,           					Z "",													 *)
+	GPS_AXES_SETTINGS: ARRAY [1..NUM_GPS_AXES, 7..8] OF REAL := [	20.0, 	0.3, 
+																 	 10.0, 	14.0, 
+																	20.0, 	14.0,
+																	82.0,  	11.0];
+	(*  see eGPS_Settings for definitions *)
+	GPS_GENERAL_SETTINGS: ARRAY [1..15] OF REAL := [0.9, 0.5, 3.0, 5.0, 1.0, 5.0, 4(8888), 10.0, 10.0, 55, 40, 8888];
+	
+	// Scheme for persistent values
+	// To add var's to persistent, just add variable name to eHMI_SettingsXxxxs in both PLC and HMI code
+	HMI_BOOLS: ARRAY [1..20] OF BOOL := [20(0)]; // eHMI_SettingsBools
+	HMI_SINTS: ARRAY [1..20] OF SINT := [-1, -5, 0, 17(-1)]; // eHMI_SettingsSints; -1 to trigger bringing over old value to new location; 
+	HMI_INTS: ARRAY [1..20] OF INT := [20(-1)]; // eHMI_SettingsInts
+	HMI_UINTS: ARRAY [1..20] OF UINT := [0, 2600, 18(55555)]; // eHMI_SettingsUints
+	HMI_REALS: ARRAY [1..40] OF REAL := [-1, 4, 4, 100, 2, 15(-1)]; // eHMI_SettingsReals
+	HMI_VECTORS: ARRAY  [1..10] OF Vector3D;
+	HMI_STRINGS: ARRAY  [1..10] OF STRING(20);
+	
+	NVM_PADDING: UDINT := 16#DEADBEEF;
+// 822 bytes remaining
+END_STRUCT
+END_TYPE
+
+(* ***** Only add var's to end of sPersistents, or the values will be corrupted!!! ***** *)

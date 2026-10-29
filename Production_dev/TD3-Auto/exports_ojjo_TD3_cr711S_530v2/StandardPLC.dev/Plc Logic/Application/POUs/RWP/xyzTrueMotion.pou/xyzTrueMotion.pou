@@ -1,0 +1,193 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK xyzTrueMotion
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	STATE: eXyzTrueMotionStates := eXyzTrueMotionStates.IDLE;
+
+	BOOM_SWING_START: REAL;
+	BOOM_SWING_POS_DELTA: REAL;
+	BOOM_SWING_POS_SETPOINT: REAL;
+	BOOM_SWING_POS_SETPOINT_LAST: REAL;
+	BOOM_SWING_VEL_SETPOINT: REAL;
+	
+	X_SLIDE_START: REAL;
+	X_SLIDE_POS_DELTA: REAL;
+	X_SLIDE_POS_SETPOINT: REAL;
+	X_SLIDE_POS_SETPOINT_LAST: REAL;
+	X_SLIDE_VEL_SETPOINT: REAL;
+
+	Z_SLIDE_START: REAL;
+	Z_SLIDE_POS_DELTA: REAL;
+	Z_SLIDE_POS_SETPOINT: REAL;
+	Z_SLIDE_POS_SETPOINT_LAST: REAL;
+	Z_SLIDE_VEL_SETPOINT: REAL;
+
+	(* This is the master speed along the true dimension.  These are all in cm/sec. *)	
+	X_SPEED_MAX: REAL := 3.0;
+	Y_SPEED_MAX: REAL := 0.75;
+	Z_SPEED_MAX: REAL := 5.0;
+	
+	(* True distance we want to have moved, relative to the start positions. *)
+	POSITION_MASTER: REAL;
+	(* Momemnt by moment request for true speed based on joystick position. *)
+	VELOCITY_MASTER: REAL;
+	(* Current time, microseconds. *)
+	US: ULINT;
+	(* Beginning time of this motion. *)
+	US_START: ULINT;
+	(* Length of the most recent step, over which we integrate velocity to get position. *)
+	US_DELTA: ULINT;
+	(* Time of last sample. *)
+	US_LAST: ULINT := 0;
+	
+	(* ******** Elements from Yu-Han's kinematic equations ******** *)
+	
+	(* Trunion position at the beginning of the move, degrees. *)
+	T0: REAL;
+	(* Distance between boom swing pivot and trunion pivot at the beginning of the move, cm.  This we calculate
+		by adding a machine dimension calculated by measing between these pivots when the X slide is retracted, then
+		adding in the X slide current position (as X slide position is referenced to the fully retracted position.) *)
+	X0: REAL;
+	S_DELTA: REAL;
+	D_DELTA: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+(* Implements the state machine and the logic for the machine's true motions (in X, Y, and Z). *)
+SysTimeGetUs(pUsTime := US);
+
+US_DELTA := US - US_LAST;
+US_LAST := US;
+
+X_SLIDE_POS_SETPOINT_LAST := X_SLIDE_POS_SETPOINT;
+BOOM_SWING_POS_SETPOINT_LAST := BOOM_SWING_POS_SETPOINT;
+Z_SLIDE_POS_SETPOINT_LAST := Z_SLIDE_POS_SETPOINT;
+
+CASE STATE OF
+	eXyzTrueMotionStates.IDLE:
+		IF REMOTE.V4_FB <> 0 THEN
+			changeState(eXyzTrueMotionStates.POSITION_X);
+			T0 := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR;
+			X0 := BS_PIVOT_TO_YAW_PIVOT + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;
+		ELSIF REMOTE.LJ_LR <> 0 THEN
+			changeState(eXyzTrueMotionStates.POSITION_Y);
+			T0 := AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR;
+			X0 := BS_PIVOT_TO_YAW_PIVOT + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;
+		ELSIF REMOTE.V3_FB <> 0 THEN
+			changeState(eXyzTrueMotionStates.POSITION_Z);
+		END_IF
+	eXyzTrueMotionStates.POSITION_X:
+		(* Move the X slide, then have the other actuators follow this to unpollute that dimension. *)
+		IF REMOTE.V4_FB = 0 THEN
+			changeState(eXyzTrueMotionStates.IDLE);
+		ELSE
+			(* Calculate requested speed in engineering units, then integrate position.
+				The negative on the lever is positive on the X slide, note minus sign below! *)
+			VELOCITY_MASTER := (X_SPEED_MAX * (-REMOTE.V4_FB)) / 100.0;
+			POSITION_MASTER := POSITION_MASTER + (VELOCITY_MASTER * TO_REAL(US_DELTA)) / 1000000;
+			D_DELTA := POSITION_MASTER;
+		
+			(* Here we adjust the Boom swing to keep the Y position stable as the X slide pollutes it.  The equation
+				of motion here is:
+				
+					deltaS = atan[(x0 * sin(t0))/(x0 * cos(t0) + deltaD)] - t0
+					
+				Where t0 is trunion initial position (which indicates misalign to laser), deltaS is the change
+					in boom swing angle, and x0 is the distance between the boom swing pivot and the trunion pivot
+					at the start of the move.  deltaD is calculated above as POSITION_MASTER. *)
+
+			(* Now we need to also move the boom swing in the case that the machine frame is not square to the
+				laser.  In this case the X motion pollutes the Y position, so we adjust for this here. *)
+			BOOM_SWING_POS_DELTA := ATAN_DEG((X0 * SIN_DEG(T0))/(X0 * COS_DEG(T0) + D_DELTA)) - T0;
+			S_DELTA := BOOM_SWING_POS_DELTA;
+			BOOM_SWING_POS_SETPOINT := BOOM_SWING_START + BOOM_SWING_POS_DELTA;
+			BOOM_SWING_VEL_SETPOINT := (BOOM_SWING_POS_SETPOINT - BOOM_SWING_POS_SETPOINT_LAST) / (TO_REAL(US_DELTA) / 1000000);
+
+			(* Now generate the required X slide motion as:
+			
+				deltaX = [-1 + sin(t0)/sin(t0 + deltaT)] * x0;
+				
+			*)
+			IF T0 = 0 OR T0 = -S_DELTA THEN
+				// The quantity in the equation on the ELSE side of this logic wants the second term to be close to
+				//	1.  This goes bad in two cases:
+				//
+				//	- When T0 goes exactly to zero, though, this goes to zero.
+				//	- When T0 and S_DELTA sum to 0, the denominator goes to zer.
+				//
+				// Either case causes problems, so we handle those special cases here.  In this case, run the X
+				//	right off the master position because it is unpolluted.
+				//
+				X_SLIDE_POS_DELTA := D_DELTA;
+			ELSE
+				X_SLIDE_POS_DELTA := (-1 + (SIN_DEG(T0)/SIN_DEG(T0 + S_DELTA))) * X0;
+			END_IF
+			X_SLIDE_POS_SETPOINT := X_SLIDE_START + X_SLIDE_POS_DELTA;
+			X_SLIDE_VEL_SETPOINT := (X_SLIDE_POS_SETPOINT - X_SLIDE_POS_SETPOINT_LAST) / (TO_REAL(US_DELTA) / 1000000);
+					
+			(* The X slide is behind the pitch axis, meaning that if the machine frame pitch and mast pitch aren't
+				equal, the X slide will pollute the Z axis. *)
+			Z_SLIDE_POS_DELTA := X_SLIDE_POS_DELTA * SIN_DEG(AXES[AXIS_PITCH].FEEDBACK.POSITION_ENGR - BASE_ROLL.POSITION_ENGR);
+			Z_SLIDE_POS_SETPOINT := Z_SLIDE_START + Z_SLIDE_POS_DELTA;
+			Z_SLIDE_VEL_SETPOINT := (Z_SLIDE_POS_SETPOINT - Z_SLIDE_POS_SETPOINT_LAST) / (TO_REAL(US_DELTA) / 1000000);
+		END_IF
+	eXyzTrueMotionStates.POSITION_Y:
+		(* Move the boom swing, then have the other actuators follow this to unpollute that dimension. *)
+		IF REMOTE.LJ_LR = 0 THEN
+			changeState(eXyzTrueMotionStates.IDLE);
+		ELSE
+			(* Calculate requested speed in engineering units, then integrate position. *)
+			VELOCITY_MASTER := (Y_SPEED_MAX * REMOTE.LJ_LR) / 100.0;
+			POSITION_MASTER := POSITION_MASTER + (VELOCITY_MASTER * TO_REAL(US_DELTA)) / 1000000;
+
+			(* We are going to run the boom swing to get Y motions, and let the X slide correct for the cross-axis pollution.
+				Note the setpoints for the true motion are in cm/sec, but the boom swing is setup in degrees per second. *)
+			IF BOOM_SWING_POS_SETPOINT >= AXES[AXIS_BOOM_SWING].CONFIG.COMMAND_LIMIT_MAX THEN
+				BOOM_SWING_POS_SETPOINT := AXES[AXIS_BOOM_SWING].CONFIG.COMMAND_LIMIT_MAX;
+				BOOM_SWING_VEL_SETPOINT := 0;
+			ELSIF BOOM_SWING_POS_SETPOINT <= AXES[AXIS_BOOM_SWING].CONFIG.COMMAND_LIMIT_MIN THEN
+				BOOM_SWING_POS_SETPOINT := AXES[AXIS_BOOM_SWING].CONFIG.COMMAND_LIMIT_MIN;
+				BOOM_SWING_VEL_SETPOINT := 0;
+			ELSE
+				BOOM_SWING_VEL_SETPOINT := VELOCITY_MASTER / BOOM_SWING_TO_Y;
+				BOOM_SWING_POS_DELTA := BOOM_SWING_POS_DELTA + (BOOM_SWING_VEL_SETPOINT * TO_REAL(US_DELTA)) / 1000000;
+				S_DELTA := BOOM_SWING_POS_DELTA;
+				BOOM_SWING_POS_SETPOINT := BOOM_SWING_START + BOOM_SWING_POS_DELTA;
+			END_IF
+			
+			(* Here we adjust the X slide to keep the X position stable as the boom swing pollutes it.  The equation
+				of motion here is:
+				
+					deltaX = [-1 + (cos(t0)/cos(t0 + deltaS)] * x0
+					
+				Where t0 is trunion initial position (which indicates misalign to laser, as well as boom swing initial
+					position (s0), deltaS is the change in boom swing angle, and x0 is the distance between the boom
+					swing pivot and the trunion pivot at the start of the move. *)
+			X_SLIDE_POS_DELTA := X0 * (-1 + (COS_DEG(T0) / COS_DEG(T0 + S_DELTA)));
+			X_SLIDE_POS_SETPOINT := X_SLIDE_START + X_SLIDE_POS_DELTA;
+			(* Differentiate the position equation to get velocity. *)
+			//X_SLIDE_VEL_SETPOINT := X0 * COS_DEG(T0) * SIN_DEG(T0 + S_DELTA)/(COS_DEG(T0 + S_DELTA) * COS_DEG(T0 + S_DELTA));
+			X_SLIDE_VEL_SETPOINT := (X_SLIDE_POS_SETPOINT - X_SLIDE_POS_SETPOINT_LAST) / (TO_REAL(US_DELTA) / 1000000);
+		END_IF
+	eXyzTrueMotionStates.POSITION_Z:
+		(* Move the Z slide, then have the other actuators follow this to unpollute that dimension. *)
+		(* TODO: we are not moving Z slide with the true motion yet.  This is because the Z is not polluted when
+			the machine frame is flat.  Change this when that logic is added to the kinematics. *)
+		IF REMOTE.V3_FB = 0 THEN
+			changeState(eXyzTrueMotionStates.IDLE);
+		ELSE
+			//BOOM_SWING_VEL_SETPOINT := 0;
+			//BOOM_SWING_POS_SETPOINT := 0;
+			(* The Z slide is in front of the pitch axis, and so it in plane with the mast.  It therefore does not pollute
+				the X position, unlike the X slide which pollutes Z position because it is behind the pitch. *)
+			//X_SLIDE_VEL_SETPOINT := 0;
+			//X_SLIDE_POS_SETPOINT := 0;
+			(* Remain with the Z slide actuator handling this as a manual operation. *)
+			//Z_SLIDE_VEL_SETPOINT := 0;
+			//Z_SLIDE_POS_SETPOINT := 0;
+		END_IF
+END_CASE

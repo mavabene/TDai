@@ -1,0 +1,136 @@
+
+(********************** Declaration ****************************)
+(* This file contains positions that are used in various mode/state combinations. *)
+//{attribute 'qualified_only'}
+VAR_GLOBAL
+
+	ROTATOR_LOAD_POS: REAL := 0.0;				(* Degrees *)
+
+	(* This is set on a machine-type basis. *)
+	X_SLIDE_TRACK_POS: REAL := 0;
+	(* Clearance amount for the longest screw during screw load. The screw must fit between the drill bit tip and the ground in order
+		for the operator to fit the screw around the drill bit. *)
+// 	DRILL_CLEARANCE_TO_GROUND_LOAD: REAL := 0;
+	
+	(* Upper crowd positions here are measured from the *top of the upper crowd* !!!  This is the so-called "relative" positioning... this
+		will be the result of an absolute to relative position map based on machine dimensions. *)
+
+	UPPER_CROWD_TRACK_POS: REAL := 245;			(* cm: this is where the upper crowd is to have the mandrel tip ground clearance same as the gas tank. *)
+	UPPER_CROWD_LOAD_POS: REAL := 228;			(* cm: this is where the upper crowd is to load a screw *)
+	UPPER_CROWD_UP_LIMIT: REAL := 0;			(* cm: this is where we stop the upper crowd so the drill bit doesn't hit the bushing. *)
+	UPPER_CROWD_DRIVE_END_POS : REAL := 0; 		(* cm: this is where the LC stops so that the mandrel tip ends up at the same depth as the screw bottom. *)
+	UPPER_CROWD_ACCURACY: REAL := 1;			(* cm: settling accuracy of the lower crowd. *)
+	UPPER_CROWD_DRILL_TIP_FLUSH: REAL := 0;		(* cm: lower crowd position when drill bit is flush with tip of currently selected screw. *)
+
+	// We have three upper crowd positions, for ceating a plug then soil is soft, clearing spoils when soft, drilling aggressively when hard.
+	UPPER_CROWD_SS_NORMAL: REAL := 0;
+	UPPER_CROWD_SS_CLEAR_SPOILS: REAL := 0;
+	UPPER_CROWD_SS_HARD_SOIL: REAL := 0;
+	
+	(* Lower crowd for Track and RWP mode. *)
+	LOWER_CROWD_LOW_TARGET_POS: REAL := 0;		(* cm *)
+	LOWER_CROWD_TRACK_POS: REAL := 160;			(* cm: halfway between high and low WP positions. *)
+// 	LOWER_CROWD_CRIMP_POS: REAL := 240;			(* cm: out of the way, up high. *)
+	LOWER_CROWD_ASSEMBLE_CLEARANCE: REAL := 30;	(* cm: lower crowd up high enough to assemble truss below *)
+	LOWER_CROWD_TRACK_CLEARANCE: REAL := 30;	(* set in product init cm: This is ATI, NXT is 5, so set to bigger.  Lower crowd moves up to clear locating installed truss before machine tracks *)
+	LOWER_CROWD_TOWER_CLEARANCE: REAL := 15;	(* cm: lower crowd moves up to clear ATI motor tower to allow removal. *)
+	LOWER_CROWD_BEARING_CRIMP_CLEARANCE: REAL := 30;	(* cm: clearance from TC to TCH when LC comes down between assemble and crimp. *)
+	LOWER_CROWD_MOTOR_CRIMP_CLEARANCE: REAL := 7;		(* cm: clearance from TC to TCH when LC comes down between assemble and crimp. *)
+	
+	LOWER_CROWD_LONG_SCREW_DRIFTER_MARGIN: REAL := 8; (* cm: margin from drifter to top estop we want to change from LC movement to Z slide when clearing truss *)
+	
+	Z_SLIDE_TRACK_CLEARANCE: REAL := 10;		(* cm: Z slide must move up to clear TCH after crimp. *)
+	Z_SLIDE_ATI_CS_CLEARANCE: REAL := 15;		(* cm: move Z slide up to clear mast foot over center structure. *)
+	
+	MAST_SLIDE_TRACK_POS: REAL := 0;
+	
+	PITCH_TRACK_POS: REAL := 0;
+
+	Z_SLIDE_RWP_POS: REAL := 0;
+	Z_SLIDE_TRACK_POS: REAL := 0;	(* cm: added 9 inches at ESM by Charles' request. *)
+	
+	BOOM_LIFT_TRACK_POS: REAL := 25;
+	JOINT_LIFT_TRACK_POS: REAL := 28;
+	
+	SCREW_MANUAL_OVERDRIVE: REAL := 1;			(* cm: distance past calculated we drive when operator is stopping with button press. *)
+	
+	// assess code load on plc
+	CODE_CYCLE_TIME: ULINT := 0;
+	CODE_RUN_TIME: ULINT := 0;
+	
+	//(*
+	// temp third leg diag
+	//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	NXT_MOTOR_THIRD_LEG_ANGLE: REAL := 20; // angle of third leg motor relative to vertical
+	NXT_MOTOR_THIRD_LEG_X_ADJUST: REAL := 0; // amount to adjust x offset by for NXT SI motor third leg install
+	NXT_MOTOR_TOP_OF_MOUNT: REAL := 0; // distance from ground plane of top of mount 
+	
+	HEAVY_TRUSS_HARDWARE_X_OFFSET: REAL := 284.6; // mm in x
+	HEAVY_TRUSS_Z_CONVERGE: REAL := 406.4; // mm in x // how high above the wp the wps converge for side and third leg
+	STD_TRUSS_HARDWARE_X_OFFSET: REAL := 369.8; // mm in x
+	STD_TRUSS_Z_CONVERGE: REAL := 1016; // mm in x // how high above the wp the wps converge for side and third leg
+	Z_SLIDE_DELTA: REAL := 0;
+	
+	MAST_AND_LC_DELTA: REAL := 0;
+	PITCH_X_DELTA: REAL := 0;
+	PITCH_Z_DELTA: REAL := 0;
+	TD_HEADING_EAST: BOOL := FALSE;
+	TD_HEADING_WEST: BOOL := FALSE;
+	TD_HEADING_NORTH: BOOL := FALSE;
+	TD_HEADING_SOUTH: BOOL := FALSE;
+	
+	
+	TRUSS_BEING_ASSEMBLED: BOOL := FALSE; // won't allow Target to flip up in Manual or when track back required, and man/auto in screw mode will send you back to FWP
+	TRUE_MAST_PLUMB: BOOL := FALSE;
+	
+	//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	//*)
+	(* vvvvvv temp debug pnezd adjust vvvvvv *)
+	(* ---  to sum for total offset --- *)
+	// * TRUSS FRAME *
+	// when we can't get to the wp, have to do side adjusts.  Often the case for Earth Truss motor
+	HIGH_WP_SIDE_LEG_ADJUST: Vector3D; 
+	// measure change in wp positiong when pedestal presses machine up
+	VERT_TO_PITCHED_MAST_ADJ: Vector3D; 
+	RAW_PITCHING_MAST_WP_OFFSETS: Vector3D;
+	
+	(* new combined NXT method *)
+	(* pnezd adjust pNEZd generic vectors variables *)
+	// total adjustment to pNEZd:
+	NXT_LOCATION_ADJUST: Vector3D; 
+	// adjustment to pNEZd to install third leg (standard wp to motor third leg wp):
+	NXT_MOTOR_THIRD_LEG_ADJUST: Vector3D; 
+	// adjustment to pNEZd to install side legs:
+	NXT_MOTOR_SIDE_LEG_ADJUST: Vector3D; 
+	// this should not be needed if we are calibrating to the pin:
+	(* offsets from machine position when pin is aligned with pNEZd(eg typically wp/COR of standard truss to new wp/COR ie std wp to 3L wp delta *)
+	NXT_PNEZD_REF_TO_3L_WP_OFFSET: Vector3D; 
+	// setting truss geometry (used to adjust pNEZd)
+	NXT_MOTOR_SIDE_LEG_WP_OFFSET: Vector3D; // distance from wp/COR of standard truss when pin is at pNEZd to motor side leg wp/COR for screw drive
+	//NXT_MOTOR_3L_SCREW_DRIVE_OFFSET: Vector3D; // distance from wp/COR of standard truss when pin is at pNEZd to motor third leg intersection with side leg plane
+	NXT_MOTOR_CRIMP_OFFSET: Vector3D; // distance in TCH design to move to align motor Truss Cap "pin" location with standard truss pin location.  Not required in newer designs, hopefully
+	NXT_STD_SIDE_LEG_OFFSET: Vector3D; // if any adjustment is needed from target at pNEZd to install standard side legs.  May never need this, but this allows complete set of options
+	
+	// Earth Truss 2.0 need adjustments for motor trusses
+	ET2_MOTOR_THIRD_LEG_ADJUST: Vector3D;
+	DEBUG_SEE_RAW_THIRD_LEG_CALC: Vector3D;
+	
+	// predict adjustment from putting pedestal down (lifts front of machine thus shifting COR in x and z)
+	PEDESTAL_ADJ_PREDICT: Vector3D;
+	// sum all vectors in truss frame before orienting to WORLD FRAME
+	TRUSS_FRAME_VECTOR_SUM: Vector3D;
+	// Convert mast frame to world frame:
+	MAST_TO_WORLD_FRAME_ROTATION: Rotation3D;
+	// adjusting wp when mast and LC are not inalignment with rotator and we need to know where the TCH is
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_MAST_FRAME: Vector3D;
+	MAST_AND_LOWERCROWD_TO_COR_ADJUST_WORLD_FRAME: Vector3D;
+	
+	// Truss Geometry latches
+	IS_NXT_MOTOR_THIRD_LEG_LATCHED: BOOL;
+	IS_NXT_MOTOR_SIDE_LEG_LATCHED: BOOL;
+	
+	
+	(*  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  *)
+	ROTARY_DESIRED_AND_PROXIMITY_VIOLATED: BOOL := FALSE;
+	
+END_VAR

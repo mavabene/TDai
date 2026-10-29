@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_SI3lm3lScrew : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_SI3lm3lScrew :=
+	(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_SI) AND
+	(TRUSS_TYPE_LATCH = eTrussType.TRUSS_TYPE_CENTER_STRUCTURE) AND
+	(SCREW_SIDE_LATCH = eScrewSide.SCREW_CENTER);

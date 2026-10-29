@@ -1,0 +1,99 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK HawePSVCurrentControl
+	(* Simple code for operating a force controlled valve.  This assumes we are using a Hawe PSV valve, with a coil resistance of
+		about 12 Ohms, so we get 1 Amp (1000 mAmp) maximum.  The minimum that we want to get the valve close to open is 0.5 Amp (500 mAmp).
+	*)
+VAR_INPUT
+	(* Channel the opens the valve to drive the actuator in the positive direction. *)
+	CH_POS: UINT;
+	(* Channel the opens the valve to drive the actuator in the negative direction. *)
+	CH_NEG: UINT;
+	(* Magnitude, in millepercent. *)
+	MAGNITUDE: UINT;
+	(* True if desired actuator direction is positive, false if negative. *)
+	POSITIVE: BOOL;
+END_VAR
+VAR_OUTPUT
+	xErrorPos: BOOL;
+	eDiagInfoPos: ifmTypes.DIAG_INFO;
+	xPreparedPos: BOOL;
+	xErrorNeg: BOOL;
+	eDiagInfoNeg: ifmTypes.DIAG_INFO;
+	xPreparedNeg: BOOL;
+END_VAR
+VAR
+	INIT: BOOL := TRUE;
+	MAG: REAL;
+	MAG_POS: UINT;
+	MAG_NEG: UINT;
+	OUT_POS: ifmOutPWM.CurrentControl;
+	OUT_NEG: ifmOutPWM.CurrentControl;
+	
+	ERROR_POS: BOOL;
+	DIAG_INFO_POS: ifmTypes.DIAG_INFO;
+	PREPARED_POS: BOOL;
+	CURRENT_ACTUAL_POS: UINT;
+	PWM_ACTUAL_POS: UINT;
+
+	ERROR_NEG: BOOL;
+	DIAG_INFO_NEG: ifmTypes.DIAG_INFO;
+	PREPARED_NEG: BOOL;
+	CURRENT_ACTUAL_NEG: UINT;
+	PWM_ACTUAL_NEG: UINT;
+END_VAR
+
+
+(********************** Implementation ****************************)
+(* We want input scale of 0-1000%% to give us 500-1000 mAmp. *)
+IF MAGNITUDE = 0 THEN
+	MAG := 0;
+ELSE
+	MAG := 500.0 + (500.0 * (TO_REAL(MAGNITUDE)/1000.0));
+END_IF
+
+IF POSITIVE THEN
+	MAG_POS := TO_UINT(MAG);
+	MAG_NEG := 0;
+ELSE
+	MAG_POS := 0;
+	MAG_NEG := TO_UINT(MAG);
+END_IF;
+
+OUT_POS(
+	xResetError := INIT,
+	uiChannel := CH_POS,
+	eMode := ifmOutPWM.MODE_CURRENT_CONTROL.OUT_CURRENT_CSO,
+	uiFrequency := 240,
+	uiDitherFrequency := 60,
+	uiDitherValue := 40,
+	usiKP := 50,
+	usiKI := 50,
+	(* Deadband is at roughly 300%% duty cycle. *)
+	uiStartRatio := 300,
+	uiDesiredCurrent := MAG_POS,
+	xError => xErrorPos,
+	eDiagInfo => eDiagInfoPos,
+	xPrepared => xPreparedPos,
+	uiCurrent => CURRENT_ACTUAL_POS,
+	uiPWMratio => PWM_ACTUAL_POS);
+	
+OUT_NEG(
+	xResetError := INIT,
+	uiChannel := CH_NEG,
+	eMode := ifmOutPWM.MODE_CURRENT_CONTROL.OUT_CURRENT_CSO,
+	uiFrequency := 240,
+	uiDitherFrequency := 60,
+	uiDitherValue := 40,
+	usiKP := 50,
+	usiKI := 50,
+	(* Deadband is at roughly 300%% duty cycle. *)
+	uiStartRatio := 300,
+	uiDesiredCurrent := MAG_NEG,
+	xError => xErrorNeg,
+	eDiagInfo => eDiagInfoNeg,
+	xPrepared => xPreparedNeg,
+	uiCurrent => CURRENT_ACTUAL_NEG,
+	uiPWMratio => PWM_ACTUAL_NEG);
+	
+INIT := FALSE;

@@ -1,0 +1,31 @@
+
+(********************** Declaration ****************************)
+FUNCTION screwSpeedSoftSoil : REAL
+VAR_INPUT
+END_VAR
+VAR
+	CONTROL_PRESSURE: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+IF pNVM4^.SS_LC_CONTROL_SOURCE = 0 THEN
+	CONTROL_PRESSURE := UPPER_ROTARY_PRESSURE_FILTERED;
+ELSE
+	CONTROL_PRESSURE := LOWER_CROWD_PRESSURE_FILTERED;
+END_IF
+
+IF pNVM4^.LC_DRIVE_PRESSURE_LOW >= pNVM4^.LC_DRIVE_PRESSURE_HI THEN
+	// Bogus setup, just use low speed.
+	screwSpeedSoftSoil := pNVM4^.SS_DRIVE_VEL_LOW;
+ELSIF CONTROL_PRESSURE < pNVM4^.LC_DRIVE_PRESSURE_LOW THEN
+	// Upper rotary pressure low, drive at max speed with lower crowd.
+	screwSpeedSoftSoil := pNVM4^.SS_DRIVE_VEL_HI;
+ELSIF CONTROL_PRESSURE > pNVM4^.LC_DRIVE_PRESSURE_HI THEN
+	// Upper rotary pressure high, drive at min speed with lower crowd.
+	screwSpeedSoftSoil := pNVM4^.SS_DRIVE_VEL_LOW;
+ELSE
+	// Upper rotary pressure within process bounds, calculate speed at which to drive lower crowd.
+	screwSpeedSoftSoil := pNVM4^.SS_DRIVE_VEL_HI -
+		(CONTROL_PRESSURE - pNVM4^.LC_DRIVE_PRESSURE_LOW)/(pNVM4^.LC_DRIVE_PRESSURE_HI - pNVM4^.LC_DRIVE_PRESSURE_LOW) *
+		(pNVM4^.SS_DRIVE_VEL_HI - pNVM4^.SS_DRIVE_VEL_LOW);
+END_IF

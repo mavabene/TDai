@@ -32,6 +32,11 @@ not yet define that feature.
 For future PLC/HMI changes, the owner wants reviewable code to copy and paste into
 CODESYS, with clear instructions identifying exactly where to paste each block.
 
+The October 29 SP21 migration checkpoint imported saved PLC `530v2` and HMI
+`530v1`. PLC Version declares `5.3.0v2` with the note “SP21”; the owner reports
+unresolved visualization libraries. Extraction succeeded, but compilation and
+migration acceptance remain unverified. See [migration checkpoint](docs/verification/2026-10-29-sp21-checkpoint.md).
+
 ## Start here
 
 | Record | Owns |

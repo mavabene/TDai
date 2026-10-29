@@ -50,3 +50,6 @@
 *.swp
 *.tmp
 __pycache__/
+
+!/Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v2.project
+!/Production_dev/TD3-Auto/exports_ojjo_TD3_cr711S_530v2/

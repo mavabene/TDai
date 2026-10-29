@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+FUNCTION isHighWP : BOOL
+VAR_INPUT
+	Z_SLIDE_MARGIN : REAL := 3.0;// cm
+END_VAR
+VAR
+	
+END_VAR
+
+(********************** Implementation ****************************)
+// uses gps feedback to determine z delta to target, so gps and a valid target req'd
+isHighWP :=
+	//GPS_READY
+	(
+		(GPS_AUTOTARGET_STATUS.GPS_USED_THIS_TRUSS OR (MACHINE_MODE = TRACK_MODE AND GPS_READY))
+		AND
+		(
+			(AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].FEEDBACK.POSITION_ENGR - 0.1 * HIGH_WP_SIDE_LEG_ADJUST[rot.pZ] + (0.1 * GPS_AXES[GPS_Z].OFFSET / COS_DEG(SCREW_PARAMETERS_CURRENT.NS_PITCH))) > 
+			( AXES[GPS_AXES[GPS_Z].ACTUATOR_AXIS].CONFIG.COMMAND_LIMIT_MAX - Z_SLIDE_MARGIN )
+		) 
+		AND 
+		(pNVM4^.HMI_BOOLS[HIGH_WP_ALLOWED] OR isNXTmotorSideLeg_perRemote())
+	);

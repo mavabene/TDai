@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+// This function has been automatically generated from the project information.
+{attribute 'signature_flag' := '1073741824'}
+{attribute 'register_in_runtime'}
+FUNCTION GetTextProperty : WSTRING
+VAR_INPUT
+	stKey: WSTRING;
+END_VAR
+(********************** Implementation ****************************)
+IF stKey = "Author" THEN
+	GetTextProperty := "SMK";
+ELSIF stKey = "Company" THEN
+	GetTextProperty := "Ojjo Inc";
+ELSIF stKey = "Description" THEN
+	GetTextProperty := "Truss Driver control software.";
+ELSIF stKey = "Project" THEN
+	GetTextProperty := "ojjo_TD3_cr711S_530v2";
+ELSIF stKey = "Title" THEN
+	GetTextProperty := "TD-3 control software";
+ELSE
+	GetTextProperty := "";
+END_IF

@@ -1,0 +1,637 @@
+<ExportFile>
+  <StructuredView Guid="{d9b2b2cc-ea99-4c3b-aa42-1e5c49e65b84}">
+<Single xml:space="preserve" Type="{3daac5e4-660e-42e4-9cea-3711b98bfb63}" Method="IArchivable">
+  <Null Name="Profile" />
+  <List2 Name="EntryList">
+    <Single Type="{6198ad31-4b98-445c-927f-3258a0e82fe3}" Method="IArchivable">
+      <Single Name="IsRoot" Type="bool">True</Single>
+      <Single Name="MetaObject" Type="{81297157-7ec9-45ce-845e-84cab2b88ade}" Method="IArchivable">
+        <Single Name="Guid" Type="System.Guid">296cb935-5a07-43ab-9548-d218e0f9b37a</Single>
+        <Single Name="ParentGuid" Type="System.Guid">f9c00bdb-2f18-4e80-863e-6da977e8f304</Single>
+        <Single Name="Name" Type="string">Library Manager</Single>
+        <Dictionary Type="{2c41fa04-1834-41c1-816e-303c7aa2c05b}" Name="Properties">
+          <Entry>
+            <Key>
+              <Single Type="System.Guid">61a44170-da69-49a8-99a4-c61280b4559c</Single>
+            </Key>
+            <Value>
+              <Single Type="{61a44170-da69-49a8-99a4-c61280b4559c}" Method="IArchivable">
+                <Dictionary2 Name="PlaceholderResolution">
+                  <Entry>
+                    <Key>
+                      <Single Type="string">ElementCollections</Single>
+                    </Key>
+                    <Value>
+                      <Single Type="string">Element Collections, 4.0.0.0 (CODESYS)</Single>
+                    </Value>
+                  </Entry>
+                </Dictionary2>
+              </Single>
+            </Value>
+          </Entry>
+        </Dictionary>
+        <Single Name="TypeGuid" Type="System.Guid">adb5cb65-8e1d-4a00-b70a-375ea27582f3</Single>
+        <Null Name="EmbeddedTypeGuids" />
+        <Single Name="Timestamp" Type="long">639288883200112965</Single>
+      </Single>
+      <Single Name="Object" Type="{adb5cb65-8e1d-4a00-b70a-375ea27582f3}" Method="IArchivable">
+        <List2 Name="ParameterTable">
+          <Single Type="{21a976b3-7eb8-4f66-8d07-0b988431cc37}" Method="IArchivable">
+            <Single Name="Name" Type="string">#Util</Single>
+            <List2 Name="Values">
+              <Single Type="{91d8a082-920c-473c-b38b-e5dfb9d7ae4c}" Method="IArchivable">
+                <Single Name="Name" Type="string">IBLOCKSIZE</Single>
+                <Single Name="Values" Type="{88513019-926a-4125-ab4f-260cf5e4c63e}" Method="IArchivable">
+                  <Null Name="Type" />
+                  <Single Name="PositionToSave" Type="long">5910974510923778</Single>
+                  <Array Name="MessagesToSave" Type="{bc2be951-49f6-4f0f-b731-e31e36606f1e}" />
+                  <Single Name="LongValue" Type="long">22800</Single>
+                  <Single Name="TypeClass" Type="{16f7aa24-038f-444e-9d81-b001bc091d35}">AnyInt</Single>
+                  <Single Name="Negative" Type="bool">False</Single>
+                  <Single Name="OriginalTypeClass" Type="{16f7aa24-038f-444e-9d81-b001bc091d35}">AnyInt</Single>
+                </Single>
+              </Single>
+            </List2>
+          </Single>
+        </List2>
+        <List Name="Items" Type="System.Collections.ArrayList">
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">ifmR360-3, * (ifm electronic)</Single>
+            <Single Name="Id" Type="long">815398303</Single>
+            <Single Name="Namespace" Type="string">ifmR360_3</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">NetVarUdp, 3.5.11.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">NetVarUdp</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">2046692497</Single>
+            <Single Name="Namespace" Type="string">NetVarUdp</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">Util, * (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">Util</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">1602971654</Single>
+            <Single Name="Namespace" Type="string">Util</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">Standard, * (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">Standard</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">3152419858</Single>
+            <Single Name="Namespace" Type="string">Standard</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">SysTime, 3.5.9.0 (System)</Single>
+            <Single Name="Id" Type="long">269045940</Single>
+            <Single Name="Namespace" Type="string">SysTime</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">Converted Hydraulic library, 0.0.0.1 (ifmWT)</Single>
+            <Single Name="Id" Type="long">3524643110</Single>
+            <Single Name="Namespace" Type="string">Hydraulic</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">StringUtils, 3.5.15.0 (System)</Single>
+            <Single Name="Id" Type="long">3239225904</Single>
+            <Single Name="Namespace" Type="string">Stu</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">SysMem23, 3.5.13.0 (System)</Single>
+            <Single Name="Id" Type="long">2148234298</Single>
+            <Single Name="Namespace" Type="string">SysMem23</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">SysCom, 3.5.15.0 (System)</Single>
+            <Single Name="Id" Type="long">1191960989</Single>
+            <Single Name="Namespace" Type="string">SysCom</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuTrendStorageAccess, 3.5.4.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">VisuTrendStorageAccess</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">3699984669</Single>
+            <Single Name="Namespace" Type="string">VisuTrendStorageAccess</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">IoStandard, 3.5.10.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">IoStandard</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">3161628338</Single>
+            <Single Name="Namespace" Type="string">IoStandard</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">True</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">3SLicense, 0.0.0.0 (3S - Smart Software Solutions GmbH)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">3SLicense</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">97c3b452-d9fa-4ac2-9d0c-3d420aa6d95b</Single>
+            <Single Name="Id" Type="long">3996907370</Single>
+            <Single Name="Namespace" Type="string">_3S_LICENSE</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">3S CANopenStack, 3.5.11.0 (3S - Smart Software Solutions GmbH)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">3S CANopenStack</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">4181664225</Single>
+            <Single Name="Namespace" Type="string">_3SCOS</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">CAA CiA 405, 3.5.8.0 (CAA Technical Workgroup)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">CAA CiA405</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">1710088733</Single>
+            <Single Name="Namespace" Type="string">CIA405</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">CANbusDevice, 3.5.10.0 (3S - Smart Software Solutions GmbH)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">CANbusDevice</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">1622534479</Single>
+            <Single Name="Namespace" Type="string">CANbusDevice</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">CanConfig, 3.0.0.1 (3S - Smart Software Solutions GmbH)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">CanConfig</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">1829490762</Single>
+            <Single Name="Namespace" Type="string">_3SCOS</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">IoDrvJ1939, 3.5.11.0 (3S - Smart Software Solutions GmbH)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">IoDrvJ1939</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">b303f5ce-75ff-4668-a777-7da8debb449c</Single>
+            <Single Name="Id" Type="long">3608518141</Single>
+            <Single Name="Namespace" Type="string">J1939</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElems, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElems</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">116282773</Single>
+            <Single Name="Namespace" Type="string">VisuElems</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemMeter, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemMeter</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">386095397</Single>
+            <Single Name="Namespace" Type="string">VisuElemMeter</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemsSpecialControls, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemsSpecialControls</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">427703314</Single>
+            <Single Name="Namespace" Type="string">VisuElemsSpecialControls</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemsWinControls, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemsWinControls</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">1713045939</Single>
+            <Single Name="Namespace" Type="string">VisuElemsWinControls</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemTextEditor, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemTextEditor</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">775847648</Single>
+            <Single Name="Namespace" Type="string">VisuElemTextEditor</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemTrace, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemTrace</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">3565448257</Single>
+            <Single Name="Namespace" Type="string">VisuElemTrace</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuNativeControl, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuNativeControl</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">2658566587</Single>
+            <Single Name="Namespace" Type="string">VisuNativeControl</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemsAlarm, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemsAlarm</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">1142194263</Single>
+            <Single Name="Namespace" Type="string">VisuElemsAlarm</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemCamDisplayer, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemCamDisplayer</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">2263427170</Single>
+            <Single Name="Namespace" Type="string">VisuElemCamDisplayer</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElem3DPath, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElem3DPath</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">3531499559</Single>
+            <Single Name="Namespace" Type="string">VisuElem3DPath</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemsDateTime, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemsDateTime</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">2897832847</Single>
+            <Single Name="Namespace" Type="string">VisuElemsDateTime</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuElemXYChart, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuElemXYChart</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">2481050200</Single>
+            <Single Name="Namespace" Type="string">VisuElemXYChart</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{4723ebe7-5bfc-43c6-be6b-5097002ef6b4}" Method="IArchivable">
+            <Single Name="DefaultResolution" Type="string">VisuInputs, 4.7.0.0 (System)</Single>
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="PlaceholderName" Type="string">System_VisuInputs</Single>
+            <Single Name="ResolverGuid" Type="System.Guid">2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</Single>
+            <Single Name="Id" Type="long">3127539385</Single>
+            <Single Name="Namespace" Type="string">VisuInputs</Single>
+            <Single Name="SystemLibrary" Type="bool">True</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">False</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+          <Single Type="{51a11660-6c0d-4598-8c08-419c5845ea1f}" Method="IArchivable">
+            <Single Name="Optional" Type="bool">False</Single>
+            <Null Name="Params" />
+            <Single Name="Name" Type="string">TD3-1 Framework, 3.1.2.0 (Ojjo)</Single>
+            <Single Name="Id" Type="long">2612343278</Single>
+            <Single Name="Namespace" Type="string">td3_1</Single>
+            <Single Name="SystemLibrary" Type="bool">False</Single>
+            <Single Name="HideWhenReferencedAsDependency" Type="bool">False</Single>
+            <Single Name="PublishSymbolsInContainer" Type="bool">True</Single>
+            <Single Name="QualifiedOnly" Type="bool">False</Single>
+            <Single Name="LinkAllContent" Type="bool">False</Single>
+          </Single>
+        </List>
+        <Dictionary Type="System.Collections.Hashtable" Name="PlaceholderRedirectionTable">
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemsSpecialControls</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemsSpecialControls, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">Collections</Single>
+            </Key>
+            <Value>
+              <Single Type="string">Collections, 3.5.17.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">StringUtils</Single>
+            </Key>
+            <Value>
+              <Single Type="string">StringUtils, 3.5.20.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemCamDisplayer</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemCamDisplayer, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemsDateTime</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemsDateTime, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">Standard</Single>
+            </Key>
+            <Value>
+              <Single Type="string">Standard, 3.5.18.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">Standard64</Single>
+            </Key>
+            <Value>
+              <Single Type="string">Standard64, 3.5.20.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuNativeControl</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuNativeControl, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElem3DPath</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElem3DPath, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemMeter</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemMeter, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemTrace</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemTrace, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">FloatingPointUtils</Single>
+            </Key>
+            <Value>
+              <Single Type="string">FloatingPointUtils, 3.5.21.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">CmpEventMgr Implementation</Single>
+            </Key>
+            <Value>
+              <Single Type="string">NotImplementedByDevice, 3.5.17.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">Util</Single>
+            </Key>
+            <Value>
+              <Single Type="string">Util, 3.5.21.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemsAlarm</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemsAlarm, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemsWinControls</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemsWinControls, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElems</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElems, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+          <Entry>
+            <Key>
+              <Single Type="string">System_VisuElemTextEditor</Single>
+            </Key>
+            <Value>
+              <Single Type="string">VisuElemTextEditor, 4.7.0.0 (System)</Single>
+            </Value>
+          </Entry>
+        </Dictionary>
+      </Single>
+      <Single Name="ParentSVNodeGuid" Type="System.Guid">f9c00bdb-2f18-4e80-863e-6da977e8f304</Single>
+      <Array Name="Path" Type="string">
+        <Single Type="string">StandardPLC</Single>
+        <Single Type="string">PLC Logic</Single>
+        <Single Type="string">Application</Single>
+      </Array>
+      <Single Name="Index" Type="int">-1</Single>
+    </Single>
+  </List2>
+  <Null Name="ProfileName" />
+</Single>  </StructuredView>
+</ExportFile>

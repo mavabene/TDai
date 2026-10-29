@@ -1,0 +1,202 @@
+
+(********************** Declaration ****************************)
+(* autotrack to gps target
+
+create approach curve by floating target point that moves from 1/3 of distance to target
+to 4 m behind target, then align to target and finish drive straignt on
+*)
+FUNCTION_BLOCK GpsTrackAssist// autotrack to gps target
+VAR_INPUT
+	INIT: BOOL := TRUE;
+	// leave as input in case we want to control to a different point, eg 3rd leg motor
+	X_OFFSET_BEGIN: REAL := 0; // distance in cm to target
+	Y_OFFSET_BEGIN: REAL := 0; // + is to the right of operator (facing forward at rear [mast end] of TD)
+	YAW_OFFSET_BEGIN: REAL := 0; // heading offset to rotate by as given by gps, + is moving mast to the right (CCW) of operator
+	ALLOW_REVERSE: BOOL := FALSE;
+	//Z_OFFSET_BEGIN: REAL := 0; // + is up;  if we want to add 3d functionality
+END_VAR
+VAR_OUTPUT
+	LEFT_TRACK_OUTPUT_MAGNITUDE: INT := 0; // send as percent to joystick controller
+	RIGHT_TRACK_OUTPUT_MAGNITUDE: INT := 0;
+	LEFT_TRACK_OUTPUT_POSITIVE: BOOL := TRUE;
+	RIGHT_TRACK_OUTPUT_POSITIVE: BOOL := TRUE;
+END_VAR
+VAR
+	X_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	Y_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	YAW_OFFSETS: ARRAY [1..9] OF REAL := [9(0)];
+	BS_ANGLE_NS_DELTA: REAL := 0;
+	BS_ANGLE_WORLD_NS: REAL := 0;
+	BS_ANGLE_NS_TO_Y_TARGET_DELTA: REAL := 0;
+	YAW_ARM_LENGTH: REAL := 135; // 135 for TD3 with x slide at 0
+	HEADING_TO_TARGET: REAL := 0;
+	HEADING_TO_TARGET_OFFSET: REAL := 0;
+	
+	LEFT_TRACK_OUTPUT: REAL := 0;
+	RIGHT_TRACK_OUTPUT: REAL := 0;
+	// test ramping
+	LEFT_TRACK_OUTPUT_LAST: REAL := 0;
+	RIGHT_TRACK_OUTPUT_LAST: REAL := 0;
+	MAX_TRACK_ACCELERATION: REAL := 30; // in %/second
+	LEFT_TRACK_POSITIVE: BOOL := TRUE;
+	RIGHT_TRACK_POSITIVE: BOOL := TRUE;
+	PROXIMITY_SLOWING_FACTOR: REAL := 1;
+	MANUAL_SPEED_REDUCING_FACTOR: REAL := 1;
+	ROLL_SLOWING_FACTOR: REAL := 1;
+	PITCH_SLOWING_FACTOR: REAL := 1;
+	JERK_SLOWING_FACTOR: REAL := 0;
+	MAXIMUM_JERK: REAL := 0.6; // deg/s/s/s;
+	TARGET_ACC: REAL := 1.0; // deg/s/s;
+	LAST_ACC: REAL := 0;
+	TARGET_VEL: REAL := 0; // deg/s
+	LAST_VEL: REAL := 0;
+	TARGET_POS: REAL := 0; // deg
+	LAST_POS: REAL := 0;
+	DELTA_IS_POS: BOOL := TRUE;
+
+	ANGULAR_VELOCITY_SLOWING_FACTOR: REAL := 1;
+	TOTAL_SLOWING_FACTOR: REAL := 1;
+	X_TARGET_OFFSET: REAL := 7; // offset tracking target position so x is easier to reach (x slide goes 'downhill')
+	WORLD_X_OFFSET: REAL := 0;
+	DISTANCE_TO_START_STRAIGHTENING: REAL := 400; // cm
+	DISTANCE_FROM_TARGET_TO_DECELERATE: REAL := 100; // cm
+	STOPPED_XSLIDE_TARGET_POSITION: REAL := 17; // X slide desired target to stop td at (err on "downhill" side of x slide as it's easier to reach
+	GPS_TRACK_ASSIST_HEADING_ERROR: REAL := 0;
+	
+	TA_MAX_ROLL_ANGLE: REAL := 15;
+	TA_MAX_PITCH_ANGLE: REAL := 15;
+END_VAR
+(********************** Implementation ****************************)
+
+// don't bother with the rest, already at desired location ("downhill" on x slide and near target)
+IF (X_OFFSET_BEGIN + X_TARGET_OFFSET) < 0 AND ABS(X_OFFSET_BEGIN + X_TARGET_OFFSET) > ( GPS_AXES[GPS_X].TARGET_LIMIT / 2 ) THEN 
+	RETURN;
+END_IF
+IF INIT THEN
+	LAST_ACC := 0; // deg/s/s
+	LAST_VEL := 0; // deg/s
+	LAST_POS := 0; // deg
+END_IF
+X_OFFSET_BEGIN := X_OFFSET_BEGIN; // in cm
+Y_OFFSET_BEGIN := Y_OFFSET_BEGIN / 10; // convert mm to cm
+//YAW_OFFSET_BEGIN := YAW_OFFSET_BEGIN; // deg to deg
+//Z_OFFSET_BEGIN := Z_OFFSET_BEGIN/10; // convert mm to cm
+
+YAW_ARM_LENGTH := YAW_PIVOT_TO_DRILL_ROD + AXES[AXIS_X_SLIDE].FEEDBACK.POSITION_ENGR;
+// * WP frame - origin at WP *
+//  (if 3d have to first rotate at wp to get pitch and roll aligned with yaw arm)
+// 1) translate origin to reference yaw pivot (translation)
+X_OFFSETS[1] := X_OFFSET_BEGIN - YAW_ARM_LENGTH;
+Y_OFFSETS[1] := Y_OFFSET_BEGIN;
+
+// * WP frame - origin at yaw pivot *
+// 2) rotate origin at yaw pivot to match bs frame (rotation)
+X_OFFSETS[2] := X_OFFSETS[1] * COS_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR) - Y_OFFSETS[1] * SIN_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR); // rotate origin at yaw pivot by gps heading offset
+Y_OFFSETS[2] := X_OFFSETS[1] * SIN_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR) + Y_OFFSETS[1] * COS_DEG(AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR);
+
+// * BS frame - origin AT yaw pivot *
+// 3) translate origin to bs pivot
+X_OFFSETS[3] := X_OFFSETS[2] - BS_PIVOT_TO_YAW_PIVOT;
+Y_OFFSETS[3] := Y_OFFSETS[2];
+
+// * BS frame - origin at BS pivot *
+// 4) rotate origin at bs pivot to world frame
+//	- rotate by BS_ANGLE_NS_DELTA
+BS_ANGLE_NS_DELTA := YAW_OFFSET_BEGIN + -1 * AXES[AXIS_YAW].FEEDBACK.POSITION_ENGR; //(Yaw is opposite sign)
+BS_ANGLE_WORLD_NS := BS_ANGLE_NS_DELTA + AXES[AXIS_BOOM_SWING].FEEDBACK.POSITION_ENGR;
+
+X_OFFSETS[4] := X_OFFSETS[3] * COS_DEG(BS_ANGLE_NS_DELTA) - Y_OFFSETS[3] * SIN_DEG(BS_ANGLE_NS_DELTA); // rotate origin at yaw pivot by gps heading offset
+Y_OFFSETS[4] := X_OFFSETS[3] * SIN_DEG(BS_ANGLE_NS_DELTA) + Y_OFFSETS[3] * COS_DEG(BS_ANGLE_NS_DELTA);
+
+// distance from xSlide target to target along x axis in world frame
+WORLD_X_OFFSET := (X_OFFSETS[4] + YAW_ARM_LENGTH + BS_PIVOT_TO_YAW_PIVOT) * COS_DEG(BS_ANGLE_NS_DELTA) + X_TARGET_OFFSET;
+
+(*
+// * WORLD frame - origin at BS pivot *
+IF X_OFFSETS[4] > 0 THEN // ~ 370 cm away from target (bs pivot goes to ~ -270)
+	X_OFFSETS[5] := MIN(X_OFFSETS[4] * 2 / 3, X_OFFSETS[4]) ; // if overshoot keep larger negative
+	Y_OFFSETS[5] := Y_OFFSETS[4] * MAX(1, MIN(1.5, WORLD_X_OFFSET/DISTANCE_TO_START_STRAIGHTENING)) ;
+END_IF *)
+
+// * WORLD frame - origin at BS pivot *
+X_OFFSETS[5] := MIN(X_OFFSETS[4] * 2 / 3, X_OFFSETS[4]) + X_TARGET_OFFSET; // if overshoot keep larger negative
+Y_OFFSETS[5] := Y_OFFSETS[4] * MAX(1, MIN(1.5, WORLD_X_OFFSET/DISTANCE_TO_START_STRAIGHTENING)) ;
+
+// OFFSESTS[5] are path planning target points in world frame from bs pivot
+// get heading offset from North South (A-B) line to new target
+IF X_OFFSETS[5] = 0 THEN // avoid /0 and keep approach orientation (+ x offset)
+	X_OFFSETS[5] := 0.1;
+END_IF
+// drive bs pivot to ns line, then keep going straight once bs pivot reaches target to get antenna to target
+HEADING_TO_TARGET := ATAN_DEG ( - Y_OFFSETS[5] / MAX(X_OFFSETS[5], 300));
+// get heading offset from machine heading
+HEADING_TO_TARGET_OFFSET := YAW_OFFSET_BEGIN + HEADING_TO_TARGET;
+ // reduce magnitude as approach target
+ // linear seems to be working
+PROXIMITY_SLOWING_FACTOR := MIN( TO_REAL(EXPT( ( (WORLD_X_OFFSET) / 100), 1.0)), 1); // start slowing at 1m (offset already /10 above)
+(*PROXIMITY_SLOWING_FACTOR := MIN(1, MAX(0, TO_REAL(EXPT( ( (-(GPS_AXES[GPS_X].FILTERED_TARGET_POSITION ) + STOPPED_XSLIDE_TARGET_POSITION) 
+												/ (DISTANCE_FROM_TARGET_TO_DECELERATE)), 1.0)))); // X slide target of 17cm *)
+												
+HEADING_TO_TARGET_OFFSET := PROXIMITY_SLOWING_FACTOR * HEADING_TO_TARGET_OFFSET; // start straightening and slowing as approaching target
+////DELTA_IS_POS := HEADING_TO_TARGET_OFFSET >= 0;
+// limit heading offset as limited by jerk:
+// calculate max new acc allowed by jerk:
+////TARGET_ACC := ddt_max(DELTA_IS_POS, LAST_ACC, MAXIMUM_JERK); // 10 deg/sec / control freg 50 cycle/sec // control jerk on initiation of track assist by limiting heading delta
+////LAST_ACC := TARGET_ACC;
+// calculate max new vel allowed by new acc:
+TARGET_VEL := 10; // deg/sec //ddt_max(DELTA_IS_POS, LAST_VEL, TARGET_ACC);
+// calculate heading delta:
+HEADING_TO_TARGET_OFFSET := ddt(HEADING_TO_TARGET_OFFSET, LAST_POS, TARGET_VEL);
+LAST_POS := HEADING_TO_TARGET_OFFSET;
+// let operator moderate speed with joysticks:
+MANUAL_SPEED_REDUCING_FACTOR := MAX ( ( ((( ABS(REMOTE.LJ_LR) + ABS(REMOTE.RJ_LR) ) / 2.0 ) - GPS_TRACK_ASSIST_JOYSTICK_LIMIT )
+								 / ( 100.0 - GPS_TRACK_ASSIST_JOYSTICK_LIMIT ) ) , 0.0 ); 
+
+								 
+// factors reduce from 1 to 0 over the range of the setpoint value to TA_MAX_ANGLE								 
+//ROLL_SLOWING_FACTOR := HMI_REALS_VALUES[TA_ROLL_REDUCTION_ANGLE] / MAX(ABS(BASE_ROLL.POSITION_ENGR), HMI_REALS_VALUES[TA_ROLL_REDUCTION_ANGLE]); // go slower if TD tilted sideways; max 1; no /0 error
+// HMI settings max value = TA_MAX_ROLL_ANGLE
+ROLL_SLOWING_FACTOR := MAX(0.0, MIN(1.0, (1.0 - ((ABS(BASE_ROLL.POSITION_ENGR) - HMI_REALS_VALUES[TA_ROLL_REDUCTION_ANGLE])/MAX(1.0, (TA_MAX_ROLL_ANGLE - HMI_REALS_VALUES[TA_ROLL_REDUCTION_ANGLE]))))));
+//PITCH_SLOWING_FACTOR := HMI_REALS_VALUES[TA_PITCH_REDUCTION_ANGLE] / MAX(ABS(BASE_PITCH.POSITION_ENGR), HMI_REALS_VALUES[TA_PITCH_REDUCTION_ANGLE]); // go slower if tilted up or down a hill; max 1; no /0 error
+PITCH_SLOWING_FACTOR := MAX(0.0, MIN(1.0, (1.0 - ((ABS(BASE_PITCH.POSITION_ENGR) - HMI_REALS_VALUES[TA_PITCH_REDUCTION_ANGLE])/MAX(1.0, (TA_MAX_PITCH_ANGLE - HMI_REALS_VALUES[TA_PITCH_REDUCTION_ANGLE]))))));
+
+ANGULAR_VELOCITY_SLOWING_FACTOR :=  MIN(1.0, MAX( 0.25, 30.0 / MAX(ABS(HEADING_TO_TARGET_OFFSET), 30.0))); // slow while turning
+// combine factors so lowest takes precedence
+TOTAL_SLOWING_FACTOR := MIN(PROXIMITY_SLOWING_FACTOR, MIN(ROLL_SLOWING_FACTOR, MIN(PITCH_SLOWING_FACTOR, 
+							MIN(ANGULAR_VELOCITY_SLOWING_FACTOR, MANUAL_SPEED_REDUCING_FACTOR))));					 
+// get track outputs to follow path
+LEFT_TRACK_OUTPUT := TOTAL_SLOWING_FACTOR * MAX ( MIN ( - HEADING_TO_TARGET_OFFSET * HMI_REALS_VALUES[TA_CORRECTION_AGGRESSION] + HMI_REALS_VALUES[TA_MAX_SPEED], 100), -100); // limit to -100 < x < 100
+IF LEFT_TRACK_OUTPUT < 0 THEN
+	LEFT_TRACK_POSITIVE := FALSE;
+ELSE
+	LEFT_TRACK_POSITIVE := TRUE;
+END_IF
+
+RIGHT_TRACK_OUTPUT := TOTAL_SLOWING_FACTOR * MAX ( MIN ( HEADING_TO_TARGET_OFFSET * HMI_REALS_VALUES[TA_CORRECTION_AGGRESSION] + HMI_REALS_VALUES[TA_MAX_SPEED], 100), -100);// limit to 100
+
+// test ramping - 50%/sec
+IF TEST THEN
+	LEFT_TRACK_OUTPUT := ddt(LEFT_TRACK_OUTPUT, LEFT_TRACK_OUTPUT_LAST, MAX_TRACK_ACCELERATION);
+	RIGHT_TRACK_OUTPUT := ddt(RIGHT_TRACK_OUTPUT, RIGHT_TRACK_OUTPUT_LAST, MAX_TRACK_ACCELERATION);
+	LEFT_TRACK_OUTPUT_LAST := LEFT_TRACK_OUTPUT;
+	RIGHT_TRACK_OUTPUT_LAST := RIGHT_TRACK_OUTPUT;
+END_IF
+
+IF RIGHT_TRACK_OUTPUT < 0 THEN
+	RIGHT_TRACK_POSITIVE := FALSE;
+ELSE
+	RIGHT_TRACK_POSITIVE := TRUE;
+END_IF
+
+IF WORLD_X_OFFSET >= 0 THEN // going forward, normal situation
+	LEFT_TRACK_OUTPUT_MAGNITUDE:= TO_INT ( ABS( LEFT_TRACK_OUTPUT) );  // max 100
+	LEFT_TRACK_OUTPUT_POSITIVE := NOT LEFT_TRACK_POSITIVE; // tracks are positive to move backward and vice versa
+	RIGHT_TRACK_OUTPUT_MAGNITUDE:= TO_INT ( ABS( RIGHT_TRACK_OUTPUT ) );  // max 100
+	RIGHT_TRACK_OUTPUT_POSITIVE:= NOT RIGHT_TRACK_POSITIVE;
+ELSE // swap directions
+	RIGHT_TRACK_OUTPUT_MAGNITUDE:= TO_INT ( ABS( LEFT_TRACK_OUTPUT ) );  // max 100
+	RIGHT_TRACK_OUTPUT_POSITIVE := (LEFT_TRACK_POSITIVE);
+	LEFT_TRACK_OUTPUT_MAGNITUDE := TO_INT ( ABS( RIGHT_TRACK_OUTPUT ) );  // max 100
+	LEFT_TRACK_OUTPUT_POSITIVE := (RIGHT_TRACK_POSITIVE);
+ END_IF
+ 

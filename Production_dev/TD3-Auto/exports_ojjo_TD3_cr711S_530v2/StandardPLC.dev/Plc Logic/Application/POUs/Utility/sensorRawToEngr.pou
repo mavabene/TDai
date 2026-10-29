@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+FUNCTION sensorRawToEngr : real
+VAR_INPUT
+	// Raw value from sensor, in counts.
+	RAW: REAL;
+	// Lowest raw value that can be reported by the sensor.
+	INPUT_OFFSET: REAL;
+	// Engineering units per count.
+	ENGR_PER_RAW: REAL;
+	// Engineering unit reading at lowest 
+	ENGR_AT_RAW_ZERO: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+sensorRawToEngr := (RAW - INPUT_OFFSET) * ENGR_PER_RAW + ENGR_AT_RAW_ZERO;

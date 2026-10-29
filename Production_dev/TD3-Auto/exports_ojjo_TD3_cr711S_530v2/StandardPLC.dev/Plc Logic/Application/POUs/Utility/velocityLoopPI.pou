@@ -1,0 +1,81 @@
+
+(********************** Declaration ****************************)
+(*
+	Velocity control loop - attempts to run an actuator at constant velocity.  Loop has:
+		- Deadband compensation for better low speed control
+		- Velocity feedforward
+		- PD feedback ocntrol
+		
+	Originally implemented on the lower crowd for screw drive control
+	
+	Note that this does not do position control of any kind.
+*)
+FUNCTION_BLOCK velocityLoopPI
+VAR_INPUT
+	ENABLE: BOOL;
+	SP: REAL;
+	pGAINS: POINTER TO sVelLoopPI;
+	pOUTPUT: POINTER TO sOutput;
+	sSP: sSetpoint;
+	FB: sFeedback;
+	CFG: sConfig;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	OUTPUT: REAL;
+	ABS_PERR_ENGR: REAL;
+	MAGNITUDE: REAL;
+	CURRENT: WORD;
+	RESULT: BYTE;
+	VFF: DINT;
+	ABS_PERR: DINT;
+	POSITIVE: BOOL := TRUE;
+END_VAR
+
+(********************** Implementation ****************************)
+
+IF SP > 0 THEN
+	OUTPUT := pGAINS^.KVFF_PLUS * SP;
+ELSE
+	OUTPUT := pGAINS^.KVFF_MINUS * SP;
+END_IF
+
+// Valve deadband.
+OUTPUT := OUTPUT + pGAINS^.DEADBAND;
+
+pGAINS^.VERR_ENGR := SP - FB.VELOCITY_ENGR;
+OUTPUT := OUTPUT + pGAINS^.VERR_ENGR * pGAINS^.KP;
+
+
+(* Vel error is negative when speed is too high. *)
+//DRIVE_VEL_ERROR := ABS(DRIVE_VEL_SETPOINT) - ABS(pLOWER_CROWD^.FEEDBACK.VELOCITY_ENGR);
+// We always calculate drive velocity as a positive for operator convenience, then use
+//	the actual sign in the control loop.
+DRIVE_VEL_ERROR := -DRIVE_VEL_SETPOINT - LOWER_CROWD_VEL_SMOOTHED; //pLOWER_CROWD^.FEEDBACK.VELOCITY_ENGR;
+(* Subtracts when vel too high, adds when vel too low. *)
+DRIVE_PWM_OUTPUT := DRIVE_PWM_OUTPUT + pNVM1^.DRIVE_KP * DRIVE_VEL_ERROR;
+(* Reduces ISUM when vel too high, adds when vel too low. *)
+DRIVE_ISUM := DRIVE_ISUM + DRIVE_VEL_ERROR * pNVM1^.DRIVE_KI_INTERNAL;
+IF DRIVE_ISUM > pNVM1^.DRIVE_ILIMIT THEN
+	DRIVE_ISUM := pNVM1^.DRIVE_ILIMIT;
+ELSIF DRIVE_ISUM < -pNVM1^.DRIVE_ILIMIT THEN
+	DRIVE_ISUM := -pNVM1^.DRIVE_ILIMIT;
+END_IF
+DRIVE_PWM_OUTPUT := DRIVE_PWM_OUTPUT + DRIVE_ISUM;
+
+IF DRIVE_PWM_OUTPUT < 0 THEN
+	POSITIVE := FALSE;
+ELSE
+	POSITIVE := TRUE;
+END_IF
+
+MAGNITUDE := TO_WORD(ABS(DRIVE_PWM_OUTPUT));
+
+// @TODO: smk - WTF is this for?
+IF MAGNITUDE > pNVM1^.DRIVE_OUTPUT_MAX THEN
+	MAGNITUDE := TO_WORD(pNVM1^.DRIVE_OUTPUT_MAX);
+ELSIF MAGNITUDE < 5 THEN
+	MAGNITUDE := TO_WORD(5);
+END_IF
+

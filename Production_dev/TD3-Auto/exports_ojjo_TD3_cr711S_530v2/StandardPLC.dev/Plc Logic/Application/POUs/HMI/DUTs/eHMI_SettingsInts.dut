@@ -1,0 +1,32 @@
+
+(********************** Declaration ****************************)
+(* 	These var names correlate to HMI_INTS array values.  
+	To add persistent INTs, just add name here and call via HMI_INTS[ENUM_NAME]
+	!! If you change positions, persistent memory will be affected! !!
+	** Updates here must be made in both PLC and HMI code **
+*)
+TYPE eHMI_SettingsInts :
+(
+	eHMI_SettingsInts_RESERVED_1  := 1,
+	eHMI_SettingsInts_RESERVED_2  := 2,
+	eHMI_SettingsInts_RESERVED_3  := 3,
+	eHMI_SettingsInts_RESERVED_4  := 4,
+    eHMI_SettingsInts_RESERVED_5  := 5,
+    eHMI_SettingsInts_RESERVED_6  := 6,
+    eHMI_SettingsInts_RESERVED_7  := 7,
+    eHMI_SettingsInts_RESERVED_8  := 8,
+    eHMI_SettingsInts_RESERVED_9  := 9,
+    eHMI_SettingsInts_RESERVED_10 := 10,
+    eHMI_SettingsInts_RESERVED_11 := 11,
+    eHMI_SettingsInts_RESERVED_12 := 12,
+    eHMI_SettingsInts_RESERVED_13 := 13,
+    eHMI_SettingsInts_RESERVED_14 := 14,
+    eHMI_SettingsInts_RESERVED_15 := 15,
+    eHMI_SettingsInts_RESERVED_16 := 16,
+    eHMI_SettingsInts_RESERVED_17 := 17,
+    eHMI_SettingsInts_RESERVED_18 := 18,
+    eHMI_SettingsInts_RESERVED_19 := 19,
+	SETTING_MIGRATION := 20 // temporary - used to set unused persistent variables to default, or control eHMI_Settings changes
+	
+);
+END_TYPE

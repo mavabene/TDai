@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION isNXT_INT_perHMI : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+isNXT_INT_perHMI :=
+	(pNVM3^.PRODUCT_INSTALL = eProductType.PRODUCT_NXT_INT) ;
