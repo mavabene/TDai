@@ -273,7 +273,7 @@ VAR_GLOBAL
 				v17	removed unused variables
 				v18	fix SET_BOOM_LIFT_ENCODER_AT_ZERO_BTN and SET_JOINT_LIFT_ENCODER_AT_ZERO_BTN not reset bugs
 				v19	520 ready for testing; 
-		5.3.0	v1	begin plumb; make ss/hs button hideable? TEST HMI 1
+		5.3.0	v1	begin plumb; make ss/hs button hideable? TEST HMI 2 738
 					
 						 
 	*)

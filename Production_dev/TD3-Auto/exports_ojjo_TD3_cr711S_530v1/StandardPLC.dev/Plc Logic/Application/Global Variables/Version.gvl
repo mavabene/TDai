@@ -448,7 +448,7 @@ VAR_GLOBAL CONSTANT
 						updated TA flag handling to require reset with joysticks near zero;
 						ADD HAMMER PRESSURE DISPLAY TO 520??!
 						fixed ASIN_DEG bug (clamping backwards);
-						add Hammer Pressure info; TEST PLC 1
+						add Hammer Pressure info; TEST PLC 2 737
 	*)
 	
 	// ************  check PreserveSettingsForDeprecatedVars before releasing this!! *************************

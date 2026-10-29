@@ -76,8 +76,9 @@ when active; this workflow does not override sandbox or organization restriction
    Preserve unrelated files. If version identity is unclear, preserve both and
    report the ambiguity. Update matching unversioned documents normally.
    The former PLC difference is no longer
-   a hold. Do not copy Box files back into the workspace. Report local-copy and
-   cloud-sync results separately; never claim cloud completion without evidence.
+   a hold. Do not copy Box files back into the workspace. Report local-copy
+   results. The owner does not require Box cloud-upload confirmation;
+   successful local-copy verification completes the Box step.
 7. **Record and report.** After verifying the push, write the local receipt below.
    Report branch/commit, main changes, checks and limits, remaining work, and Box
    outcome. Report failures as failures. If interrupted, inspect actual Git and
@@ -87,11 +88,11 @@ when active; this workflow does not override sandbox or organization restriction
    Box outcomes, and commit ID if applicable. Count project imports, committed
    file changes, and Box copies/overwrites separately; never describe files merely
    checked or hash-verified as changed. Say “no changes” when appropriate. Mention
-   an actionable failure or cloud-sync uncertainty briefly. Do not start another
+   an actionable failure briefly; omit routine Box cloud-sync caveats. Do not start another
    chat, send email, or create a schedule merely to deliver this confirmation.
 
 Example: “Update complete — 3m 12s. Changed 2 project files and committed 4 files.
-GitHub and local Box copy verified. Commit abc1234. Box cloud sync unverified.”
+GitHub and local Box copy verified. Commit abc1234.”
 
 “Run Update” authorizes this review, record maintenance, Git commit/push,
 and the Box copy under the authorized version-retention policy. Normal filesystem/

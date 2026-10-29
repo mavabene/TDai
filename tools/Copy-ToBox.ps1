@@ -32,7 +32,7 @@ foreach ($entry in $manifest) {
     if ((Get-FileHash -LiteralPath $entry.Destination -Algorithm SHA256).Hash -ne $entry.SHA256) { throw ('Box copy mismatch: ' + $entry.Destination) }
     $verified++
 }
-$result = [ordered]@{status='verified_local_copy'; completed_utc=[DateTime]::UtcNow.ToString('o'); destination=$destination; verified_files=$verified; deleted_files=0; cloud_sync='not_verified'}
+$result = [ordered]@{status='verified_local_copy'; completed_utc=[DateTime]::UtcNow.ToString('o'); destination=$destination; verified_files=$verified; deleted_files=0; cloud_sync='not_required'}
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source '.box-copy-result.json') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $source '.box-copy-result.json') -Destination (Join-Path $destination '.box-copy-result.json')
 $result | ConvertTo-Json

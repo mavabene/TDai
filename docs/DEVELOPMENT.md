@@ -246,7 +246,9 @@ paths must not recurse into one another. Keep each version's readable exports
 alongside its corresponding project/library version.
 
 A verified local copy establishes that the Box-synced folder received the files.
-Report cloud upload completion only when Box sync status provides that evidence.
+The owner does not require cloud-upload confirmation. Successful verification of
+the local Box copy completes the backup step; omit routine cloud-sync caveats
+from completion messages and do not monitor or wait for Box cloud upload.
 Writing outside this workspace may require a destination-specific filesystem
 permission when writes are enabled. Box copying is authorized on Run Update; no automatic scheduled
 synchronization is enabled. The GitHub baseline push succeeded separately.
