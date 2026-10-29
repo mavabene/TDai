@@ -10,7 +10,7 @@ Standing permissions and their concerns are recorded in
 [UPDATE_PERMISSIONS](docs/UPDATE_PERMISSIONS.md). Use the built-in Auto-review
 when active; this workflow does not override sandbox or organization restrictions.
 
-- Workspace: `C:/Users/jcheney/Documents/Codex/TD3`.
+- Workspace: `C:/Users/jcheney/Documents/Codex/TD3ai`.
 - GitHub: `https://github.com/mavabene/TDai.git`.
 - Include maintained records and selected PLC/HMI projects, exports, and libraries
   under the [development policy](docs/DEVELOPMENT.md) and `.gitignore`.
@@ -130,7 +130,7 @@ comments are separate evidence, and either may be unchanged during development.
 
 ## Local receipt
 
-Use `C:/Users/jcheney/Documents/Codex/TD3/.daily-update-state.json`, excluded from
+Use `C:/Users/jcheney/Documents/Codex/TD3ai/.daily-update-state.json`, excluded from
 Git, to record the most recent verified invocation without making the repository
 dirty after every run. Create it on the first invocation. Missing state means no
 invocation is recorded, not that an update failed. This is local execution state,
@@ -151,7 +151,7 @@ Note any work deliberately excluded. Never store credentials in the receipt.
 Schedule: **every day at 4 PM and 9 AM, America/Los_Angeles**. Morning defaults
 to 9 AM and can be changed by the owner. Scheduled runs inspect and remind only;
 they do not run this update, stage/commit/push, change branches, or write to Box.
-The app reminder is named **TD3 Daily Update reminders**, automation ID
+The app reminder is named **TD3 Update reminders**, automation ID
 `td3-daily-update-reminders`, attached to the project setup chat.
 
 Inspect local Git status, unpushed commits against the known upstream, new code

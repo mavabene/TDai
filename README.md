@@ -54,7 +54,7 @@ Detailed evidence belongs in its owning record, not in repeated chat summaries.
 ## Existing material
 
 ```text
-TD3/
+TD3ai/
   README.md
   TODO.md
   AGENTS.md

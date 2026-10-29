@@ -43,7 +43,7 @@ Keep `.project` and `.library` binaries as the full source artifacts.
    or stale. Saved copies are authoritative; unsaved edits in an open IDE session
    are not included. Do not drive the owner's existing editing sessions.
 2. Launch a separate CODESYS process using the executable/profile above and:
-   `--runscript="C:/Users/jcheney/Documents/Codex/TD3/tools/run_codesys_exports.py" --noUI`.
+   `--runscript="C:/Users/jcheney/Documents/Codex/TD3ai/tools/run_codesys_exports.py" --noUI`.
    Use a hidden process window and capture stdout/stderr. This launch may need
    normal app execution approval. The reusable runner implements the same
    temporary-copy approach; its complete orchestration should be checked on its

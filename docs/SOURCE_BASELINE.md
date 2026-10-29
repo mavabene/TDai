@@ -6,7 +6,7 @@ keys. The [architecture](ARCHITECTURE.md) owns observed execution details; the
 
 ## Identity and provenance
 
-Workspace root: `C:/Users/jcheney/Documents/Codex/TD3`.
+Workspace root: `C:/Users/jcheney/Documents/Codex/TD3ai`.
 
 The user supplied current development exports named `530v1`. Use this pair for
 this assessment and future work until a task selects a different baseline. Their
