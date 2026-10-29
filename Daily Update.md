@@ -6,6 +6,10 @@ October 29, 2026.
 
 ## Scope
 
+Standing permissions and their concerns are recorded in
+[UPDATE_PERMISSIONS](docs/UPDATE_PERMISSIONS.md). Use the built-in Auto-review
+when active; this workflow does not override sandbox or organization restrictions.
+
 - Workspace: `C:/Users/jcheney/Documents/Codex/TD3`.
 - GitHub: `https://github.com/mavabene/TDai.git`.
 - Include maintained records and selected PLC/HMI projects, exports, and libraries
@@ -20,8 +24,13 @@ October 29, 2026.
 
 ## Run the update
 
-1. **Establish state.** Read `AGENTS.md`, this file, DEVELOPMENT, README, TODO,
-   and the code inventory as needed. Inspect branch, status, staged changes,
+1. **Establish state.** Record the start time before performing update work and measure elapsed wall
+   time through final Git/Box verification. Run routine authorized steps without
+   waiting for the owner; Auto-review handles eligible execution requests. The
+   owner may leave the chat while the run continues. Do not promise completion
+   through app closure, computer sleep, network loss, or a required human decision.
+   Read `AGENTS.md`, this file, DEVELOPMENT, README, TODO, and the code inventory
+   as needed. Inspect branch, status, staged changes,
    upstream, and recent commits. Coordinate active writers before committing
    shared work. Stay on the current agreed branch; do not switch another chat's
    checkout, merge features, or publish unfinished work just to finish a checkpoint.
@@ -73,6 +82,16 @@ October 29, 2026.
    Report branch/commit, main changes, checks and limits, remaining work, and Box
    outcome. Report failures as failures. If interrupted, inspect actual Git and
    remote state before resuming.
+   Finish with one brief confirmation in this chat: success/partial/blocked,
+   elapsed time, whether files changed (with counts where available), GitHub and
+   Box outcomes, and commit ID if applicable. Count project imports, committed
+   file changes, and Box copies/overwrites separately; never describe files merely
+   checked or hash-verified as changed. Say “no changes” when appropriate. Mention
+   an actionable failure or cloud-sync uncertainty briefly. Do not start another
+   chat, send email, or create a schedule merely to deliver this confirmation.
+
+Example: “Update complete — 3m 12s. Changed 2 project files and committed 4 files.
+GitHub and local Box copy verified. Commit abc1234. Box cloud sync unverified.”
 
 “Run Update” authorizes this review, record maintenance, Git commit/push,
 and the Box copy under the authorized version-retention policy. Normal filesystem/
@@ -117,8 +136,11 @@ invocation is recorded, not that an update failed. This is local execution state
 not another TODO list.
 
 Record `last_successful_run_utc`, `timezone` (`America/Los_Angeles`), `branch`,
-`pushed_commit`, `remote`, `remaining_changes`, and `box_status`. Keep prior success
-if a later attempt fails; record a separate `last_attempt` with time/failure details.
+`pushed_commit`, `remote`, `remaining_changes`, and `box_status`. Also record
+`started_at_utc`, `finished_at_utc`, `elapsed_seconds`, and actual
+change counts (project imports and committed files; Box changes when measured).
+Keep prior success if a later attempt fails; record a separate `last_attempt`
+with time/failure details.
 Success means the intended Git checkpoint was verified remotely. A Box-copy failure does not erase Git success; record it separately and report
 the overall update as partial until the required copy succeeds.
 Note any work deliberately excluded. Never store credentials in the receipt.

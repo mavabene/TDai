@@ -120,6 +120,10 @@ leave provisional numerical assumptions looking like accepted calibration data.
 ## Workspace and coordination
 
 When the owner says **“Run Update”**, follow [Daily Update](Daily%20Update.md).
+Consult [Update permissions](docs/UPDATE_PERMISSIONS.md) for standing authorization,
+purpose, and concerns. Reference the relevant permission ID and exact targets when
+requesting execution review. Do not ask again for already-authorized update steps;
+respect the app's actual review outcome and managed restrictions.
 That request authorizes the checkpoint workflow described there, including Git
 commit/push, including the authorized Box copy. Scheduled reminders only
 inspect and remind; they do not run the update automatically.

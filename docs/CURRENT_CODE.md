@@ -14,7 +14,7 @@ readable-export validation is recorded there separately.
 
 The [original assessment baseline](SOURCE_BASELINE.md) preserves the provenance
 of the earlier review. [DEVELOPMENT](DEVELOPMENT.md) owns the update and backup
-workflow, including the hold on the differing Box PLC project.
+workflow, including the authorized Box copy and version-retention policy.
 
 | Workspace file | Bytes | SHA-256 |
 | --- | ---: | --- |

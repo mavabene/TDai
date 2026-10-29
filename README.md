@@ -38,6 +38,7 @@ CODESYS, with clear instructions identifying exactly where to paste each block.
 | --- | --- |
 | [TODO list](TODO.md) | Pending/deferred work and its dedicated chat names |
 | [Daily Update](Daily%20Update.md) | Owner-invoked checkpoint procedure, local receipt, and conditional reminder rules |
+| [Update permissions](docs/UPDATE_PERMISSIONS.md) | Annotated authorization catalog and Auto-review setup/verification |
 | [Readable CODESYS exports](docs/CODESYS_EXPORTS.md) | Tested export route, input identities, limitations, and refresh procedure |
 | [Agent guidance](AGENTS.md) | Reviewed working rules, active for this workspace |
 | [Source baseline](docs/SOURCE_BASELINE.md) | Exact inputs, hashes, version identity, and archive-member reference keys |
