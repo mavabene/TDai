@@ -96,3 +96,5 @@ when there is real content to maintain:
 Do not create empty specifications or a permanent report for every chat. Preserve
 dated assessments as snapshots; update current facts in their maintained home.
 References to future folders above are a proposal, not a claim that they exist.
+
+Latest warning cleanup: saved PLC now assigns CAN_VALVES during axesInit startup. Owner reports successful compilation and removal of pointer warnings; J1939 Byte7 layout correction remains unconfirmed. See the migration checkpoint above.

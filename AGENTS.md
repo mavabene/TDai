@@ -133,7 +133,13 @@ TDai repository; [DEVELOPMENT](docs/DEVELOPMENT.md) owns the tracked-file scope 
 Box-copy and authorized mainline-project import policy. Import saved PLC/HMI
 projects from the authorized development root as part of Run Update, excluding
 letter-suffixed alternates; ask about unexpected naming or conflicting copies.
-Keep libraries unchanged unless the owner identifies an update. Do not import
+Include every owner-made addition, edit, rename, and deletion within TD3ai in
+the next Git update, including library files and new versions, without requiring
+separate identification or confirmation. Inspect ignored paths and adjust tracking
+rules so an existing allowlist cannot silently omit owner changes. Exclude generated
+caches, scratch files, IDE-local settings, and local execution receipts as specified
+in DEVELOPMENT. The restriction on importing libraries from outside TD3ai still
+applies; it does not exclude libraries already added or changed here. Do not import
 Box code back into the workspace. The owner lifted the Box hold
 on October 29, 2026; update the Box copy without another user confirmation. The Box
 copy replaces matching versions and retains prior versions when a new version is

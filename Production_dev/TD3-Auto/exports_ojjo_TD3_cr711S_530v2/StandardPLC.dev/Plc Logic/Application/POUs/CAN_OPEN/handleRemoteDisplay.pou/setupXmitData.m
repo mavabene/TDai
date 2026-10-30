@@ -7,7 +7,7 @@ END_VAR
 
 VAR
 	INDEX: USINT;
-	CHAR: USINT;
+	CHRCTR: USINT;
 	AT_EOL: BOOL;
 	PTR: POINTER TO BYTE;
 END_VAR
@@ -27,22 +27,22 @@ FOR INDEX := 1 TO 18 DO
 	
 	IF AT_EOL THEN
 		// Fill in with spaces when message doesn't fill the entire field.
-		CHAR := 32;
+		CHRCTR := 32;
 	ELSE
 		// Otherwise take the next character from the message.
-		CHAR := PTR^;
+		CHRCTR := PTR^;
 	END_IF
 	
 	PTR := PTR + 1;
  
 	IF INDEX >= 1 AND INDEX <= 6 THEN
 		// Characters 1 to 6 in first register.
-		XMIT_COLUMN_1[INDEX + 2] := CHAR;
+		XMIT_COLUMN_1[INDEX + 2] := CHRCTR;
 	ELSIF INDEX >= 7 AND INDEX <= 12 THEN
 		// Characters 6 to 12 in second register.
-		XMIT_COLUMN_2[INDEX + 2 - 6] := CHAR;
+		XMIT_COLUMN_2[INDEX + 2 - 6] := CHRCTR;
 	ELSE
 		// Characters 13 to 18 in third register.
-		XMIT_COLUMN_3[INDEX + 2 - 12] := CHAR;
+		XMIT_COLUMN_3[INDEX + 2 - 12] := CHRCTR;
 	END_IF
 END_FOR

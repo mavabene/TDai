@@ -49,6 +49,20 @@ Imported the saved mainline PLC 530v2 and changed HMI 530v1 from the authorized 
 
 | Workspace file | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v2.project` | 3450487 | `f0f2715c4105ec95c34922b8799e46e05efda05daf9d0907d8dbe3c4d413a6db` |
+| `Production_dev/TD3-Auto/ojjo_TD3_cr711S_530v2.project` | 3450487 | `f82dae1fee496850219bf5971cf29ae2dd5702a242df55f6025fbf0b89d8f6a0` |
 
-Seven untracked files already present under Library were left untouched and excluded from the Git checkpoint because the owner has not identified a library update: motor2.library, motor3_3105.library, td2.library, td3.library, td3_31010.library, td3_3101011_SP21.library, td3_31011.library. The full-workspace Box backup includes these local files under the existing backup policy.
+Seven untracked files already present under Library were left untouched and excluded from the Git checkpoint because the owner has not identified a library update: motor2.library, motor3_3105.library, td2.library, td3.library, td3_31010.library, td3_3101011_SP21.library, td3_31011.library. The full-workspace Box backup includes these local files under the existing backup policy. The owner subsequently authorized all owner-made TD3ai changes for Git updates, including these seven library additions; include them in the next checkpoint without further confirmation. This paragraph records the earlier exclusion, not a continuing hold.
+
+## Subsequent owner update
+
+The seven previously untracked Library additions are included under the revised owner policy. Their binary contents are preserved; inclusion does not establish resolved dependencies.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `Library/motor2.library` | 199169 | `0af080f93746c48c1e92ebed051957117509fa82bd9f06cbcde16dbffdd4fbef` |
+| `Library/motor3_3105.library` | 208554 | `c97b465c0b714098ffcbd94d30c0d5a60d36171a83fb535d1d2e30837b95638d` |
+| `Library/td2.library` | 183136 | `81988f89411525423227a96c868046822f61f0d6b1fe6838228076d6a563b18b` |
+| `Library/td3.library` | 173721 | `f515a578ebfe6844a6267866b892efdb704152834f76205c81d99dde78d50c14` |
+| `Library/td3_31010.library` | 191784 | `e0e395fb7b21352f48011bfdbdddf0141c3f4630e3f281b4ed1e7a7049302560` |
+| `Library/td3_3101011_SP21.library` | 341878 | `09b39f6f5a590b308c75d958e7bc45b5aca9dc080915c32b02cb11ed634135c9` |
+| `Library/td3_31011.library` | 191247 | `63bbf6fd30ab55fa87fc3de19aaa0bed77ad80a03ee4f900482144eb969ac1b5` |

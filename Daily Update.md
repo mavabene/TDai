@@ -12,11 +12,14 @@ when active; this workflow does not override sandbox or organization restriction
 
 - Workspace: `C:/Users/jcheney/Documents/Codex/TD3ai`.
 - GitHub: `https://github.com/mavabene/TDai.git`.
-- Include maintained records and selected PLC/HMI projects, exports, and libraries
-  under the [development policy](docs/DEVELOPMENT.md) and `.gitignore`.
+- Include every owner-made addition, edit, rename, and deletion within TD3ai,
+  including libraries, new versions, and files outside the previous allowlist.
+  Follow the [development policy](docs/DEVELOPMENT.md) for generated/local-state
+  exclusions; update `.gitignore` when it would hide owner-maintained changes.
 - Import the latest saved mainline PLC/HMI projects from the authorized source
   folder using DEVELOPMENT's import policy. Unsaved IDE edits are not included.
-  Libraries stay unchanged unless the owner identifies a library update.
+  Do not import external libraries unless the owner identifies an update. Libraries
+  already added or changed inside TD3ai are included without another confirmation.
 - **Box updates are authorized** without asking the owner again. The owner lifted
   the hold on October 29, 2026, including replacement of the previously differing
   Box PLC copy. Workspace files are the source; use DEVELOPMENT's destination
@@ -43,8 +46,9 @@ when active; this workflow does not override sandbox or organization restriction
    [the CODESYS export procedure](docs/CODESYS_EXPORTS.md) before reviewing code
    and version notes. If exporting fails, preserve the last good exports and
    report them as stale; do not silently label them current.
-   Check managed code folders for newly copied project/library/archive
-   versions currently ignored by the allowlist. Preserve owner edits but flag
+   Check the entire workspace, including ignored paths, for owner-made changes.
+   Include newly copied libraries and project/archive versions without requiring
+   the owner to identify each one again. Preserve owner edits but flag
    apparent problems with evidence. Do not implement new machine-code changes,
    require an export after every edit, or assume binary/export names imply
    matching content. Resolve ambiguous replacements before discarding files.
@@ -54,9 +58,10 @@ when active; this workflow does not override sandbox or organization restriction
    fingerprints, and owning guides. Distinguish proposals, owner reports, inspected
    source, compilation, and machine tests. Do not mark tasks complete without
    evidence or erase dated assessment history. Preserve useful resume context.
-4. **Prepare the checkpoint.** Update the allowlist for identified new versions.
-   Remove only superseded managed versions whose replacement the owner identified;
-   preserve unrelated library variants and local historical material. Review
+4. **Prepare the checkpoint.** Adjust tracking rules for all owner-maintained changes,
+   including new folders and versions. Include owner-made renames and deletions;
+   do not delete older versions merely because a newer one exists. Preserve
+   unrelated library variants and local historical material. Review
    additions/deletions, relevant source/interface differences, links, fingerprints,
    and maintained-document whitespace. Preserve supplied reference bytes. Run
    appropriate available checks and report their limits; do not claim unavailable

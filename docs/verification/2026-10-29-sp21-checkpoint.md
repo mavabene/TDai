@@ -45,3 +45,29 @@ Seven pre-existing untracked Library binaries remain untouched and excluded from
 Git pending identification by the owner; CURRENT_CODE lists them. Full-workspace
 Box copying includes local files under the standing policy. Git/Box results and
 elapsed time are recorded in the ignored local update receipt after verification.
+
+## Subsequent warning cleanup checkpoint
+
+Saved PLC SHA-256: `f82dae1fee496850219bf5971cf29ae2dd5702a242df55f6025fbf0b89d8f6a0`.
+HMI identity remains unchanged. Successful scratch extraction manifest:
+`.export-work/run-uosj7h/result.json` (418 PLC / 189 HMI files).
+The saved PLC moves all 22 CAN_VALVES address assignments into axesInit's
+IF INIT block and comments out its former global initializer. Valve order matches.
+The owner reports that this removed the initialization warnings and that 530v2
+compiles. The owner does not use online changes; startup-only pointer assignment
+is intentional. This is owner-reported compilation, not an agent build result.
+
+Also observed: CHAR was renamed CHRCTR in setupXmitData and xmitLines; all active
+uses in setupXmitData were renamed consistently. PLC Version notes are unchanged.
+HMI source text is unchanged. Differing HMI library metadata was not promoted.
+No controller connection or machine testing was performed.
+
+The remaining reported J1939 warnings concern Group2 PGN 65282: Byte6 occupies
+bits 56–63, while Byte7 occupies 57–64, overlapping and exceeding the eight-byte
+message. Screenshots show no explicit Application mapping for Byte7. Removal of
+that unused signal was proposed; removal and a warning-free rebuild have not
+been confirmed and this custom export does not capture that signal configuration.
+Next action: confirm Byte7 removal and the subsequent rebuild result.
+
+This checkpoint includes the revised all-owner-changes Git policy and seven
+previously untracked library binaries without modifying their contents.

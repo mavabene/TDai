@@ -161,6 +161,23 @@ versions; inclusion does not mean every library is used by the current projects.
 Historical application versions under `Production` and generated IDE/cache files
 are excluded from Git. They have not been deleted from the local workspace.
 
+**Tracking policy updated October 29, 2026:** Every owner-made addition, edit,
+rename, and deletion within TD3ai belongs in the next Git update. This includes
+new libraries, new versions, new folders, and other owner-maintained files without
+separate identification or confirmation. Review the entire workspace, including
+ignored paths, and adjust `.gitignore` when an old allowlist would omit these
+changes. The seven Library additions excluded from the preceding checkpoint are
+authorized for inclusion in the next update under this policy.
+
+Generated CODESYS caches, IDE-local settings, temporary/scratch outputs (including
+`.export-work` and `.restore-tests`), local logs, and execution receipts remain
+excluded. Previously excluded historical trees need not be bulk-imported merely
+because this policy changed, but subsequent owner-made changes there must be
+reviewed and included. Unsaved IDE changes cannot be captured. Coordinate active
+writers to obtain a stable checkpoint rather than silently dropping their changes.
+This policy concerns Git inclusion; it does not authorize modifying machine code,
+installing libraries, or importing libraries from external folders.
+
 For later updates, copy the latest changed files here, identify the components
 they replace, review the differences, and update the Git allowlist/inventory when
 names change. Commit the replacement and removal of its prior managed version
@@ -191,8 +208,9 @@ Letter suffixes such as `530v1a` and `530v1b` are alternate versions the owner
 is veering away from; exclude them, along with named tests, recovered copies,
 and other suffixes. Ask when an unfamiliar naming pattern could change the
 selection or same-version copies differ; do not repeatedly ask about known a/b
-alternates. Libraries rarely change and remain as-is unless the owner identifies
-an update. No version bump is required to import edits to the same mainline file.
+alternates. External libraries are imported only when the owner identifies
+an update. Owner-added or changed libraries already inside TD3ai are included
+in Git under the tracking policy above. No version bump is required to import edits to the same mainline file.
 
 Verify copied files against stable source hashes. Save in CODESYS before import;
 unsaved changes cannot be included. Import only reads development files and writes
