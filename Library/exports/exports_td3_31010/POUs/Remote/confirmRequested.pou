@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+(* Set for one and only one cycle when the operator has hit the CONFIRM button. *)
+FUNCTION confirmRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+confirmRequested := REMOTE.LMB1_RE;
+IF REMOTE.LMB1_RE THEN
+	REMOTE.LMB1_RE := FALSE;
+END_IF;

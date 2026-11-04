@@ -1,0 +1,128 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK OperatorState
+VAR_INPUT
+	TIME_NOW_MS: DWORD;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR_IN_OUT
+END_VAR
+VAR
+	(* Timeout in milliseconds. *)
+	NO_TOUCH_TIMEOUT: DWORD := 500;
+	NO_TOUCH_START: DWORD;
+	GO_SETUP_START: DWORD := 0;
+	FIRST_TIME: BOOL := TRUE;
+END_VAR
+(********************** Implementation ****************************)
+
+IF LOAD_UNLOAD_ONLY THEN
+	// Manual only is allowed in this mode.
+	setAutoManualBump(FALSE, TRUE, FALSE);
+	
+	IF isModeSwitchRequested() THEN
+		(* When this comes in, the operator has made a request to change state. We only allow IDLE to TRACK. *)
+		CASE MACHINE_MODE OF
+			ERROR_MODE:
+				MACHINE_MODE := TRACK_MODE;
+			IDLE_MODE:
+				MACHINE_MODE := TRACK_MODE;
+		END_CASE
+	END_IF
+ELSE
+	IF isPauseContinueRequested() THEN
+		PAUSED := NOT PAUSED;
+	END_IF;
+	LAST_PAUSED := PAUSED;
+	NEW_MODE_ENABLED := FALSE;
+	
+	IF isAutomaticRequested() THEN
+		setAutoManualBump(TRUE, FALSE, FALSE);
+	ELSIF isManualRequested() THEN
+		setAutoManualBump(FALSE, TRUE, FALSE);
+	ELSIF isBumpRequested() OR FIRST_TIME THEN
+		(* The falling edge detect doesn't get set on powerup, so if on powerup we are not in
+			AUTO or MANUAL, we must come here. *)
+		setAutoManualBump(FALSE, FALSE, TRUE);
+	END_IF;
+	FIRST_TIME := FALSE;
+	
+	IF ESTOP_PRESSED THEN
+		(* The E-stop button is pressed, just go to the error state. *)
+		MACHINE_MODE := ERROR_MODE;
+	
+		(* Do this immediately to make the E-stop action quick! *)
+		MACHINE_NO_TOUCH := FALSE;
+	
+		PAUSED := FALSE;
+	ELSIF MACHINE_MODE = IDLE_MODE AND 
+		isAutoSelected() THEN
+		(* Switching out of idle disallowed if automatic is selected. *)
+		;
+	ELSIF isModeSwitchRequested() OR MODE_CHANGE_REQUEST THEN
+		(* When this comes in, the operator has made a request to change state.  We just want to
+			bump the state forward, then start the "no touch" delay. *)
+		CASE MACHINE_MODE OF
+			ERROR_MODE:
+				MACHINE_MODE := TRACK_MODE;
+			IDLE_MODE:
+				MACHINE_MODE := TRACK_MODE;
+			TRACK_MODE:
+				MACHINE_MODE := RWP_MODE;
+			RWP_MODE:
+				MACHINE_MODE := SCREW_MODE;
+			SCREW_MODE:
+				MACHINE_MODE := TRACK_MODE;
+				(* MACHINE_STATE := SETUP_MODE; *)
+			FWP_MODE:
+				MACHINE_MODE := SETUP_MODE;
+			SETUP_MODE:
+				MACHINE_MODE := TRACK_MODE;
+		ELSE
+			SoftwareError('OPERATOR_STATE: invalid state in request.');
+		END_CASE
+		
+		(* Only use MODE_CHANGE_REQUEST for one cycle *)
+		MODE_CHANGE_REQUEST := FALSE;
+		
+		(* Starts the logic that allows the operator to cycle through modes quickly without
+			engaging the logic at the beginning of each mode. *)
+		MACHINE_NO_TOUCH := TRUE;
+		NO_TOUCH_START := TIME_NOW_MS;
+	
+		(* We always start a new mode with the machine not in a paused state. *)
+		PAUSED := FALSE;
+	
+		confirmMonitorStop();
+	
+	ELSIF MACHINE_NO_TOUCH THEN
+		(* To here, there is an outstanding request to change state.  Check to see if this
+			had been stable long enough that we know this is what the operator wants. *)
+		IF ((TIME_NOW_MS - NO_TOUCH_START) >= NO_TOUCH_TIMEOUT) THEN
+			MACHINE_NO_TOUCH := FALSE;
+	
+			(* Flag code to know that a new mode has been enabled. This is active for one and only one scan! *)
+			NEW_MODE_ENABLED := TRUE;
+		END_IF;
+	
+		(* We'd like to call the appropriate state machine function here, but cannot due to lack of
+			pointer to function in Codesys. *)
+	END_IF;
+
+	(*	
+	IF REMOTE.RMB2 AND (MACHINE_MODE <> SETUP_MODE) THEN
+		IF GO_SETUP_START = 0 THEN
+			GO_SETUP_START := TIME_NOW_MS;
+		END_IF
+		
+		IF TIME_NOW_MS - GO_SETUP_START > 5000 THEN
+			MACHINE_MODE := SETUP_MODE;
+			MACHINE_NO_TOUCH := TRUE;
+			NO_TOUCH_START := TIME_NOW_MS;
+		END_IF
+	ELSE
+		GO_SETUP_START := 0;
+	END_IF
+	*)
+END_IF

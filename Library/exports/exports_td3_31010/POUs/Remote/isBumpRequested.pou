@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+(* This is set for one and only one cycle when the operator has requested a change to manual operation.  This
+	may be checked by any logic level. *)
+FUNCTION isBumpRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isBumpRequested := REMOTE.T3P1_DN_FE OR REMOTE.T3P1_UP_FE;

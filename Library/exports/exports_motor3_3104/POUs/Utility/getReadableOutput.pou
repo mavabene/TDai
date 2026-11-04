@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+FUNCTION getReadableOutput : REAL
+VAR_INPUT
+	AXIS: sAxis;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+// Latch the magnitude.
+getReadableOutput := AXIS.OUTPUT.MAGNITUDE / 10.0;
+
+// Change the sign if necessary.
+IF NOT AXIS.OUTPUT.POSITIVE THEN
+	getReadableOutput := -getReadableOutput;
+END_IF
+

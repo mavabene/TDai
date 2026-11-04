@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+(* Returns a member of enum eScrewSide. *)
+FUNCTION getScrewSide : eScrewSide
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF REMOTE.T3P3_DN THEN
+	getScrewSide := SCREW_LEFT;
+ELSIF REMOTE.T3P3_UP THEN
+	getScrewSide := SCREW_RIGHT;
+ELSE
+	getScrewSide := SCREW_CENTER;
+END_IF;

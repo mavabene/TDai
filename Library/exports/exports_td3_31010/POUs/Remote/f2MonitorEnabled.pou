@@ -1,0 +1,8 @@
+
+(********************** Declaration ****************************)
+FUNCTION f2MonitorEnabled: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+f2MonitorEnabled := F2_MONITORED;

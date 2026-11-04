@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eMachineVendor :
+(
+	DRILLTECH := 0,
+	HUTTE := 1
+);
+END_TYPE

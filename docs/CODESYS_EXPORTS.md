@@ -1,5 +1,9 @@
 # Readable CODESYS exports
 
+For the October 30 TD3/motor3 library extraction and stable 5.1.1 dependency
+coverage, see [library source review](verification/2026-10-30-library-exports.md).
+This adds readable library source without changing the historical project exports.
+
 The owner-supplied exporter uses CODESYS `projects` and `system` scripting APIs.
 It must run in CODESYS's scripting runtime, not normal Python. CODESYS can launch
 scripts from the command line with `--runscript` and `--noUI`.

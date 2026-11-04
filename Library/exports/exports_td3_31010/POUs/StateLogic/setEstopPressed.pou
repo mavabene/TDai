@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+FUNCTION setEstopPressed : BOOL
+VAR_INPUT
+	(* When pressed is TRUE, that means the E-stop button is pressed, which means the
+		machine should go to an error state. *)
+	pressed: BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+ESTOP_PRESSED := pressed;
+setEstopPressed := ESTOP_PRESSED;

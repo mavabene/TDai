@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+
+VAR_GLOBAL CONSTANT
+	(*
+		3.1.0.2 - Started Version info tracking.
+		3.1.0.4 - Merge library stubs, add updated Motor library to include 3d rotations
+		3.1.0.5 - Add variable for requesting mode change, and change operator state to include this trigger; add proximity alarm ESTOP cause to eEstopCauseMask;
+		3.1.0.6 - update Motor3-1 library to 3.1.0.1
+		3.1.0.7 - add Proximity Sensor functionality
+		3.1.0.8 - edited product types to standardize naming and add variable geometry; remove eWarningCauseMask.UR_MOTOR and eWarningCauseMask.LC_MOTOR
+		3.1.0.9 - update motor library
+		3.1.0.10 - remove proximity sensor from this library
+	*)
+//	VERSION: STRING[20] := '3.1.0.10'; //  
+END_VAR

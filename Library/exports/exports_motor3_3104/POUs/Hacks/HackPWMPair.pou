@@ -1,0 +1,39 @@
+
+(********************** Declaration ****************************)
+(* This library cannot handle PWM channels because of limitations in the IFM libraries.  You
+	should pull this function out of here, put it into your app with a different name, then
+	uncomment the lines referencing PWM1000 and then drive them with the output of the sAxis. *)
+FUNCTION HackPWMPair : BOOL
+VAR_INPUT
+	CH_PLUS: BYTE;
+	CH_MINUS: BYTE;
+	PWM_MAG: WORD;
+	PWM_FREQ: WORD;
+	PWM_POSITIVE: BOOL;
+	DITHER_FREQ: WORD;
+	DITHER_VAL: WORD;
+END_VAR
+VAR
+	(*
+	PWM1000_PLUS: PWM1000;
+	PWM1000_MINUS: PWM1000;
+	*)
+	DV: WORD;
+END_VAR
+(********************** Implementation ****************************)
+
+IF PWM_MAG = 0 THEN
+	DV := 0;
+ELSE
+	DV := DITHER_VAL;
+END_IF;
+
+(*
+IF PWM_POSITIVE THEN
+	PWM1000_PLUS(ENABLE := TRUE, CHANNEL := CH_PLUS, FREQUENCY := PWM_FREQ, VALUE := PWM_MAG, DITHER_FREQUENCY := DITHER_FREQ, DITHER_VALUE := DV);
+	PWM1000_MINUS(ENABLE := TRUE, CHANNEL := CH_MINUS, FREQUENCY := PWM_FREQ, VALUE := 0, DITHER_FREQUENCY := DITHER_FREQ, DITHER_VALUE := 0);
+ELSE
+	PWM1000_PLUS(ENABLE := TRUE, CHANNEL := CH_PLUS, FREQUENCY := PWM_FREQ, VALUE := 0, DITHER_FREQUENCY := DITHER_FREQ, DITHER_VALUE := 0);
+	PWM1000_MINUS(ENABLE := TRUE, CHANNEL := CH_MINUS, FREQUENCY := PWM_FREQ, VALUE := PWM_MAG, DITHER_FREQUENCY := DITHER_FREQ, DITHER_VALUE := DV);
+END_IF;
+*)

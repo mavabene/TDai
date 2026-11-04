@@ -1,0 +1,5 @@
+
+(********************** Declaration ****************************)
+TYPE eAxisControlStates :
+	(AXIS_OFF, AXIS_OPEN_LOOP, AXIS_TRAPEZOID, AXIS_RATIO);
+END_TYPE

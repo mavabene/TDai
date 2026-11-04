@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION VEL_RAW_TO_ENGR : REAL
+VAR_INPUT
+	FB: sFeedback;
+	VEL_OR_ACCEL: REAL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+VEL_RAW_TO_ENGR := VEL_OR_ACCEL / FB.RAW_PER_ENGR;

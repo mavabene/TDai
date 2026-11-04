@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+TYPE eAirCompressorStates :
+	// States:
+	//	0 => off
+	//	1 => warmup
+	//	2 => run loaded
+	//	3 => normal shutdown
+	(
+	COMPRESSOR_OFF := 0,
+	COMPRESSOR_WARMUP := 1,
+	COMPRESSOR_RUN_LOADED := 2,
+	COMPRESSOR_SHUTDOWN := 3,
+	COMPRESSOR_EMERGENCY := 4
+	);
+END_TYPE

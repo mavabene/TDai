@@ -1,0 +1,101 @@
+
+(********************** Declaration ****************************)
+FUNCTION LoopOpen: BOOL
+VAR_INPUT
+(* Run the valve/axis in open loop.  Simply put the valve where the user wants it, they will stop manually.  This doesn't respect:
+	
+	1) motion limits
+	2) failed feedback
+	3) output limits
+	4) almost anything!
+
+	Really the only thing this respects is the deadband of the valve, to give the user a full range when the speed range is small.
+
+	The idea is that an input signal from a pot that is center balanced for bi-directional control is wired directly here.
+		So you pass the maximum value from the sensor (say, 24000 mV) and the current value of the input (say, 9000 mV).  This
+		is coupled with a valve parameter of deadband (say, 300 mille-percent duty cycle).  This function will calculate that
+		this is a 3000 out of 12000 request in the negative direction, so 25% negative.  This is 25% of the full range of the
+		valve, which means the operator has to get it out of the deadband manually.  This is the proper behavior, though, because
+		this allows it to get back to zero speed when the operator lets off the control, just like a manual valve handle!
+		The ratio is used to provide finer control.  So if range is 100 (percent), then -25% will operate on the full 1000 mille-percent
+		of the output, and give you PWM magnitude of 0.25(700*1.0) on the negative channel.  However, if ratio is set to 30%, this will
+		only use 30% of the 700 mille-percent output, so a -25% on
+		the input sensor will give you a 
+
+*)
+	pOUTPUT: POINTER TO sOutput;
+	(* Configuration of this axis; the max output and direction specific valve deadbands are used here. *)
+	CFG: sConfig;
+	(* Raw input value from the sensor (typically a joystick) used to jog *)
+	INPUT: DINT;
+	(* Maximum value from jog sensor; it is expected the sensor is balanced about the halfway point *)
+	INPUT_MAX: DINT;
+	(* Input deadband half-width, in percent.  This will set the output to zero when input is within this value on either side of the center point
+		of the input. *)
+	INPUT_DEADBAND: DINT;
+	(* How much of the output range you want to scale to full scale on the input (should be 0 - 100).  If you want the full range of
+		the joystick to drive the output to 75% of its usable range, set this to 75. *)
+	RANGE: DINT;
+	(* Whether the value is flipped, that is a positive direction on the jog sensor will move the axis in the negative direction *)
+	FLIPPED: BOOL;
+
+END_VAR
+VAR
+	HALF_INPUT: DINT;
+	OUT_POSITIVE: BOOL;
+	OUT_MAGNITUDE: WORD;
+	CURRENT: WORD;
+	RESULT: BYTE;
+	FS: DINT;
+	COMMAND: DINT;
+	DB: WORD;
+END_VAR
+(********************** Implementation ****************************)
+HALF_INPUT := INPUT_MAX / 2;
+
+IF INPUT > HALF_INPUT THEN
+	OUT_POSITIVE := TRUE;
+ELSE
+	OUT_POSITIVE := FALSE;
+END_IF;
+
+IF FLIPPED THEN
+	OUT_POSITIVE := NOT OUT_POSITIVE;
+END_IF;
+
+(* Magnitude in millepercent *)
+COMMAND := 1000 * ABS(INPUT - HALF_INPUT) / (INPUT_MAX / 2);
+
+IF COMMAND < INPUT_DEADBAND THEN
+	OUT_MAGNITUDE := 0;
+ELSE
+	(* Full scale for axis is MAX minus DEADBAND *)
+	IF OUT_POSITIVE THEN
+		DB := CFG.DEADBAND_PLUS;
+		FS := CFG.OUTPUT_PLUS_MAX;
+	ELSE
+		DB := CFG.DEADBAND_MINUS;
+		FS := CFG.OUTPUT_MINUS_MAX;
+	END_IF;
+
+	(* The input to here will be between INPUT_DEADBAND and 100 *)
+
+	(* Now we calculate magnitude by:
+		- Determine the full scale usable output of the valve output (valve_output_max - valve_DB)
+		- Determine the joystick input as a fraction of the usable range
+		- Ratio down the full scale command by the joystick input fraction, then again by the user's range onto the output.
+		- To this variable output, add the valve deadband in the proper direction.
+	*)
+	OUT_MAGNITUDE := DB + DINT_TO_WORD(FS * (COMMAND - INPUT_DEADBAND) * RANGE / ((100 - INPUT_DEADBAND) * 100));
+END_IF;
+
+IF OUT_MAGNITUDE > 1000 THEN
+	OUT_MAGNITUDE := 1000;
+END_IF;
+
+pOUTPUT^.MAGNITUDE := OUT_MAGNITUDE;
+pOUTPUT^.POSITIVE := OUT_POSITIVE;
+
+
+
+

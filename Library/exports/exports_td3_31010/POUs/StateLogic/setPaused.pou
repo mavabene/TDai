@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION setPaused : BOOL
+VAR_INPUT
+	NEW: BOOL;
+	pPAUSED: POINTER TO BOOL;
+	pCHANGED: POINTER TO BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF NEW <> pPAUSED^ THEN
+	pPAUSED^ := NEW;
+	pCHANGED^ := TRUE;
+END_IF

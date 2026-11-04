@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+(* State variable that returns whether or not the machine is in manual operation. *)
+FUNCTION isManual : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isManual := MANUAL;

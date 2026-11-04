@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+(* Function to convert a number in engineering units to the raw encoder counts that represents the same position. *)
+FUNCTION POS_ENGR_TO_RAW : DINT
+VAR_INPUT
+	FB: sFeedback;
+	ENGR: REAL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+POS_ENGR_TO_RAW := TO_DINT(ENGR * FB.RAW_PER_ENGR);
+
+

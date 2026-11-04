@@ -1,0 +1,18 @@
+
+(********************** Declaration ****************************)
+FUNCTION setAutoManualBump : BOOL
+VAR_INPUT
+	A: BOOL;
+	M: BOOL;
+	B: BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+(* Changes top level tool to automatic or manual. *)
+
+AUTOMATIC := A;
+MANUAL := M;
+BUMP := B;
+
+(* TODO: Flipping the switch between auto and manual and bump may do something, sometimes, to state variables! *)

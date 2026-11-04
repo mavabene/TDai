@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+FUNCTION nearHardStop : BOOL
+VAR_INPUT
+	AXIS: sAxis;
+	JS: REAL;
+	JS_POS_IS_OUTPUT_POS: BOOL;
+END_VAR
+VAR
+	TOWARD_MAX: BOOL;
+END_VAR
+
+(********************** Implementation ****************************)
+IF (JS >= 0 AND JS_POS_IS_OUTPUT_POS) OR (JS <= 0 AND NOT JS_POS_IS_OUTPUT_POS) THEN
+	TOWARD_MAX := TRUE;
+ELSE
+	TOWARD_MAX := FALSE;
+END_IF
+
+IF TOWARD_MAX AND (AXIS.FEEDBACK.POSITION_ENGR > (AXIS.CONFIG.COMMAND_LIMIT_MAX - AXIS.CONFIG.MANUAL_HARDSTOP_BAND)) THEN
+	(* We are within range of + hardstop or beyond it (probably because feedback is messed up). *)
+	nearHardStop := TRUE;
+ELSIF (NOT TOWARD_MAX) AND (AXIS.FEEDBACK.POSITION_ENGR < (AXIS.CONFIG.COMMAND_LIMIT_MIN + AXIS.CONFIG.MANUAL_HARDSTOP_BAND)) THEN
+	nearHardStop := TRUE;
+ELSE
+	nearHardStop := FALSE;
+END_IF

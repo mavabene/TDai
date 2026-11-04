@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TD3 · Motion study</title><link rel="stylesheet" href="style.css">
+</head><body>
+<header><div class="brand">TD<span>3</span><small> MOTION STUDY</small></div><div class="status"><i></i> STANDALONE / v0.2</div></header>
+<main><section id="viewport" aria-label="Interactive machine model">
+<div class="view-heading"><span class="eyebrow">ARTICULATED MACHINE MODEL</span><h1>Explore the movement.</h1><p>Simple geometry. Independent joints. One connected machine.</p></div>
+<nav aria-label="Camera views"><button data-view="iso" class="active">Isometric</button><button data-view="side">Side</button><button data-view="end">End</button><button data-view="top">Top</button><button id="fit">Fit</button></nav>
+<div class="overlay-card"><div class="overlay-options"><label><input id="dimensions" type="checkbox"> Show dimensions</label><label><input id="etPlumb" type="checkbox"> ET Plumb mode</label><label><input id="environment" type="checkbox" checked> Desert environment</label><p>Click an actuator to inspect. Lengths in cm; stance in inches.</p></div><pre id="measurementReadout" hidden></pre><pre id="etReadout" hidden></pre></div><svg id="cadDimensions" aria-label="CAD dimension leaders" hidden></svg><div id="error" role="alert" hidden></div>
+<div class="view-footer"><span>Drag to orbit · right-drag to pan · scroll to zoom</span><label><input id="markers" type="checkbox"> Pivot axes</label></div>
+<div class="axis-key"><b>+X</b> Forward <b>+Y</b> Right <b>+Z</b> Up</div>
+</section>
+<aside><div class="panel-top"><span class="eyebrow">POSE CONTROLS</span><button id="reset">Reset pose ↺</button></div>
+<div class="notice">VISUAL PROTOTYPE<span>Geometry includes estimates. Controls use 530v2 axesInit command ranges, except rotary speed demos. No machine envelope or PLC behavior is validated.</span></div>
+<label style="display:block;font-size:12px;margin-top:16px">Machine profile · family 3
+<select id="machineVersion" style="width:100%;padding:7px;margin-top:6px"><option value="2">3.2 · version 2 · lower crowd minimum 37 cm</option><option value="0">Version 0 reference · lower crowd minimum 44 cm</option></select></label>
+<button id="stopRotaries" style="margin-top:10px;width:100%">Stop rotaries</button>
+<button id="alignCap" style="margin-top:6px;width:100%">Align holder WP to COR (195 / 160 cm)</button>
+<button id="trackDefaults" style="margin-top:6px;width:100%" title="Nominal non-GPS Track positions; upper crowd uses declared 245 cm because its Track command is disabled. Mast plumb in model geometry.">Reset all · Track defaults, mast plumb</button><div id="controls"></div>
+
+
+<details><summary>Geometry & reference notes</summary><p>Confirmed motion relationships; estimated pivot placement. Lift, pitch, roll and slide drawing zeros are provisional; position ranges use source initialization. Nominal horizontal arms: 1.35 m each; X-slide: 0.30 m. Origin: chassis boom-swing pivot. Rendering: (X, Z, Y).</p><p>Rotator marker is an estimated COR. Physical WP and pin markers are omitted pending dimensions. No collision enforcement or hydraulic dynamics.</p><a href="reference/td3-side-view.png" target="_blank">Side reference ↗</a> · <a href="reference/td3-angled-overview.png" target="_blank">Angled reference ↗</a></details>
+</aside></main>
+<script>
+window.modelStartupFailed = function(message) {
+  var error = document.getElementById('error');
+  error.hidden = false;
+  error.textContent = message + ' If viewer.js is missing, run Launch Model.cmd to rebuild it, then refresh this page.';
+};
+window.addEventListener('error', function(event) {
+  if (event.message) window.modelStartupFailed('The model could not start: ' + event.message);
+});
+setTimeout(function() {
+  if (document.documentElement.dataset.modelStatus !== 'ready')
+    window.modelStartupFailed('The 3D viewer has not finished loading.');
+}, 15000);
+</script>
+<script src="viewer.js" onerror="window.modelStartupFailed('The bundled viewer could not be loaded.');"></script></body></html>

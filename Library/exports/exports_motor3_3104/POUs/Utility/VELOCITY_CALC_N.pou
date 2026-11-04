@@ -1,0 +1,51 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK VELOCITY_CALC_N
+VAR_INPUT
+	POS: DINT;
+	US_TIME: DWORD;
+END_VAR
+VAR_IN_OUT
+	POS_SAMPLES: ARRAY [*] OF DINT;
+	TIME_SAMPLES: ARRAY [*] OF DWORD;
+END_VAR
+VAR_OUTPUT
+	VEL: REAL;
+	VALID: BOOL;
+END_VAR
+VAR
+	IDX_START: INT;
+	IDX_END: INT;
+	IDX: INT := 1;
+	VALID_INTERNAL: BOOL := FALSE;
+END_VAR
+
+(********************** Implementation ****************************)
+
+POS_SAMPLES[IDX] := POS;
+TIME_SAMPLES[IDX] := US_TIME;
+
+IDX_END := IDX;
+
+IF IDX_END = UPPER_BOUND(POS_SAMPLES, 1) THEN
+	IDX_START := 1;
+ELSE
+	IDX_START := IDX + 1;
+END_IF;
+
+(* Increment and wrap index *)
+IDX := IDX + 1;
+IF IDX > UPPER_BOUND(POS_SAMPLES, 1) THEN
+	IDX := 1;
+	(* Mark this function block as now spitting out valid velocity readings. *)
+	VALID_INTERNAL := TRUE;
+END_IF;
+
+IF VALID_INTERNAL THEN
+	(* Calculate velocity in counts per second. *)
+	VEL := (1000000.0 * DINT_TO_REAL(POS_SAMPLES[IDX_END] - POS_SAMPLES[IDX_START])) / UDINT_TO_REAL(TIME_SAMPLES[IDX_END] - TIME_SAMPLES[IDX_START]);
+	VALID := TRUE;
+ELSE
+	VEL := 0.0;
+	VALID := FALSE;
+END_IF;

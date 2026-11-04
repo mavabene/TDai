@@ -1,0 +1,69 @@
+
+(********************** Declaration ****************************)
+FUNCTION HaweVpocMaintain : BOOL
+(* Maintain a Hawe VPOC valves in an operating state.  The state diagram in the manual makes it look pretty simple,
+	but it is not quite so.  There are some states where the valves don't do what they are told (for instance, when
+	the operator uses a valve handle to do something not via the controls).  In this situation (and others like it), the
+	valves don't recover on their own, they just sit in an error state.  This function attempts to keep the valve
+	in an operating state, and will repeatadly pull it out of error states in situations like the one described. *)
+VAR_INPUT
+	pHAWE_VPOC: POINTER TO sHaweVpoc;
+	MSTIME: DWORD;
+	TOGGLE: BOOL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+ CASE pHAWE_VPOC^.initState OF
+	0:
+		(* Just powering up, or recovering from error in Device_Mode_Active.
+					 Check the status word.  1 => faulted, 8 => init, 9 => disabled, other => unknown *)
+		IF pHAWE_VPOC^.pDSW^ = 1 THEN // initializeing valve
+			(*toggle between 8 and 9, as both will work, and toggling results in telegram*)
+			IF pHAWE_VPOC^.pDCW^ = 8 THEN 
+				pHAWE_VPOC^.pDCW^ := 9;   
+			ELSE   
+				pHAWE_VPOC^.pDCW^ := 8; 
+			END_IF
+		   	pHAWE_VPOC^.pVPOC_CMD^ := 0; 
+		ELSIF (pHAWE_VPOC^.pDSW^  = 8) OR (pHAWE_VPOC^.pDSW^  = 9)  THEN  // 8 or 9   
+			(* We're in normal init state, just bring to active. *)
+			IF pHAWE_VPOC^.pDCW^ = 15 THEN 
+				pHAWE_VPOC^.pDCW^ := 7;   
+			ELSE   
+				pHAWE_VPOC^.pDCW^ := 15; 
+			END_IF
+			pHAWE_VPOC^.pVPOC_CMD^ := 0; // first command after Error and after Reset must be zero
+			pHAWE_VPOC^.timeStart := MSTIME;
+			pHAWE_VPOC^.initState := 1;
+		ELSIF pHAWE_VPOC^.pDSW^ = 15 THEN
+			(* Valve already initialized, probably in development mode. *)
+			pHAWE_VPOC^.initState := 1;
+		END_IF
+	1: // valve transitioning to active
+		// Feedback Telegram comes 250ms later
+		IF (MSTIME - pHAWE_VPOC^.timeStart) > 440 AND pHAWE_VPOC^.pDSW^ <> 15 THEN
+		   pHAWE_VPOC^.initState := 0;
+		   pHAWE_VPOC^.failures := pHAWE_VPOC^.failures + 1;
+		END_IF
+		pHAWE_VPOC^.pVPOC_CMD^ := 0; // first command after Error and after Reset must be zero
+		IF pHAWE_VPOC^.pDSW^  = 15 THEN
+			pHAWE_VPOC^.initState := 2;
+		END_IF
+	2: 	// normal mode - valve active
+		IF pHAWE_VPOC^. pVPOC_CMD^ <> 0 THEN
+			pHAWE_VPOC^.pDCW^ := 7; 
+		ELSE
+			pHAWE_VPOC^.pDCW^ := 15;
+		END_IF
+		IF pHAWE_VPOC^.pDSW^ <> 15 THEN
+			pHAWE_VPOC^.initState := 0;
+		  	pHAWE_VPOC^.failures := pHAWE_VPOC^.failures + 1;
+		END_IF
+END_CASE
+
+// flips bit 4 (unused) every ~400ms to force CAN update
+IF TOGGLE THEN
+	pHAWE_VPOC^.pDCW^ := pHAWE_VPOC^.pDCW^ XOR 16#0010;
+END_IF

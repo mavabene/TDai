@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+TYPE eScrewType :
+	(
+	SCREW_ARRAY,
+	SCREW_MOTOR_NORTH,
+	SCREW_MOTOR_SOUTH
+	);
+END_TYPE

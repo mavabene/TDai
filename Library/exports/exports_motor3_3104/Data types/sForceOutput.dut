@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+TYPE sForceOutput :
+STRUCT
+	FORCED: BOOL := FALSE;
+	DOUT_STATE: BOOL := FALSE;
+	AOUT_STATE: WORD := 0;
+	USINT_STATE: USINT := 0;
+END_STRUCT
+END_TYPE

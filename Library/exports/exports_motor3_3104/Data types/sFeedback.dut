@@ -1,0 +1,34 @@
+
+(********************** Declaration ****************************)
+TYPE sFeedback :
+STRUCT
+	(* Whether or not this axis has an installed feedback device. *)
+	INSTALLED: BOOL := FALSE;
+	(* Raw feedback counts per engineering unit *)
+	RAW_PER_ENGR: REAL := 1.0;
+	(* Encoder counts when engineering units are zero *)
+	RAW_WHEN_ENGR_ZERO: DINT := 0;
+	(* Maximum valid feedback, raw counts.  Set min and max to 0 to disable! *)
+	FEEDBACK_VALID_MAX: DINT := 0;
+	(* Minimum valid feedback, raw counts.  Set min and max to 0 to disable! *)
+	FEEDBACK_VALID_MIN: DINT := 0;
+
+	POSITION_RAW: DINT := 0;
+	POSITION_ENGR: REAL := 0.0;
+	VELOCITY_RAW: REAL := 0.0;
+	VELOCITY_ENGR: REAL := 0.0;
+	US_LAST_SAMPLE: DWORD := 0;
+	POSITION_RAW_LAST_SAMPLE: DINT := 0;
+	VALID: BOOL := FALSE;
+	SAMPLE_VALID: BOOL := FALSE;
+	COUNT: UDINT := 0;
+	ROLLOVER_AT: DINT := 0;
+	ROLLOVER_HALF: DINT := 0;
+	
+	ABS_ZERO_ABOVE_RANGE_HALF: BOOL := FALSE;
+	ABS_RANGE_MIN: DINT := 0;
+	ABS_RANGE_MAX: DINT := 0;
+
+	VELOCITY_CALC_01: VELOCITY_CALC;
+END_STRUCT
+END_TYPE

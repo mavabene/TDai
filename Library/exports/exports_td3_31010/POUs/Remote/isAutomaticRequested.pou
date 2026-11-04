@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+(* This is set for one and only one cycle when the operator has requested a change to automatic operation.  This
+	may be checked by any logic level. *)
+
+FUNCTION isAutomaticRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isAutomaticRequested := REMOTE.T3P1_UP_RE;

@@ -71,3 +71,31 @@ Next action: confirm Byte7 removal and the subsequent rebuild result.
 
 This checkpoint includes the revised all-owner-changes Git policy and seven
 previously untracked library binaries without modifying their contents.
+
+## October 30 static rescan
+
+The latest saved mainline projects in the authorized development root match the
+last checkpoint hashes exactly: PLC f82dae1fee496850219bf5971cf29ae2dd5702a242df55f6025fbf0b89d8f6a0;
+HMI 6839eff3c3650f51d5f58d50f966a7aa45598baa3b627026a3391c173f7dad50.
+Reused the verified run-uosj7h text extraction; no redundant export was launched.
+
+No new defect found in the reviewed migration edits. A static comparison confirms
+all 22 pointer assignments preserve the original valve order and cover indices
+1–22. They execute inside axesInit IF INIT; PLC_PRG calls machineState (which
+calls axesInit) before runActuators and clears Init_1 afterward. No exported
+consumer of CAN_VALVES was found. Startup-only assignment matches the owner's
+no-online-change workflow. Representative boom-swing control still calls
+HaweOutput, with valve control/status/data references configured by HaweVpocInit;
+those library implementations were not decoded or runtime-tested.
+
+The CHAR-to-CHRCTR rename in setupXmitData preserves all uses. Its 18-character
+loop writes indices 3–8 in each of three 8-element output arrays; caller line
+indices are 1–7 matching LINES. No bounds regression found in this changed code.
+
+Existing deferred issues F-01 (zero-valued Z_ADJUST_FINAL in pitch coupling) and
+F-03 (ET2_TEST=86 caught by earlier >70 branch) remain present, not new migration
+regressions. This review did not rederive geometry or resolve those findings.
+Byte7 layout removal remains unverified because the custom export omits the
+J1939 layout. No new compile, device-library validation, controller connection,
+or machine test was performed. This is a targeted static rescan, not a full
+application/library audit or release acceptance.

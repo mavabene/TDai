@@ -1,0 +1,32 @@
+
+(********************** Declaration ****************************)
+FUNCTION LoopPIDInit : BOOL
+VAR_INPUT
+	pLOOPPI: POINTER TO sLoopPID;
+	CFG: sCONFIG;
+	(* Position band, in engineering units, to determine whether axis is settled. *)
+	SETTLED_BAND: REAL;
+	(* Proportional gain. The proportional gain is scaled such that that with a raw error of 1000
+		and a Kp of 1, you get 10% of the working range on the output. *)
+	KP: REAL := 0.0;
+	(* Integral gain. *)
+	KI: REAL := 0.0;
+	(* Maximum output allowed as a result of integrator: should correspond to what is known about overcoming the max steady state error.
+		This is in millepercent, and it is scaled into the working area (so two valves with different hysteresis but otherwise
+		the same performance will work the same. This is a limit of the actual integrator sum that corresponds to that
+		level of output. *)
+	INTEGRATOR_MAX: WORD;
+	(* Derivative gain. *)
+	KD: REAL := 0.0;
+
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+pLOOPPI^.SETTLED_BAND := SETTLED_BAND;
+pLOOPPI^.KP := KP;
+pLOOPPI^.KI := KI;
+LoopPIIsumInit(pLOOPPI, CFG, INTEGRATOR_MAX);
+pLOOPPI^.KD := KD;
+

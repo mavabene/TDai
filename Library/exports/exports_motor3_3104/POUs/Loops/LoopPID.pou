@@ -1,0 +1,129 @@
+
+(********************** Declaration ****************************)
+FUNCTION LoopPID: BOOL
+VAR_INPUT
+	ENABLE: BOOL;
+	pLOOP: POINTER TO sLoopPID;
+	pOUTPUT: POINTER TO sOutput;
+	SP: sSetpoint;
+	FB: sFeedback;
+	CFG: sConfig;
+	I_ENABLED: BOOL;
+END_VAR
+VAR
+	ABS_PERR_ENGR: REAL;
+	MAGNITUDE: REAL;
+	CURRENT: WORD;
+	RESULT: BYTE;
+	VFF: DINT;
+	ABS_PERR: DINT;
+END_VAR
+(********************** Implementation ****************************)
+(* Settled if desired velocity is 0 and actual position is close to desired position. *)
+pLOOP^.PERR_ENGR := SP.POSITION_ENGR - FB.POSITION_ENGR;
+ABS_PERR_ENGR := ABS(pLOOP^.PERR_ENGR);
+
+IF (ABS_PERR_ENGR < pLOOP^.SETTLED_BAND) AND (SP.VELOCITY_RAW = 0) THEN
+	pLOOP^.SETTLED := TRUE;
+ELSE
+	pLOOP^.SETTLED := FALSE;
+END_IF;
+
+pLOOP^.PERR := SP.POSITION_RAW - FB.POSITION_RAW;
+// IF FB.RAW_PER_ENGR < 1 THEN
+// 	pLOOP^.PERR := -pLOOP^.PERR;
+// END_IF
+
+(* Only generate errors for severe lack of following, because:
+	1) Some axes stall under normal operation (LC, LR, UC)
+	2) The following when running a profile is pretty poor and hard to predict especially with hydraulic fluid temperature.
+*)
+
+IF ABS_PERR_ENGR > CFG.POS_FOLLOW_BAND THEN
+	(* TODO: reeanble this => pLOOP^.ERROR := TRUE; *)
+	;
+END_IF;
+
+IF NOT pLOOP^.ERROR AND ENABLE AND FB.VALID AND NOT pLOOP^.SETTLED THEN
+
+	IF I_ENABLED THEN
+		IF (pLOOP^.PERR < 0 AND pLOOP^.PERR_LAST > 0) OR (pLOOP^.PERR > 0 AND pLOOP^.PERR_LAST < 0) THEN
+			(* Sign has switched, zero integrator *)
+			pLOOP^.ISUM := 0;
+		END_IF;
+
+		// Straightforward PID loop.  Not that this is assumes that this loop runs at a fixed frequency, so
+		//	that we don't directly incorporate time into KI or KD!
+		pLOOP^.ISUM := pLOOP^.ISUM + pLOOP^.KI * TO_REAL(pLOOP^.PERR);
+		IF pLOOP^.ISUM > pLOOP^.ISUM_MAX THEN
+			pLOOP^.ISUM := pLOOP^.ISUM_MAX;
+		ELSIF pLOOP^.ISUM < -pLOOP^.ISUM_MAX THEN
+			pLOOP^.ISUM := -pLOOP^.ISUM_MAX;
+		END_IF;
+	ELSE
+		pLOOP^.ISUM := 0;
+	END_IF;
+
+	(* Calculate feedback related output. *)
+	pLOOP^.P_CONTRIB := pLOOP^.KP * TO_REAL(pLOOP^.PERR);
+	pLOOP^.D_CONTRIB := pLOOP^.KD * TO_REAL(pLOOP^.PERR - pLOOP^.PERR_LAST); 
+	pLOOP^.FB := pLOOP^.P_CONTRIB + pLOOP^.D_CONTRIB + pLOOP^.ISUM / 10;
+
+	pLOOP^.P_CONTRIB := pLOOP^.P_CONTRIB / 10;
+	pLOOP^.D_CONTRIB := pLOOP^.D_CONTRIB / 10;
+	pLOOP^.I_CONTRIB := pLOOP^.ISUM / 100; (* Accounts for division above and of FB below! *)
+
+	(* Scale the loop output into the range of the output, then handle the
+		velocity feedforward. *)
+	pLOOP^.FB := pLOOP^.FB / 10;
+
+	IF SP.VELOCITY_RAW > 0 THEN
+		pLOOP^.VFF := SP.VELOCITY_RAW * CFG.VFF_MPCT_PER_CPS_PLUS / 10000;
+	ELSE
+		pLOOP^.VFF := SP.VELOCITY_RAW * CFG.VFF_MPCT_PER_CPS_MINUS / 10000;
+	END_IF;
+
+	pLOOP^.OUTPUT := pLOOP^.FB + pLOOP^.VFF;
+
+	(* To here, these are in MPCT.  Since we scale down by 10x to PCT later, we scale
+		these contributions here also. *)
+	//pLOOP^.VFF := pLOOP^.VFF / 10;
+	//pLOOP^.FB := pLOOP^.FB / 10;
+
+	IF pLOOP^.OUTPUT < 0 THEN
+		pOUTPUT^.POSITIVE := FALSE;
+	ELSE
+		pOUTPUT^.POSITIVE := TRUE;
+	END_IF;
+
+	(* Tune in the positive direction, then compensate for imbalance in PLANT gain ratio. *)
+	MAGNITUDE := ABS(pLOOP^.OUTPUT);
+	IF NOT pOUTPUT^.POSITIVE THEN
+		MAGNITUDE := MAGNITUDE * CFG.CYL_GAIN_RATIO;
+	END_IF;
+
+	(* Plant deadband compensation, typically related to valve as well as mechanism. *)
+	IF pOUTPUT^.POSITIVE THEN
+		MAGNITUDE := MAGNITUDE + CFG.DEADBAND_PLUS;
+	ELSE
+		MAGNITUDE := MAGNITUDE + CFG.DEADBAND_MINUS;
+	END_IF
+	
+	(* Magnitude to here is scale to millepercent, output stage is in percent. *)
+	MAGNITUDE := MAGNITUDE;
+	IF MAGNITUDE > 1000 THEN
+		MAGNITUDE := 1000;
+	END_IF;
+
+	pOUTPUT^.MAGNITUDE := REAL_TO_WORD(MAGNITUDE);
+
+ELSE
+
+	pOUTPUT^.POSITIVE := TRUE;
+	pOUTPUT^.MAGNITUDE := 0;
+	pLOOP^.ISUM := 0;
+
+END_IF;
+
+
+pLOOP^.PERR_LAST := pLOOP^.PERR;

@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION confirmMonitorStart: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF CONFIRM_MONITORED = FALSE THEN
+	REMOTE.LMB1_RE := FALSE;
+	CONFIRM_MONITORED := TRUE;
+END_IF;
+confirmMonitorStart := CONFIRM_MONITORED;

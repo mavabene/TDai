@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+(* This is set by the top level mode switch logic.  This is set for one, and only one cycle, when a new mode
+	has taken effect.  It should be used by state logic to setup the entry state. *)
+FUNCTION isNewModeEnabled : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isNewModeEnabled := NEW_MODE_ENABLED;

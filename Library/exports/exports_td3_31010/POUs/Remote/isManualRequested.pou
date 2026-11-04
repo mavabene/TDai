@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+(* This is set for one and only one cycle when the operator has requested a change to manual operation.  This
+	may be checked by any logic level. *)
+FUNCTION isManualRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isManualRequested := REMOTE.T3P1_DN_RE;

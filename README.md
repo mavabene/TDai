@@ -1,5 +1,16 @@
 # TD3 diesel hydraulic drill rig development
 
+November 3 hammer-pressure review: input 203 has no application validity guard
+in the inspected pressure conversion; automatic hammer control uses other
+pressure sensors. See the [input review](docs/verification/2026-11-03-hammer-pressure-input.md)
+for evidence and limits. No code changes or machine test occurred.
+
+November 3 motor-leg investigation: the owner clarified that adjustments must
+reset on return to Track after third-leg crimping. An unapplied
+[Track-entry reset handoff](docs/verification/2026-11-03-motor-side-leg-proposal.md)
+is available for review and compile; no runtime cause or machine correction
+has been verified.
+
 Documentation and source-assessment workspace for the TD3 machine, with an ifm
 CR711S PLC and CR1203 HMI. Initial assessment: October 27, 2026, California time.
 
@@ -39,9 +50,45 @@ migration acceptance remain unverified. See [migration checkpoint](docs/verifica
 
 ## Start here
 
+November 3 working-model update: new dimensioned SolidWorks references supersede
+the old simplified arm lengths. Gold movement markers and two-pivot CAD
+measurements are implemented in the active simulator copy; stable v0.1 remains
+preserved. See [geometry and checks](docs/verification/2026-11-03-model-drawing-geometry.md).
+Working v0.4 now uses source crowd bearing datums, touching-edge upper zero and
+coupled rail-top limits. The pivot/slide annotations share a checkbox. Physical
+rail extent and the stacked-near-top expectation remain subject to confirmation;
+see [drawing geometry](simulator/DRAWING_GEOMETRY.md#crowd-and-mast-datums--working-v04-november-3).
+
+The standalone viewer now includes clickable dimensions and nominal ET Plumb
+screw-top/stance overlays. See [measurement conventions](simulator/MEASUREMENTS.md).
+
+Actual-machine reference: [five owner-supplied photographs](AI%20info/machine-images/2026-11-02-actual-machine/README.md)
+are preserved alongside the CAD references, with descriptive view names. These
+informed simulator visual revision 0.2, with a red enclosure and 6-foot scale figure.
+
+November 2 machine-reference addition: five unique owner-supplied CAD screenshots are
+preserved in the [machine image index](AI%20info/machine-images/2026-11-02/README.md)
+for the proposed standalone 3D model. Geometry conventions remain owned by GEOMETRY;
+the screenshots do not establish calibrated dimensions. No simulator or PLC change
+has been implemented as part of this reference addition.
+
+Standalone model planning: the [3D model build instructions](docs/requirements/standalone-3d-model.md)
+define the first-version scope, implementation handoff, and acceptance checks.
+Owner-confirmed mechanical movements are maintained in GEOMETRY. The first local
+viewer is implemented in [simulator](simulator/README.md), with 13 joint controls,
+camera presets and estimated geometry. See the [November 2 model checks](docs/verification/2026-11-02-standalone-model.md)
+for automated/browser evidence and limits. Owner review of pivot placement and
+proportions is the next step; no PLC integration or machine validation occurred.
+The viewer now also supports opening `simulator/index.html` directly from disk;
+the original module-only entry failed under Chrome's local-file restrictions.
+The owner selected profile 3.2 (family 3, version 2). The model now uses 530v2
+axesInit command ranges with the applicable lower-crowd minimum, continuous
+bidirectional rotary controls, and a portable sharing ZIP; see simulator/README.md.
+
 | Record | Owns |
 | --- | --- |
 | [TODO list](TODO.md) | Pending/deferred work and its dedicated chat names |
+| [State diagram workflow](docs/STATE_DIAGRAM_WORKFLOW.md) | "Update state diagram" release inputs, deliverables, reconciliation, and verification |
 | [Daily Update](Daily%20Update.md) | Owner-invoked checkpoint procedure, local receipt, and conditional reminder rules |
 | [Update permissions](docs/UPDATE_PERMISSIONS.md) | Annotated authorization catalog and Auto-review setup/verification |
 | [Readable CODESYS exports](docs/CODESYS_EXPORTS.md) | Tested export route, input identities, limitations, and refresh procedure |
@@ -98,3 +145,7 @@ dated assessments as snapshots; update current facts in their maintained home.
 References to future folders above are a proposal, not a claim that they exist.
 
 Latest warning cleanup: saved PLC now assigns CAN_VALVES during axesInit startup. Owner reports successful compilation and removal of pointer warnings; J1939 Byte7 layout correction remains unconfirmed. See the migration checkpoint above.
+
+ET Plumb holder alignment: mode entry sets mast slide 195 cm and lower crowd
+160 cm, with live alignment notes beside both controls. The cap moves with the
+holder; the fixed-COR target preview was superseded. See simulator/MEASUREMENTS.md.

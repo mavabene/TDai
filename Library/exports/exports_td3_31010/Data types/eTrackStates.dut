@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+TYPE eTrackStates :
+	(
+	TRACK_STATE_ENTRY := 1,
+	TRACK_STATE_CLEAR_GROUND,
+	TRACK_STATE_WAIT_DRIVE,
+	TRACK_STATE_CROWDS_DOWN,
+	TRACK_STATE_NORMAL,
+	TRACK_STATE_POSITION_BOOM
+	);
+END_TYPE

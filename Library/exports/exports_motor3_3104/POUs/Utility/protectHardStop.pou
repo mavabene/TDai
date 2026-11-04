@@ -1,0 +1,44 @@
+
+(********************** Declaration ****************************)
+FUNCTION protectHardStop : WORD
+VAR_INPUT
+	AXIS: sAxis;
+END_VAR
+VAR
+	OUT: REAL := 0;
+	FRAC: REAL;
+END_VAR
+
+(********************** Implementation ****************************)
+(* We know where the end of travel limits are, how far back we want to start slowing down, and maximum output we will
+	allow at the beginning of the respect distance and at the limit. *)
+
+IF AXIS.CONFIG.COMMAND_LIMIT_MAX = 0 AND AXIS.CONFIG.COMMAND_LIMIT_MIN = 0 THEN
+	OUT := AXIS.CONFIG.MANUAL_OUTPUT_MAX;
+ELSIF (AXIS.FEEDBACK.POSITION_ENGR > AXIS.CONFIG.COMMAND_LIMIT_MAX) OR (AXIS.FEEDBACK.POSITION_ENGR < AXIS.CONFIG.COMMAND_LIMIT_MIN) THEN
+	(* We don't know where we are, we are past the positive or negative limit.  Run slowest speed here. *)
+	OUT := AXIS.CONFIG.MANUAL_OUTPUT_AT_HARDSTOP;
+ELSIF AXIS.FEEDBACK.POSITION_ENGR > (AXIS.CONFIG.COMMAND_LIMIT_MAX - AXIS.CONFIG.MANUAL_HARDSTOP_BAND) THEN
+	IF AXIS.FEEDBACK.POSITION_ENGR > AXIS.CONFIG.COMMAND_LIMIT_MAX THEN
+		(* We are past the hardstop. *)
+		FRAC := 0.0;
+	ELSE
+		(* We are between limit max and start of hardstop band. *)
+		FRAC := (AXIS.CONFIG.COMMAND_LIMIT_MAX - AXIS.FEEDBACK.POSITION_ENGR) / AXIS.CONFIG.MANUAL_HARDSTOP_BAND;
+	END_IF
+	OUT := AXIS.CONFIG.MANUAL_OUTPUT_AT_HARDSTOP + FRAC * (AXIS.CONFIG.MANUAL_OUTPUT_MAX - AXIS.CONFIG.MANUAL_OUTPUT_AT_HARDSTOP);
+ELSIF AXIS.FEEDBACK.POSITION_ENGR < (AXIS.CONFIG.COMMAND_LIMIT_MIN + AXIS.CONFIG.MANUAL_HARDSTOP_BAND) THEN
+	IF AXIS.FEEDBACK.POSITION_ENGR < AXIS.CONFIG.COMMAND_LIMIT_MIN THEN
+		(* We are past the hardstop. *)
+		FRAC := 0.0;
+	ELSE
+		(* We are between limit min and start of hardstop band. *)
+		FRAC := (AXIS.FEEDBACK.POSITION_ENGR - AXIS.CONFIG.COMMAND_LIMIT_MIN) / AXIS.CONFIG.MANUAL_HARDSTOP_BAND;
+	END_IF
+	OUT := AXIS.CONFIG.MANUAL_OUTPUT_AT_HARDSTOP + FRAC * (AXIS.CONFIG.MANUAL_OUTPUT_MAX - AXIS.CONFIG.MANUAL_OUTPUT_AT_HARDSTOP);
+ELSE
+	(* Far enough away from the hardstop to use full flow in manual. *)
+	OUT := AXIS.CONFIG.MANUAL_OUTPUT_MAX;
+END_IF
+
+protectHardStop := TO_WORD(OUT);

@@ -1,0 +1,46 @@
+
+(********************** Declaration ****************************)
+// Typically call this from within the state logic.  The state logic will cause the following sequence:
+//	1) Cycle N
+//		- State logic performs a state change.
+//		- State logic at the same time initializes this function block.
+//		- Actuator code will start moves associated with this state change.
+//	2) Cycle N + 1
+//		- State logic will return and call this FB to monitor actuator.
+//
+FUNCTION_BLOCK settledForWithin
+VAR_INPUT
+	INIT: BOOL;
+	MSTIME: DWORD;
+	pAXIS: POINTER TO sAxis;
+	FOR_MS: DWORD;
+	WITHIN: REAL;
+END_VAR
+VAR_OUTPUT
+	DONE: BOOL;
+END_VAR
+VAR
+	SETTLED_STARTED: BOOL := FALSE;
+	SETTLED_STARTED_AT_MS: DWORD;
+END_VAR
+
+(********************** Implementation ****************************)
+
+DONE := FALSE;
+
+IF INIT THEN
+	SETTLED_STARTED := FALSE;
+ELSE
+	IF pAXIS^.PROFILER.STATE = eTrapezoidStates.HOLD AND ABS(pAXIS^.LOOP_PID.PERR_ENGR) < WITHIN THEN
+		IF NOT SETTLED_STARTED THEN
+			SETTLED_STARTED := TRUE;
+			SETTLED_STARTED_AT_MS := MSTIME;
+		ELSE
+			IF MSTIME - SETTLED_STARTED_AT_MS > FOR_MS THEN
+				DONE := TRUE;
+			END_IF
+		END_IF
+	ELSE
+		SETTLED_STARTED := FALSE;
+	END_IF
+END_IF

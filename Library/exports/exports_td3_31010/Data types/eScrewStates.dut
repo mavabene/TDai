@@ -1,0 +1,50 @@
+
+(********************** Declaration ****************************)
+TYPE eScrewStates :
+	(
+	(* The idea is that auto mode will allow us to drive multiple screws at multiple positions using
+		the same steps.  So the top level logic will upon entry decide how many screws need to be
+		drive, and which screws they are.  This top level logic will run the state machine below through
+		the states between LOAD_POSITION and RETURN_CENTER for each of the screws.
+
+		The state diagram for the is found at:
+
+			https://www.lucidchart.com/invitations/accept/d5ea1bb7-1a55-4774-b37d-d2481433fc55
+	*)
+	SCREW_STATE_ENTRY := 1,
+	SCREW_STATE_MANUAL,
+	SCREW_STATE_TARGET_UP,
+	SCREW_STATE_SELECT_OPERATION,
+	SCREW_STATE_PREPARE_TO_LOAD,
+	SCREW_STATE_INITIAL_ROTATE,
+	SCREW_STATE_LOAD_SCREW,
+	SCREW_STATE_MAST_TO_TARGET,
+	SCREW_STATE_NXT_TL_ADJUST,
+	SCREW_STATE_POSITION_MAST_SLIDE,
+	SCREW_STATE_PRELOAD_COMPLIANCE,
+	SCREW_STATE_DRILL_EXTEND,
+	SCREW_STATE_DRIVE_SCREW,
+	SCREW_STATE_CLEAR_SPOILS,
+	SCREW_STATE_DRILL_TO_SCREW_END,
+	SCREW_STATE_RELIEVE_SPOILS_PRESSURE,
+	SCREW_STATE_LC_REWIND,
+	SCREW_STATE_DRILL_REVERSE,
+	SCREW_STATE_BRIEF_HAMMER,
+	SCREW_STATE_DRILL_AHEAD,
+	SCREW_STATE_DRILL_RETURN,
+	SCREW_STATE_DRIVE_ASSIST,
+	SCREW_STATE_RETURN_TO_DRIVE,
+	SCREW_STATE_UNLOAD_SCREW,
+	SCREW_STATE_RETRACT_AFTER_DRIVE,
+	SCREW_STATE_CONFIRM_MAST_CLEAR,
+	SCREW_STATE_MAST_TO_VERTICAL,
+	SCREW_STATE_CLEAR_TRUSS_CAP,
+	SCREW_STATE_ASSEMBLE,
+	SCREW_STATE_FWP,
+	SCREW_STATE_GPS_FWP_RETURN_TO_WP,
+	SCREW_STATE_GPS_FWP_AUTOTARGET_GPS,
+	SCREW_STATE_CRIMP,
+	SCREW_STATE_LC_CLEAR,
+	SCREW_STATE_EXIT
+	);
+END_TYPE

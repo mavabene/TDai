@@ -1,0 +1,8 @@
+
+(********************** Declaration ****************************)
+FUNCTION confirmMonitorEnabled: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+confirmMonitorEnabled := CONFIRM_MONITORED;

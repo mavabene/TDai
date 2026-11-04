@@ -1,0 +1,37 @@
+
+(********************** Declaration ****************************)
+TYPE sTrapezoid :
+STRUCT
+	(* All internals values are in units of counts and seconds! *)
+	POSITION_START: DINT;
+	POSITION_END: DINT;
+	VELOCITY: REAL;
+	ACCELERATION: REAL;
+	DIRECTION_POSITIVE: BOOL;
+
+	(* Calculated values *)
+
+	(* Breakpoint distance between trapezoidal and triangular move. *)
+
+	(* Times in microseconds. *)
+	TIME_START: DWORD;
+	TIME_LAST_POINT: DWORD;
+
+	(* State of profiler *)
+	STATE: eTrapezoidStates := HOLD;
+
+	(* Run the whole thing on the basis of time, just like a player piano *)
+	TIME_SEGMENT_BEGIN: DWORD;
+	POS_SEGMENT_BEGIN: DINT;
+	VEL_SEGMENT_BEGIN: REAL;
+
+	TIME_ACCEL_END: DWORD;
+	TIME_CRUISE_END: DWORD;
+	TIME_DECEL_END: DWORD;
+
+	TIME_ACCEL: DWORD;
+	TIME_CRUISE: DWORD;
+	TIME_DECEL: DWORD;
+
+END_STRUCT
+END_TYPE

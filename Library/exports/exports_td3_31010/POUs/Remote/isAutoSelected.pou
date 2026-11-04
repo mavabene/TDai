@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION isAutoSelected : bool
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+// Check to see if automatic is selected.
+isAutoSelected := REMOTE.T3P1_UP;

@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eOperatorLevel :
+(
+	OPERATOR := 0,
+	TECHNICIAN := 1,
+	CUSTOMER_ENGINEER := 2,
+	OWNER_ENGINEER := 3,
+	OJJO_ENGINEER := 4,
+	OWNER_ADMIN := 5,
+	OJJO_ADMIN := 6
+);
+END_TYPE

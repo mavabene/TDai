@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+VAR_GLOBAL
+	(*
+	version 	3.1.0.3
+					- added VersionInfo for notes on changes
+	 			3.1.0.4 
+					- modified Profilers to not fail if negative time calculated (Siko encoders work in opposite direction, so FB.RAW_PER_ENGR is negative to correct, which caused a negative to be cast to REAL_TO_DWORD, resulting in PLC Exception)
+					*)
+END_VAR

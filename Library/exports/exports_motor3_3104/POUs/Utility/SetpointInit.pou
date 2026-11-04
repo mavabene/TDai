@@ -1,0 +1,25 @@
+
+(********************** Declaration ****************************)
+FUNCTION SetpointInit : BOOL
+VAR_INPUT
+	pSETPOINT: POINTER TO sSetpoint;
+	FB: sFeedback;
+	POS: REAL;
+	VEL: REAL;
+	ACCEL: REAL;
+
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+pSETPOINT^.POSITION_ENGR := POS;
+pSETPOINT^.VELOCITY_ENGR := VEL;
+pSETPOINT^.ACCELERATION_ENGR := ACCEL;
+
+pSETPOINT^.POSITION_RAW := POS_ENGR_TO_RAW(FB, POS);
+pSETPOINT^.VELOCITY_RAW := VEL_ENGR_TO_RAW(FB, VEL);
+pSETPOINT^.ACCELERATION_RAW := VEL_ENGR_TO_RAW(FB, ACCEL);
+
+pSETPOINT^.SETPOINT_CHANGED := TRUE;
+
+SetpointInit := TRUE;

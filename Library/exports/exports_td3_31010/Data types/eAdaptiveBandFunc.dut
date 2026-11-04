@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eAdaptiveBandFunc :
+(
+	FUNCTION_MAX := 0,
+	FUNCTION_MIN := 1,
+	FUNCTION_AVG := 2
+);
+END_TYPE

@@ -1,0 +1,67 @@
+
+(********************** Declaration ****************************)
+FUNCTION Sampled: BOOL
+VAR_INPUT
+	pFEEDBACK: POINTER TO sFeedback;
+
+	(* Raw feedback sensor data *)
+	POSITION_RAW: DINT;
+	(* Time in microseconds at which this data was sampled *)
+	US_SAMPLE: UDINT;
+	
+	(* Did we get a valid sample from this device? *)
+	IS_VALID: BOOL;
+END_VAR
+VAR
+	DELTA_P: DINT;
+END_VAR
+(********************** Implementation ****************************)
+(* Call this when the control program has gotten a new reading from the axis *)
+
+pFEEDBACK^.SAMPLE_VALID := IS_VALID;
+
+IF IS_VALID THEN
+	(* Only operate on the position sample sent in if it is reported to be valid. *)
+	IF pFEEDBACK^.ROLLOVER_AT > 0 THEN
+		IF pFEEDBACK^.ABS_ZERO_ABOVE_RANGE_HALF THEN
+			IF POSITION_RAW > pFEEDBACK^.ABS_RANGE_MIN THEN
+				pFEEDBACK^.POSITION_RAW := POSITION_RAW - pFEEDBACK^.RAW_WHEN_ENGR_ZERO;
+			ELSE
+				pFEEDBACK^.POSITION_RAW := pFEEDBACK^.ROLLOVER_AT - pFEEDBACK^.RAW_WHEN_ENGR_ZERO + POSITION_RAW;
+			END_IF
+		ELSE
+			IF POSITION_RAW < pFEEDBACK^.ABS_RANGE_MAX THEN
+				pFEEDBACK^.POSITION_RAW := POSITION_RAW - pFEEDBACK^.RAW_WHEN_ENGR_ZERO;
+			ELSE
+				pFEEDBACK^.POSITION_RAW := -pFEEDBACK^.RAW_WHEN_ENGR_ZERO - (pFEEDBACK^.ROLLOVER_AT - POSITION_RAW);
+			END_IF
+		END_IF
+	ELSE
+		(* This is just absolute coming here for an encoder with no rollover point, that is an incremental encoder that
+			will be accummulated externally. *)
+		pFEEDBACK^.POSITION_RAW := POSITION_RAW - pFEEDBACK^.RAW_WHEN_ENGR_ZERO;
+	END_IF;
+	
+	pFEEDBACK^.POSITION_ENGR := TO_REAL(pFEEDBACK^.POSITION_RAW) / pFEEDBACK^.RAW_PER_ENGR;
+	
+	IF pFEEDBACK^.FEEDBACK_VALID_MAX <> 0 AND pFEEDBACK^.FEEDBACK_VALID_MIN <> 0 THEN
+		IF pFEEDBACK^.POSITION_RAW <= pFEEDBACK^.FEEDBACK_VALID_MAX AND pFEEDBACK^.POSITION_RAW >= pFEEDBACK^.FEEDBACK_VALID_MIN THEN
+			pFEEDBACK^.VELOCITY_CALC_01(POS := pFEEDBACK^.POSITION_RAW, US_TIME := US_SAMPLE, VEL => pFEEDBACK^.VELOCITY_RAW);
+			pFEEDBACK^.VELOCITY_ENGR := pFEEDBACK^.VELOCITY_RAW / pFEEDBACK^.RAW_PER_ENGR;
+	
+			pFEEDBACK^.VALID := TRUE;
+		ELSE
+			pFEEDBACK^.VALID := FALSE;
+		END_IF;
+	END_IF;
+	
+	(* Latch values for next sample's velocity calculation *)
+	pFEEDBACK^.US_LAST_SAMPLE := US_SAMPLE;
+	pFEEDBACK^.POSITION_RAW_LAST_SAMPLE := pFEEDBACK^.POSITION_RAW;
+ELSE
+	pFEEDBACK^.VALID := FALSE;
+END_IF;
+
+pFEEDBACK^.COUNT := pFEEDBACK^.COUNT + 1;
+
+Sampled := TRUE;

@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION setState : BOOL
+VAR_INPUT
+	NEW_STATE: WORD;
+	pSTATE: POINTER TO WORD;
+	pCHANGED: POINTER TO BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF NEW_STATE <> pSTATE^ THEN
+	pSTATE^ := NEW_STATE;
+	pCHANGED^ := TRUE;
+END_IF;

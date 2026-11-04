@@ -1,0 +1,75 @@
+
+(********************** Declaration ****************************)
+(* This function allows the user to fill up a config structure for cylinder control *)
+FUNCTION ConfigInitForceControlled : BOOL
+VAR_INPUT
+	(* This is a pointer to the sConfig structure you are initializing. *)
+	pCONFIG: POINTER TO sConfig;
+	(* This is the feedback device associated with this axis. *)
+	FB: sFeedback;
+
+	(* This is the velocity feedforward term.  It specifies the velocity of the axis, in
+		engineering units per second, when the maximum output is applied. *)
+	SPEED_PLUS_MAX: REAL;
+	SPEED_MINUS_MAX: REAL;
+
+	(* Maximum permissible endpoint for a motion command, engineering units. *)
+	COMMAND_LIMIT_MAX: REAL;
+	(* Minimum permissible endpoint for a motion command, engineering units. *)
+	COMMAND_LIMIT_MIN: REAL;
+
+	(* Frequency in Hz of the PWM signal sent to the valve. *)
+	PWM_FREQ: WORD;
+	(* The dither frequency to be used will be equal to PWM_FREQ / DITHER_DIVISOR. *)
+	DITHER_DIVISOR: WORD;
+	(* Magnitude of the dither, in millepercent. *)
+	DITHER_MAGNITUDE: WORD;
+	(* Maximum output, directional, milliamps. *)
+	OUTPUT_PLUS_MAX: WORD;
+	OUTPUT_MINUS_MAX: WORD;
+	(* Valve deedband (asymmetric), milliamps. *)
+	DEADBAND_PLUS: WORD;
+	DEADBAND_MINUS: WORD;
+	(* Output channel to be used for the PWM that moves the valve in the positive direction. *)
+	CHANNEL_PLUS: BYTE;
+	(* Output channel to be used for the PWM that moves the valve in the negative direction. *)
+	CHANNEL_MINUS: BYTE;
+	(* Set this true if the PWM output channels are on the extended side. *)
+	CHANNELS_EXTENDED: BOOL;
+	(* Controller will generate an error if the axis doesn't track the setpoint within this
+		band, in engineering units. *)
+	POS_FOLLOW_BAND: REAL;
+	(* Ratio of speed of axis going positive to the speed of the axis going negative when
+		the same output to the valve is used (with only the direction changed).  This is
+		the PLANT gain ratio (not the ratio of servo gains)!! *)
+	CYL_GAIN_RATIO: REAL;
+	(* Does the cylinder extension correspond to positive movement in the engineering unit
+		coordinate frame? *)
+	CYL_EXT_POSITIVE: BOOL;
+
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+pCONFIG^.FORCE_CONTROL := TRUE;
+
+pCONFIG^.COMMAND_LIMIT_MAX := COMMAND_LIMIT_MAX;
+pCONFIG^.COMMAND_LIMIT_MIN := COMMAND_LIMIT_MIN;
+pCONFIG^.PWM_FREQ := PWM_FREQ;
+pCONFIG^.DITHER_DIVISOR := DITHER_DIVISOR;
+pCONFIG^.DITHER_MAGNITUDE := DITHER_MAGNITUDE;
+pCONFIG^.OUTPUT_PLUS_MAX := OUTPUT_PLUS_MAX;
+pCONFIG^.OUTPUT_MINUS_MAX := OUTPUT_MINUS_MAX;
+pCONFIG^.DEADBAND_PLUS := DEADBAND_PLUS;
+pCONFIG^.DEADBAND_MINUS := DEADBAND_MINUS;
+pCONFIG^.CHANNEL_PLUS := CHANNEL_PLUS;
+pCONFIG^.CHANNEL_MINUS := CHANNEL_MINUS;
+pCONFIG^.CHANNELS_EXTENDED := CHANNELS_EXTENDED;
+pCONFIG^.POS_FOLLOW_BAND := POS_FOLLOW_BAND;
+pCONFIG^.CYL_GAIN_RATIO := CYL_GAIN_RATIO;
+pCONFIG^.CYL_EXT_POSITIVE := CYL_EXT_POSITIVE;
+
+ConfigVffInit(pConfig, FB, SPEED_PLUS_MAX, SPEED_MINUS_MAX);
+pCONFIG^.DITHER_FREQ := PWM_FREQ / DITHER_DIVISOR;
+pCONFIG^.OUTPUT_WORKING_PLUS := OUTPUT_PLUS_MAX - DEADBAND_PLUS;
+pCONFIG^.OUTPUT_WORKING_MINUS := OUTPUT_MINUS_MAX - DEADBAND_MINUS;

@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+(* Returns a member of enum eScrewSide. *)
+FUNCTION getTrussType : eTrussType
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF NOT REMOTE.T3P4_DN AND NOT REMOTE.T3P4_UP THEN
+	getTrussType := eTrussType.TRUSS_TYPE_CENTER_STRUCTURE;
+ELSIF REMOTE.T3P4_DN THEN
+	getTrussType := eTrussType.TRUSS_TYPE_END;
+ELSE
+	getTrussType := eTrussType.TRUSS_TYPE_NORMAL;
+END_IF;

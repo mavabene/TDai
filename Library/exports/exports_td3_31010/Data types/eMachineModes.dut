@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+TYPE eMachineModes :
+	(* These are the top level machine states. *)
+	(
+	IDLE_MODE,
+	TRACK_MODE,
+	RWP_MODE,
+	SCREW_MODE,
+	FWP_MODE,
+	SETUP_MODE,
+	ERROR_MODE
+	);
+END_TYPE

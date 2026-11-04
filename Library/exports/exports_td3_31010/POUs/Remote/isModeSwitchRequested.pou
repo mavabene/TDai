@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+(* Call this function from the top level control logic to determine if a mode switch has been
+	requested.  This gives your logic absolute indication that a mode switch has been requested:
+	that is, the proper edge is determined already, and this edge has been properly debounced.
+	You can safely use the output of this function to directly control states.
+*)
+FUNCTION isModeSwitchRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isModeSwitchRequested := REMOTE.RMB1_RE;
+IF REMOTE.RMB1_RE THEN
+	(* Use only once. *)
+	REMOTE.RMB1_RE := FALSE;
+END_IF;

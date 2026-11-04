@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+TYPE sSetpoint :
+STRUCT
+	(* User side setpoints are in engineering units *)
+	POSITION_ENGR: REAL;
+	VELOCITY_ENGR: REAL;
+	ACCELERATION_ENGR: REAL;
+	(* Internal use setpoint are in counts *)
+	POSITION_RAW: DINT;
+	VELOCITY_RAW: REAL;
+	ACCELERATION_RAW: REAL;
+	(* Flag to allow the profiler know a new setpoint is in *)
+	SETPOINT_CHANGED: BOOL;
+END_STRUCT
+END_TYPE

@@ -1,0 +1,257 @@
+{
+  "date": "2026-10-30",
+  "compiled": false,
+  "installed": false,
+  "online": false,
+  "libraries": [
+    {
+      "source_unchanged": true,
+      "sha256": "bb73e4983983f8fd609dd95d873311fd355deac48db8ef98dd06953a8f8fa188",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\1\\exports_motor3",
+      "files": 63,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\motor3.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "Motor3-1 control",
+        "version": "3.1.0.1"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "0cd204574adce6931cd3e91931c5b1db9b18491c4fcf91a2a8d6fa43b09f623c",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\2\\exports_motor3_3103",
+      "files": 63,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\motor3_3103.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "Motor3-1 control",
+        "version": "3.1.0.3"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "52858f6d18a1c07236f603f11a96440e45bb00064e9fb48594f8d3227b356180",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\3\\exports_motor3_3104",
+      "files": 64,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\motor3_3104.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "Motor3-1 control",
+        "version": "3.1.0.4"
+      },
+      "status": "exported",
+      "maintained_output": "Library/exports/exports_motor3_3104"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "c97b465c0b714098ffcbd94d30c0d5a60d36171a83fb535d1d2e30837b95638d",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\4\\exports_motor3_3105",
+      "files": 64,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\motor3_3105.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "Motor3-1 control",
+        "version": "3.1.0.5"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "098399e94babbe1c0f2c42f5c97ef6abacd43281aadea01a392856170917b417",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\5\\exports_motor3_add3D",
+      "files": 61,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\motor3_add3D.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "Motor3-1 control",
+        "version": "3.1.0.1"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "f515a578ebfe6844a6267866b892efdb704152834f76205c81d99dde78d50c14",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\6\\exports_td3",
+      "files": 71,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.1"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "e0e395fb7b21352f48011bfdbdddf0141c3f4630e3f281b4ed1e7a7049302560",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\7\\exports_td3_31010",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_31010.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.10"
+      },
+      "status": "exported",
+      "maintained_output": "Library/exports/exports_td3_31010"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "09b39f6f5a590b308c75d958e7bc45b5aca9dc080915c32b02cb11ed634135c9",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\8\\exports_td3_3101011_SP21",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3101011_SP21.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.1.11"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "63bbf6fd30ab55fa87fc3de19aaa0bed77ad80a03ee4f900482144eb969ac1b5",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\9\\exports_td3_31011",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_31011.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.11"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "51ca6b3ff065fc6eaf40af581f56a2543aacc71ce969383ab137080c835f7bb8",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\10\\exports_td3_31012",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_31012.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.12"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "9477b938677f88fa90d11a846b160d429a415be7ca1ac68733bed3e24f2969b7",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\11\\exports_td3_31013",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_31013.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.13"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "3a4907dcb9a4f1eb81af457e34e70f1d3fdb0ae9ac8843a382a461b74989b394",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\12\\exports_td3_3102",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3102.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.1.0"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "db10ce711eeb527d4504826d5dc805e0991c34f9bfd94edbc2dc9fbb5b05e963",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\13\\exports_td3_3104",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3104.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.4"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "2a0f6e50b943ffbbab3d01ccfcddeec3b684db072ffef86ec405a23e5d0b1aef",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\14\\exports_td3_3105",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3105.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.5"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "5e4c427d550ae412b53be3023e75a6041011e9a7d6e8da3efe75cbf986b27167",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\15\\exports_td3_3106",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3106.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.6"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "9e6597252e9c764327604cada07c4d96e7d5f0d580fe3e19302fc32bf500f7b1",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\16\\exports_td3_3107",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3107.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.7"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "8239c433e240d708f72e16c8aa3319d4f81b9469860444e8de0f8be923c1a94a",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\17\\exports_td3_3108",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3108.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.8"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "6c9f162f367d82ad124a360dac5c4c19ee7de72aa08b2f0ece5016423c7abb2a",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\18\\exports_td3_3109",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Library\\td3_3109.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.9"
+      },
+      "status": "exported"
+    },
+    {
+      "source_unchanged": true,
+      "sha256": "3931e3bc37a78029ae3db0a2609619f508a7815741ac02f734fd763cb58a6930",
+      "output": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\.export-work\\libraries-2lswj7\\19\\exports_td3_31012",
+      "files": 75,
+      "source": "C:\\Users\\jcheney\\Documents\\Codex\\TD3ai\\Production_dev/libraries\\td3_31012.library",
+      "identity": {
+        "company": "Ojjo",
+        "title": "TD3-1 Framework",
+        "version": "3.1.0.12"
+      },
+      "status": "exported"
+    }
+  ]
+}

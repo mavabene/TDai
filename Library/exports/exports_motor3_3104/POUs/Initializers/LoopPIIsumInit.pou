@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+FUNCTION LoopPIIsumInit : BOOL
+VAR_INPUT
+	pLOOPPI: POINTER TO sLoopPID;
+	CFG: sConfig;
+	INTEGRATOR_MAX: WORD;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+pLOOPPI^.INTEGRATOR_MAX := INTEGRATOR_MAX;
+pLOOPPI^.ISUM_MAX := 100 * INTEGRATOR_MAX;

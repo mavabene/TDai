@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION getEstopPressed : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+getEstopPressed := ESTOP_PRESSED;

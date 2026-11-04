@@ -1,0 +1,81 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+VAR_GLOBAL
+	(* MUST MATCH THE ORDER IN eEstopCauseMask !!! *)
+	ESTOP_CAUSE_STRINGS: ARRAY[1..16] OF STRING := [
+		'Remote unavailable',
+		'Estop button pressed',
+		'Feedback element failed',
+		'Lower crowd OOR',
+		'Pitch OOR',
+		'Base pitch OOR (normal)',
+		'Base pitch OOR (loading)',
+		'Base roll OOR',
+		'Valve failed',
+		'Mast slide OOR',
+		'Estop bit 10',
+		'Estop bit 11',
+		'Estop bit 12',
+		'Estop bit 13',
+		'Estop bit 14',
+		'Estop bit 15'
+		];
+		
+	(* MUST MATCH THE ORDER IN eWarningCauseMask !!! *)
+	WARNING_CAUSE_STRINGS: ARRAY[1..15] OF STRING := [
+		'Pitch position',
+		'Lower crowd position',
+		'Base pitch tilt',
+		'Base roll tilt',
+		'Pitch OOR',
+		'Pump pressure low',
+		'Remote battery low',
+		'Warning bit 8',
+		'Warning bit 9',
+		'Warning bit 10',
+		'Warning bit 11',
+		'Warning bit 12',
+		'Warning bit 13',
+		'Warning bit 14',
+		'Warning bit 15'
+		];
+
+	(* MUST MATCH THE ORDER IN eFeedbackCauseMask !!! *)
+	FEEDBACK_CAUSE_STRINGS: ARRAY[1..16] OF STRING := [
+		'Base inclinometer',
+		'Knuckle inclinometer',
+		'Mast inclinometer',
+		'Lower crowd encoder',
+		'Upper crowd encoder',
+		'Yaw encoder',
+		'X slide encoder',
+		'Z slide encoder',
+		'Mast slide encoder',
+		'Feedback device bit 9',
+		'Feedback device bit 10',
+		'Feedback device bit 11',
+		'Feedback device bit 12',
+		'Feedback device bit 13',
+		'Feedback device bit 14',
+		'Feedback device bit 15',
+		];
+
+	(* MUST MATCH THE ORDER IN THE valveFailed FUNCTION BLOCK IN THE CR711S CODE !!! *)
+	VALVE_STRINGS: ARRAY[1..13] OF STRING := [
+		'Baby roll',
+		'Yaw',
+		'Pitch',
+		'Zslide',
+		'Rotator',
+		'Mast slide',
+		'Lower crowd',
+		'Lower rotary',
+		'Upper crowd',
+		'Upper rotary',
+		'Left track',
+		'Right track',
+		'X slide'
+		];
+
+END_VAR

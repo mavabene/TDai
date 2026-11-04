@@ -1,0 +1,47 @@
+
+(********************** Declaration ****************************)
+FUNCTION FeedbackInit : BOOL
+VAR_INPUT
+	pFEEDBACK: POINTER TO sFeedback;
+
+	(* This is the counts of the feedback per engineering unit on the axis. *)
+	RAW_PER_ENGR : REAL;
+	(* This is the counts on the feedback when the axis is at the position you want
+		to call 0 in engineering units. *)
+	RAW_WHEN_ENGR_ZERO: UDINT;
+
+	(* Maximium valid feedback reading, in engineering units.  This should be far
+		enough past the maximum command limit to tolerate the maximum expected overshoot
+		when settling. *)
+	FB_VALID_MAX: REAL;
+	(* Minimum valid feedback reading, in engineering units.  This should be far
+		enough past the minimum command limit to tolerate the maxium expected overshoot
+		when settling. *)
+	FB_VALID_MIN: REAL;
+
+	(* *)
+	ROLLOVER_AT: DINT;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+pFEEDBACK^.RAW_PER_ENGR := RAW_PER_ENGR;
+
+IF RAW_PER_ENGR < 0 THEN // counts are in opposite direction
+	pFEEDBACK^.FEEDBACK_VALID_MIN := POS_ENGR_TO_RAW(pFEEDBACK^, FB_VALID_MAX);
+	pFEEDBACK^.FEEDBACK_VALID_MAX := POS_ENGR_TO_RAW(pFEEDBACK^, FB_VALID_MIN);
+ELSE
+	pFEEDBACK^.FEEDBACK_VALID_MAX := POS_ENGR_TO_RAW(pFEEDBACK^, FB_VALID_MAX);
+	pFEEDBACK^.FEEDBACK_VALID_MIN := POS_ENGR_TO_RAW(pFEEDBACK^, FB_VALID_MIN);
+END_IF
+
+pFEEDBACK^.ROLLOVER_AT := ROLLOVER_AT;
+pFEEDBACK^.ROLLOVER_HALF := ROLLOVER_AT / 2;
+
+AxisZeroInit(pFEEDBACK := pFEEDBACK, RAW_WHEN_ENGR_ZERO := RAW_WHEN_ENGR_ZERO);
+
+(* Now reset dynamic information, especially important on single turn encoders that have to handle rollover. *)
+pFEEDBACK^.US_LAST_SAMPLE := 0;
+pFEEDBACK^.COUNT := 0;
+
+

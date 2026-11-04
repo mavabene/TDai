@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+TYPE eScrewLength :
+	(
+	SCREW_1 := 1,
+	SCREW_2,
+	SCREW_3
+	);
+END_TYPE

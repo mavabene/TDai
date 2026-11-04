@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+(* Set for one and only one cycle when the operator has hit the CONFIRM button. *)
+FUNCTION f2Requested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+f2Requested := REMOTE.RMB2_RE;
+IF REMOTE.RMB2_RE THEN
+	REMOTE.RMB2_RE := FALSE;
+END_IF;

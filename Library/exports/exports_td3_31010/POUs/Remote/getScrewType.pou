@@ -1,0 +1,17 @@
+
+(********************** Declaration ****************************)
+(* Returns a member of enum eScrewType. *)
+FUNCTION getScrewType : eScrewType
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF REMOTE.T3P4_UP THEN
+	getScrewType := SCREW_ARRAY;
+ELSIF REMOTE.T3P4_DN THEN
+	getScrewType := SCREW_MOTOR_SOUTH;
+ELSE
+	getScrewType := SCREW_MOTOR_NORTH;
+END_IF;

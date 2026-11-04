@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+TYPE eWorkpointHeight :
+	(
+	WP_HIGH,
+	WP_NONE,
+	WP_LOW
+	);
+END_TYPE

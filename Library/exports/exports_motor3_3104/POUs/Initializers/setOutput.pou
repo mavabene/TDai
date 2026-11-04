@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION setOutput : BOOL
+VAR_INPUT
+	pOUT: POINTER TO sOutput;
+	MAG: WORD;
+	POSITIVE: BOOL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+
+pOUT^.MAGNITUDE := MAG;
+pOUT^.POSITIVE := POSITIVE;

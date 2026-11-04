@@ -1,0 +1,25 @@
+
+(********************** Declaration ****************************)
+FUNCTION HaweVpocInit : BOOL
+VAR_INPUT
+	pHAWE: POINTER TO sHaweVpoc;
+	USED: BOOL;
+	pDCW: POINTER TO UINT;
+	pDSW: POINTER TO UINT;
+	pVPOC_CMD: POINTER TO INT;
+	OUTPUT_REVERSE: BOOL;
+	//pVPOC_ACT: POINTER TO INT;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+pHAWE^.EXISTS := USED;
+pHAWE^.initState := 0;
+pHAWE^.pDCW := pDCW;
+pHAWE^.pDSW := pDSW;
+pHAWE^.pDSW^:= 16#AA;
+pHAWE^.pVPOC_CMD := pVPOC_CMD;
+pHAWE^.OUTPUT_REVERSE := OUTPUT_REVERSE;
+pHAWE^.failures := 0;
+//pSTRUCT^.pVPOC_ACT := pVPOC_ACT;

@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eRemote :
+(
+	KARTECH := 0,
+	TELERADIO := 2,
+	AUTEC := 8
+);
+END_TYPE

@@ -1,0 +1,61 @@
+
+(********************** Declaration ****************************)
+TYPE sLoopPID :
+STRUCT
+	(*
+		Loop configuration is:
+
+			output = kp * perr + sum (ki * perr) + deadband + velocity_ff
+			output = limit(output, max_output)
+			
+	*)
+
+	(* EXTERNAL INTERFACE HERE!  SET THESE ON POWERUP *)
+	(* Settled band, in engineering units *)
+	SETTLED_BAND: REAL := 0.0;
+	(* Proportional gain *)
+	KP: REAL := 0.0;
+	(* Integral gain *)
+	KI: REAL := 0.0;
+	(* Derivative gain *)
+	KD: REAL := 0.0;
+	(* Maximum output allowed as a result of integrator: should correspond to what is known about overcoming the max steady state error.
+		This is in millepercent, and it is scaled into the working area (so two valves with different hysteresis but otherwise
+		the same performance will work the same. This is a limit of the actual integrator sum that corresponds to that
+		level of output. *)
+	ISUM_MAX: REAL := 0.0;
+	INTEGRATOR_MAX: WORD := 0;
+
+	(* INTERNAL VARIABLES: DO **NOT** SET! *)
+	(* Whether or not we are enabled. *)
+	ENABLED: BOOL := 0;
+	(* If we have an error, the loop gets turned off until reset. *)
+	ERROR: BOOL := 0;
+	(* One shot last state; reset is only allowed on transition, not on level! *)
+	RESET_LAST: BOOL := 0;
+	(* Whether or not the axis is on target within the settled band *)
+	SETTLED: BOOL := 0;
+	(* The output of the servo loop *)
+	OUTPUT: REAL;
+	(* Use to limit slew rate to new output *)
+	OUTPUT_LAST: REAL;
+	(* Position error, engr *)
+	PERR_ENGR: REAL;
+	(* Position error, raw *)
+	PERR: DINT;
+	(* Last position error, raw *)
+	PERR_LAST: DINT := 0;
+	(* Accummulated integrator *)
+	ISUM: REAL := 0.0;
+
+	(* Feedforward contribution *)
+	VFF: REAL;
+	(* Feedback contribution *)
+	FB: REAL;
+	P_CONTRIB: REAL;
+	D_CONTRIB: REAL;
+	I_CONTRIB: REAL;
+
+
+END_STRUCT
+END_TYPE

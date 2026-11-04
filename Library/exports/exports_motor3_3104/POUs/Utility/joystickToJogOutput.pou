@@ -1,0 +1,64 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK joystickToJogOutput
+VAR_INPUT
+	RESET_DYN: BOOL := FALSE;
+	JS: REAL;
+	JS_POS_IS_OUTPUT_POS: BOOL;
+	FILTER: BOOL := TRUE;
+	STEP: INT;
+	OUTMAX: REAL;
+END_VAR
+VAR_OUTPUT
+	OUT: REAL := 0;
+	JS_OUT: REAL := 0;
+	MAG: WORD;
+	POSITIVE: BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+IF RESET_DYN THEN
+	RESET_DYN := FALSE;
+	JS_OUT := 0;
+	RETURN;
+END_IF
+
+(* Input is +/- 100, output is +/- 1000, scale that here before any logic. *)
+JS := JS * 10.0;
+
+(* Put the joystick value into the axis coordinate frame to simplify the calculation. *)
+IF NOT JS_POS_IS_OUTPUT_POS THEN
+	JS := -JS;
+END_IF;
+
+(* To here, the joystick is +/- 1000, and the direction is the same as the axis direction. *)
+
+IF FILTER THEN
+	(* Ramp the output based on the joystick input. *)
+	IF JS > JS_OUT THEN
+		IF (JS - JS_OUT) < STEP THEN
+			JS_OUT := JS;
+		ELSE
+			JS_OUT := JS_OUT + STEP;
+		END_IF;
+	ELSIF JS_OUT > JS THEN
+		JS_OUT := JS_OUT - STEP;
+		IF (JS_OUT - JS) < STEP THEN
+			JS_OUT := JS;
+		ELSE
+			JS_OUT := JS_OUT - STEP;
+		END_IF;
+	ELSE
+		JS_OUT := JS;
+	END_IF;
+ELSE
+	(* No filter, direct map joystick onto valve. *)
+	JS_OUT := JS;
+END_IF;
+
+(* JS_OUT is now in range between +/- 1000.  Ratio that into the possibly smaller scale. *)
+OUT := JS_OUT * (OUTMAX / 1000.0);
+
+POSITIVE := OUT > 0;
+MAG := TO_WORD(ABS(OUT));

@@ -1,0 +1,73 @@
+
+(********************** Declaration ****************************)
+(* This function allows the user to fill up a config structure for cylinder control *)
+FUNCTION ConfigInitPositionControlled : BOOL
+VAR_INPUT
+	(* This is a pointer to the sConfig structure you are initializing. *)
+	pCONFIG: POINTER TO sConfig;
+	(* This is the feedback device associated with this axis. *)
+	FB: sFeedback;
+
+	(* This is the velocity feedforward term.  It specifies the velocity of the axis, in
+		engineering units per second, when the maximum output is applied. *)
+	SPEED_PLUS_MAX: REAL;
+	SPEED_MINUS_MAX: REAL;
+
+	(* Maximum permissible endpoint for a motion command, engineering units. *)
+	COMMAND_LIMIT_MAX: REAL;
+	(* Minimum permissible endpoint for a motion command, engineering units. *)
+	COMMAND_LIMIT_MIN: REAL;
+
+	(* Parameters CYCLE_ are for axis diagnostics. *)
+	CYCLE_PLUS: REAL;
+	CYCLE_MINUS: REAL;
+	CYCLE_VEL: REAL;
+	CYCLE_ACCEL: REAL;
+	
+	(* Maximum output, directional, milliamps. *)
+	OUTPUT_PLUS_MAX: WORD;
+	OUTPUT_MINUS_MAX: WORD;
+
+	(* Valve deedband (asymmetric), millepercent. *)
+	DEADBAND_PLUS: WORD;
+	DEADBAND_MINUS: WORD;
+	
+	MANUAL_HARDSTOP_BAND: REAL := 0.0;
+	MANUAL_OUTPUT_AT_HARDSTOP: REAL;
+	MANUAL_OUTPUT_MAX: REAL; 
+
+	(* Controller will generate an error if the axis doesn't track the setpoint within this
+		band, in engineering units. *)
+	POS_FOLLOW_BAND: REAL;
+	(* Ratio of speed of axis going positive to the speed of the axis going negative when
+		the same output to the valve is used (with only the direction changed).  This is
+		the PLANT gain ratio (not the ratio of servo gains)!! *)
+	CYL_GAIN_RATIO: REAL;
+	(* Does the cylinder extension correspond to positive movement in the engineering unit
+		coordinate frame? *)
+	CYL_EXT_POSITIVE: BOOL;
+
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+pCONFIG^.FORCE_CONTROL := FALSE;
+
+pCONFIG^.COMMAND_LIMIT_MAX := COMMAND_LIMIT_MAX;
+pCONFIG^.COMMAND_LIMIT_MIN := COMMAND_LIMIT_MIN;
+pCONFIG^.CYCLE_PLUS := CYCLE_PLUS;
+pCONFIG^.CYCLE_MINUS := CYCLE_MINUS;
+pCONFIG^.CYCLE_VEL := CYCLE_VEL;
+pCONFIG^.CYCLE_ACCEL := CYCLE_ACCEL;
+pCONFIG^.OUTPUT_PLUS_MAX := OUTPUT_PLUS_MAX;
+pCONFIG^.OUTPUT_MINUS_MAX := OUTPUT_MINUS_MAX;
+pCONFIG^.DEADBAND_PLUS := DEADBAND_PLUS;
+pCONFIG^.DEADBAND_MINUS := DEADBAND_MINUS;
+pCONFIG^.MANUAL_HARDSTOP_BAND := MANUAL_HARDSTOP_BAND;
+pCONFIG^.MANUAL_OUTPUT_AT_HARDSTOP := MANUAL_OUTPUT_AT_HARDSTOP;
+pCONFIG^.MANUAL_OUTPUT_MAX := MANUAL_OUTPUT_MAX; 
+pCONFIG^.POS_FOLLOW_BAND := POS_FOLLOW_BAND;
+pCONFIG^.CYL_GAIN_RATIO := CYL_GAIN_RATIO;
+pCONFIG^.CYL_EXT_POSITIVE := CYL_EXT_POSITIVE;
+
+ConfigVffInit(pConfig, FB, SPEED_PLUS_MAX, SPEED_MINUS_MAX);

@@ -1,0 +1,39 @@
+TD3 motion study - family 3, version 2 (3.2)
+
+Working geometry uses the November 3 dimensioned SolidWorks references,
+superseding older arm assumptions. See DRAWING_GEOMETRY.md. With dimensions
+enabled, click two gold pivot centers for live horizontal/vertical distances
+and inclination. A third pivot starts a new pair; Clear pivot measurement clears.
+Show pivots & slides is a checkbox for markers and gold slide surfaces. When
+off, a changed actuator's annotations appear for two seconds. Steel guides remain.
+Only actuator axes and
+slide reference points are marked; cylinder ends and pendulum points are omitted.
+
+Unzip the entire archive into a folder, then open index.html in Chrome or Edge.
+Keep index.html, style.css, viewer.js and the reference folder together.
+No installation, Node.js, internet, local server or PLC connection is required.
+
+Use signed RPM controls for continuous rotary motion in either direction.
+Stop rotaries stops both; Reset pose stops rotation and restores the reference.
+RPM ranges are demonstration speeds, not measured hydraulic response.
+
+Crowd blocks touch at upper zero. A source-based coupled top limit and the
+lower-crowd minimum keep their bearing blocks on the modeled guides. The current
+build header is WORKING / v0.4 - CROWD GEOMETRY. See DRAWING_GEOMETRY.md for the
+source datums, remaining physical-dimension questions and low-pose ground crossings.
+Position controls use 530v2 axesInit ranges with these crowd exceptions. See LIMITS.md for source
+identity, machine-version selection, unit conversion and known limitations.
+Geometry/pivots are estimates. This viewer is not a machine operation interface.
+
+Sharing: send this ZIP through your usual file-sharing or email service.
+Recipients must extract it before opening index.html. A hosted version could
+later provide a single web link, but this package has not been published.
+
+ET Plumb: screw ends are vertical. A listed size is selected by pin height, with
+3-15 inch reveal closest to 9 inches. Stance and actual reveal are displayed.
+
+ET Plumb mode entry sets this model to mast slide 195 cm and lower crowd 160 cm.
+The mounted cap WP aligns with COR there; both axes can then be adjusted.
+Alignment notes beside the controls and the Align holder button help restore it.
+The lower-crowd 160 cm value is a source default chosen for this model, not a
+verified persistent rig setting. See MEASUREMENTS.md for details.

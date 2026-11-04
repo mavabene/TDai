@@ -1,0 +1,20 @@
+
+(********************** Declaration ****************************)
+FUNCTION HaweOutput : BOOL
+VAR_INPUT
+	pAXIS: POINTER TO sAxis;
+END_VAR
+VAR
+	POSITIVE_VALUE: BOOL;
+END_VAR
+
+(********************** Implementation ****************************)
+
+(* Drive the output to the valve control. *)
+IF pAXIS^.CONFIG.HAWE_VPOC.pDSW^ <> 15 THEN
+	pAXIS^.CONFIG.HAWE_VPOC.pVPOC_CMD^ := 0;
+ELSIF isOutputPositive(pAXIS^) THEN
+	pAXIS^.CONFIG.HAWE_VPOC.pVPOC_CMD^ := WORD_TO_INT(pAXIS^.OUTPUT.MAGNITUDE);
+ELSE
+	pAXIS^.CONFIG.HAWE_VPOC.pVPOC_CMD^ := -WORD_TO_INT(pAXIS^.OUTPUT.MAGNITUDE);
+END_IF

@@ -1,0 +1,13 @@
+
+(********************** Declaration ****************************)
+(* Call this function from the lower level state logic to determine if a PAUSE has been
+	requested. This tells the lower level code, for one scan, that the user has newly initiated
+	a PAUSE request. *)
+FUNCTION isPauseRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isPauseRequested := (REMOTE.RJ_B_RE AND LAST_PAUSED);

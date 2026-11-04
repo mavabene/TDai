@@ -1,0 +1,23 @@
+
+(********************** Declaration ****************************)
+TYPE eFWPStates :
+	(
+	(* The idea is that auto mode will allow us to arrive at the Fine Working Point location using a combination of auto and manual functions..
+
+		The state diagram for the is found at:
+
+			https://www.lucidchart.com/  (complete path to be added later)
+	*)
+	FWP_STATE_ENTRY, (* INITIAL ENTRY INTO RWP MODE *)
+	FWP_STATE_MANUAL,
+	FWP_STATE_SELECT_OPERATION,
+	FWP_STATE_INIT_VERTICAL, (* INITIAL AUTO MANDREL VERTICAL *)
+	FWP_STATE_CONTINUE,
+	FWP_STATE_CORRECT_YAW,
+	FWP_STATE_VERTICAL_PYA,  (* MANDREL VERTICAL POST YAW ADJUST *)
+	FWP_STATE_JOGZ,  (* JOG Z AXIS TO WORK POINT *)
+	FWP_STATE_JOGY, (* JOG Y AXIS TO WORK POINT *)
+	FWP_STATE_JOGZY,
+	FWP_STATE_EXIT
+	);
+END_TYPE

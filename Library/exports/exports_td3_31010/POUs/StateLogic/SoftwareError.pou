@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION SoftwareError : BOOL
+VAR_INPUT
+	MSG: STRING;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+SOFTWARE_ERRORMSG := MSG;
+SOFTWARE_ERRORS := SOFTWARE_ERRORS + 1;

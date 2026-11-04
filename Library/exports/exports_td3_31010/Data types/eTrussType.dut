@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eTrussType :
+(
+	TRUSS_TYPE_NORMAL := 0,
+	TRUSS_TYPE_CENTER_STRUCTURE := 1,
+	TRUSS_TYPE_END := 2
+);
+END_TYPE

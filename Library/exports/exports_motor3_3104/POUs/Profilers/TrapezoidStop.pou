@@ -1,0 +1,34 @@
+
+(********************** Declaration ****************************)
+FUNCTION TrapezoidStop : BOOL
+VAR_INPUT
+	pPROFILE: POINTER TO sTrapezoid;
+	pSETPOINT: POINTER TO sSetpoint;
+	TIME_NOW_US: DWORD;
+	CFG: sConfig;
+	FB: sFeedback;
+END_VAR
+VAR
+	DECEL_TIME: REAL;
+	DECEL_DISTANCE: REAL;
+	POS_DELTA: REAL;
+END_VAR
+(********************** Implementation ****************************)
+(* Whereever we are, we just want to stop.  We know the current desired velocity, and we also know the desired
+	acceleration.  Use this to calculate the time required to stop, and then switch the profiler state to
+	decel and begin this operation *)
+
+IF pPROFILE^.STATE = HOLD OR pPROFILE^.STATE = DECEL OR ((TO_REAL(pSETPOINT^.VELOCITY_RAW) * TO_REAL(pSETPOINT^.ACCELERATION_RAW)) = 0 ) THEN
+	(* Do nothing.  We are either stopped, or already stopping *)
+	;
+ELSE
+	(* We are either cruising or accelerating.  Stop this. *)
+	DECEL_TIME := ABS(TO_REAL(pSETPOINT^.VELOCITY_RAW) / TO_REAL(pSETPOINT^.ACCELERATION_RAW));
+	pPROFILE^.TIME_SEGMENT_BEGIN := TIME_NOW_US;
+	pPROFILE^.TIME_DECEL_END := TIME_NOW_US + REAL_TO_DWORD(DECEL_TIME * 1000000.0);
+	POS_DELTA := ((pPROFILE^.ACCELERATION * DECEL_TIME * DECEL_TIME) / 2);
+	pPROFILE^.POS_SEGMENT_BEGIN := pSETPOINT^.POSITION_RAW;
+	pPROFILE^.POSITION_END := pSETPOINT^.POSITION_RAW + REAL_TO_DINT(POS_DELTA);
+	pPROFILE^.VEL_SEGMENT_BEGIN := pSETPOINT^.VELOCITY_RAW;
+	pPROFILE^.STATE := DECEL;
+END_IF;

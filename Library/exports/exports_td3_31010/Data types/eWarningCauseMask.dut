@@ -1,0 +1,40 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eWarningCauseMask :
+(
+	PITCH := 16#0001,
+	LOWER_CROWD := 16#0002,
+	BASE_PITCH := 16#0004,
+	BASE_ROLL := 16#0008,
+	PUMP1_PRESSURE := 16#0010,
+	PUMP2_PRESSURE := 16#0020,
+	REMOTE_BATTERY := 16#0040,
+	ANY_VALVE := 16#0080,
+	ANY_AXIS_RANGE := 16#0100,
+	UPPER_CROWD := 16#0200,
+	DRIFTER_TO_TOP := 16#0400,
+	TRACK_HIGH_SPEED := 16#0800,
+	FUEL_LEVEL := 16#1000,
+	HYDRAULIC_TEMPERATURE := 16#2000,
+	REMOTE_ERROR := 16#4000,
+	ROTATOR := 16#8000,
+	COMPRESSOR := 16#10000,
+	eWarningCauseMask_AVAIL_20000 := 16#20000,
+	eWarningCauseMask_AVAIL_40000 := 16#40000,
+	PNEZD_D_INVALID := 16#80000,
+	PROXIMITY_SENSOR_FAILED := 16#100000,
+	eWarningCauseMask_AVAIL_200000 := 16#200000,
+	eWarningCauseMask_AVAIL_400000 := 16#400000,
+	eWarningCauseMask_AVAIL_800000 := 16#800000,
+	eWarningCauseMask_AVAIL_1000000 := 16#1000000,
+	eWarningCauseMask_AVAIL_2000000 := 16#2000000,
+	eWarningCauseMask_AVAIL_4000000 := 16#4000000,
+	eWarningCauseMask_AVAIL_8000000 := 16#8000000,
+	eWarningCauseMask_AVAIL_10000000 := 16#10000000,
+	eWarningCauseMask_AVAIL_20000000 := 16#20000000,
+	eWarningCauseMask_AVAIL_40000000 := 16#40000000,
+	eWarningCauseMask_AVAIL_80000000 := 16#80000000
+) DWORD;
+END_TYPE

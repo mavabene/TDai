@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+TYPE sHaweVpoc :
+STRUCT
+	EXISTS: BOOL := FALSE;
+	pDCW: POINTER TO UINT;
+	pDSW: POINTER TO UINT;
+	pVPOC_CMD: POINTER TO INT;
+	//pVPOC_ACT: POINTER TO INT;
+	(* Set to true if positive value to valve runs encoder in negative direction. *)
+	OUTPUT_REVERSE: BOOL;
+	(*
+		0: not ready.
+		1: device in fault, have sent reset command.
+		2: device in fault, have cleared reset command.
+		3: device in init, have sent enable command
+		4: device active
+	*)
+	initState: INT;
+	timeStart: DWORD;
+	
+	failures: INT;
+END_STRUCT
+END_TYPE

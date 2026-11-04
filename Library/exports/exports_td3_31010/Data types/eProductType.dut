@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eProductType :
+(
+	PRODUCT_NXT_SI := 0,
+	PRODUCT_NXT_INT := 1,
+	PRODUCT_NXT_VAR := 2,
+	PRODUCT_ATI := 3
+);
+END_TYPE

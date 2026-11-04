@@ -1,0 +1,50 @@
+
+(********************** Declaration ****************************)
+FUNCTION_BLOCK boxcarFilter
+VAR_INPUT
+	INIT: BOOL;
+	READING: REAL;
+END_VAR
+VAR_IN_OUT
+	SAMPLES: ARRAY [*] OF REAL;
+END_VAR
+VAR_OUTPUT
+	FILTERED: REAL;
+	VALID: BOOL;
+END_VAR
+VAR
+	// This is a convenience.  If you want to run continuously for the entire uptime of the machine,
+	//	no initialization is required.
+	INITIALIZED: BOOL := FALSE;
+	IDX: DINT := 1;
+	IDX_LAST: DINT;
+	SUM: REAL := 0.0;
+	BOUND: DINT;
+END_VAR
+
+(********************** Implementation ****************************)
+IF INIT OR NOT INITIALIZED THEN
+	FOR IDX := 1 TO UPPER_BOUND(SAMPLES, 1) DO
+		SAMPLES[IDX] := 0.0;
+	END_FOR
+	SUM := 0.0;
+	VALID := FALSE;
+	IDX := 1;
+	IDX_LAST := UPPER_BOUND(SAMPLES, 1);
+	INITIALIZED := TRUE;
+ELSE
+	BOUND := UPPER_BOUND(SAMPLES, 1);
+	SUM := SUM + READING - SAMPLES[IDX];
+	SAMPLES[IDX] := READING;
+	IDX := IDX + 1;
+	IF IDX > UPPER_BOUND(SAMPLES, 1) THEN
+		IDX := 1;
+	END_IF
+	IF IDX = 1 THEN
+		IDX_LAST := UPPER_BOUND(SAMPLES, 1);
+		VALID := TRUE;
+	ELSE
+		IDX_LAST := IDX;
+	END_IF
+	FILTERED := SUM / TO_REAL(UPPER_BOUND(SAMPLES, 1));
+END_IF

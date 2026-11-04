@@ -1,0 +1,30 @@
+
+(********************** Declaration ****************************)
+FUNCTION AxisZeroInit : BOOL
+VAR_INPUT
+	pFEEDBACK: POINTER TO sFeedback;
+
+	(* This is the counts on the feedback when the axis is at the position you want
+		to call 0 in engineering units. *)
+	RAW_WHEN_ENGR_ZERO: UDINT;
+END_VAR
+VAR
+END_VAR
+
+
+
+
+(********************** Implementation ****************************)
+pFEEDBACK^.RAW_WHEN_ENGR_ZERO := TO_DINT(RAW_WHEN_ENGR_ZERO);
+
+IF pFEEDBACK^.ROLLOVER_AT > 0 THEN
+	IF TO_DINT(RAW_WHEN_ENGR_ZERO) > pFEEDBACK^.ROLLOVER_HALF THEN
+		pFEEDBACK^.ABS_ZERO_ABOVE_RANGE_HALF := TRUE;
+		pFEEDBACK^.ABS_RANGE_MIN := TO_DINT(RAW_WHEN_ENGR_ZERO) - pFEEDBACK^.ROLLOVER_HALF;
+		pFEEDBACK^.ABS_RANGE_MAX := 0;
+	ELSE
+		pFEEDBACK^.ABS_ZERO_ABOVE_RANGE_HALF := FALSE;
+		pFEEDBACK^.ABS_RANGE_MIN := 0;
+		pFEEDBACK^.ABS_RANGE_MAX := TO_DINT(RAW_WHEN_ENGR_ZERO) + pFEEDBACK^.ROLLOVER_HALF;
+	END_IF
+END_IF

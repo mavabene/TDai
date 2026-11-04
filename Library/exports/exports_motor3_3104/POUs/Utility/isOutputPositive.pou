@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+FUNCTION isOutputPositive : BOOL
+VAR_INPUT
+	AXIS: sAxis;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF AXIS.OUTPUT.POSITIVE XOR AXIS.CONFIG.HAWE_VPOC.OUTPUT_REVERSE THEN
+	isOutputPositive := TRUE;
+ELSE
+	isOutputPositive := FALSE;
+END_IF

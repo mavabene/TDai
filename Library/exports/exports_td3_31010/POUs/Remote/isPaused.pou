@@ -1,0 +1,14 @@
+
+(********************** Declaration ****************************)
+(* Tells you if the machine is currently in the PAUSED state.  This can be used by lower leve
+	state logic along with isPauseRequested() and isContinueRequested() to make that lower level
+	logic simpler and more reliable, as this library will handle debouncing, resetting the state
+	variable on mode switch, and also handling history to determine when this state changed. *)
+FUNCTION isPaused : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isPaused := PAUSED;

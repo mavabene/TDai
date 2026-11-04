@@ -1,0 +1,15 @@
+
+(********************** Declaration ****************************)
+TYPE sAxis :
+STRUCT
+	USED: BOOL := FALSE;
+	CONTROL_MODE: eAxisControlStates;
+
+	CONFIG: sConfig;
+	FEEDBACK: sFeedback;
+	SETPOINT: sSetpoint;
+	PROFILER: sTrapezoid;
+	LOOP_PID: sLoopPID;
+	OUTPUT: sOutput;
+END_STRUCT
+END_TYPE

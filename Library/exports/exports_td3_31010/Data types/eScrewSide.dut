@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+TYPE eScrewSide :
+	(
+	SCREW_RIGHT,
+	SCREW_CENTER,
+	SCREW_LEFT
+	);
+END_TYPE

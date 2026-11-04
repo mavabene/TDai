@@ -1,0 +1,130 @@
+
+(********************** Declaration ****************************)
+VAR_GLOBAL CONSTANT
+	NUM_AXES: INT := 23;
+END_VAR
+
+VAR_GLOBAL
+	(* ------------------------- TOP LEVEL STATES ------------------------*)
+
+	(* Singleton value of MACHINE_STATE. *)
+	MACHINE_MODE: eMachineModes := IDLE_MODE;
+
+	(* Keeps track of how many machine state errors have been seen, and some info from the last one. *)
+	SOFTWARE_ERRORS: DINT;
+	SOFTWARE_ERRORMSG: STRING;
+
+	(* Servo control errors will put the whole machine in error state for safety. *)
+	MACHINE_ERROR: BOOL := FALSE;
+
+	(* Whether we are operating in automatic. *)
+	AUTOMATIC: BOOL := FALSE;
+	MANUAL: BOOL := FALSE;
+	BUMP: BOOL := FALSE;
+
+	(* Whether or not the remote is on. *)
+	REMOTE_ON: BOOL := FALSE;
+	ESTOP_PRESSED: BOOL := TRUE;
+
+	(* When the operator is changing between modes, there is a brief waiting period when no subtask should do
+		anything. *)
+	MACHINE_NO_TOUCH: BOOL := FALSE;
+	
+	(* used to trigger mode change via code - should be reset to False after every trigger *)
+	MODE_CHANGE_REQUEST: BOOL := FALSE;
+
+	PAUSED: BOOL := FALSE;
+	LAST_PAUSED: BOOL := FALSE;
+	NEW_MODE_ENABLED: BOOL := FALSE;
+
+	CONFIRM_MONITORED: BOOL := FALSE;
+	F2_MONITORED: BOOL := FALSE;
+	
+	LOAD_UNLOAD_ONLY: BOOL := FALSE;
+
+	(* ------------------------- DATA RELEVANT TO ALL MODES ------------------------*)
+
+	(* Array of objects representing axes should be here.  This size should correspond
+		to the number of elements in the eAxes enum. *)
+	AXES: ARRAY [1..NUM_AXES] OF sAxis;
+	AXIS_NAMES: ARRAY [1..NUM_AXES] OF STRING :=
+		[
+		'TRACK LEFT',
+		'TRACK RIGHT',
+		'PITCH',
+		'BOOM SWING',
+		'YAW',
+		'Z SLIDE',
+		'ROTATOR',
+		'MAST SLIDE',
+		'UPPER CROWD',
+		'UPPER ROTARY',
+		'LOWER CROWD',
+		'LOWER ROTARY',
+		'X SLIDE',
+		'BOOM LIFT',
+		'JOINT LIFT',
+		'PENDULUM',
+		'HAMMER',
+		'OUTRIGGER',
+		'CENTRALIZER',
+		'LEFT_CRIMPER',
+		'RIGHT_CRIMPER',
+		'TARGET_PLATE',
+		'WATER'
+		];
+
+	BASE_ROLL: sFeedback;
+	BASE_PITCH: sFeedback;
+	MAST_PITCH: sFeedback;
+	KNUCKLE_ROLL: sFeedback;
+(*
+	HAMMER_HAWE_VPOC: sHaweVpoc;
+	OUTRIGGER_HAWE_VPOC: sHaweVpoc;
+	CENTRALIZER_HAWE_VPOC: sHaweVpoc;
+	CRIMPER_1_HAWE_VPOC: sHaweVpoc;
+	CRIMPER_2_HAWE_VPOC: sHaweVpoc;
+	TARGET_PLATE_HAWE_VPOC: sHaweVpoc;
+*)	
+	(* Remote unit. *)
+	REMOTE: sKartech3B256KA;
+
+	(* ------------------------- SCREW_MODE ------------------------*)
+
+	TRACK_STATE_NAMES: ARRAY [1..3] OF STRING :=[
+		'ENTRY',
+		'CLEAR GROUND',
+		'NORMAL']
+	;
+
+	SCREW_STATE_NAMES: ARRAY [1..15] OF STRING :=[
+		'ENTRY',
+		'MANUAL',
+		'SELECT OPERATION',
+		'PREPARE TO LOAD',
+		'LOAD SCREW',
+		'MAST TO TARGET',
+		'POSITION MAST SLIDE',
+		'DRIVE SCREW',
+		'DRIVE ASSIST',
+		'UPPER CROWD_RETURN',
+		'UNLOAD SCREW',
+		'RETRACT AFTER DRIVE',
+		'CONFIRM MAST CLEAR',
+		'MAST TO VERTICAL',
+		'EXIT']
+	;
+
+		RWP_STATE_NAMES: ARRAY [1..6] OF STRING :=[
+		'RWP STATE ENTRY', (* INITIAL ENTRY INTO RWP MODE *)
+		'RWP STATE MANUAL',
+		'RWP STATE SELECT OPERATION',
+		'RWP STATE WAIT LEVEL',
+		'RWP STATE LOCATE WP',
+		'RWP STATE EXIT']
+		;
+
+	SETUP_STATE_NAMES: ARRAY [1..1] OF STRING :=[
+		'Manual']
+	;
+END_VAR

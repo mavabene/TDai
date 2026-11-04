@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+FUNCTION f2MonitorStart: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF F2_MONITORED = FALSE THEN
+	REMOTE.RMB2_RE := FALSE;
+	F2_MONITORED := TRUE;
+END_IF;
+f2MonitorStart := F2_MONITORED;

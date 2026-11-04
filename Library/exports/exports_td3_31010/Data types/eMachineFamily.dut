@@ -1,0 +1,12 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eMachineFamily :
+(
+	TD1_0 := 0,
+	TD1_1 := 1,
+	TD2 := 2,
+	TD3 := 3
+);
+END_TYPE

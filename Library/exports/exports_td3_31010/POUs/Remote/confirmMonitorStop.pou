@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION confirmMonitorStop: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+CONFIRM_MONITORED := FALSE;
+confirmMonitorStop := FALSE;

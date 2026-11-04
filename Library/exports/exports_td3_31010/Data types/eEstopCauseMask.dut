@@ -1,0 +1,40 @@
+
+(********************** Declaration ****************************)
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE eEstopCauseMask :
+(
+	REMOTE := 16#0001,
+	BUTTON := 16#0002,
+	FEEDBACK := 16#0004,
+	LOWER_CROWD := 16#0008,
+	PITCH := 16#0010,
+	BASE_PITCH_NORMAL := 16#0020,
+	BASE_PITCH_LOADING := 16#0040,
+	BASE_ROLL := 16#0080,
+	ANY_VALVE := 16#0100,
+	MAST_SLIDE := 16#0200,
+	UPPER_CROWD := 16#0400,
+	DRIFTER_TO_TOP := 16#0800,
+	FUEL_LEVEL := 16#1000,
+	HYDRAULIC_TEMPERATURE := 16#2000,
+	COMPRESSOR := 16#4000,
+	PROXIMITY_ALARM := 16#8000,
+	eEstopCauseMask_AVAIL_10000 := 16#10000,
+	eEstopCauseMask_AVAIL_20000 := 16#20000,
+	eEstopCauseMask_AVAIL_40000 := 16#40000,
+	eEstopCauseMask_AVAIL_80000 := 16#80000,
+	eEstopCauseMask_AVAIL_100000 := 16#100000,
+	eEstopCauseMask_AVAIL_200000 := 16#200000,
+	eEstopCauseMask_AVAIL_400000 := 16#400000,
+	eEstopCauseMask_AVAIL_800000 := 16#800000,
+	eEstopCauseMask_AVAIL_1000000 := 16#1000000,
+	eEstopCauseMask_AVAIL_2000000 := 16#2000000,
+	eEstopCauseMask_AVAIL_4000000 := 16#4000000,
+	eEstopCauseMask_AVAIL_8000000 := 16#8000000,
+	eEstopCauseMask_AVAIL_10000000 := 16#10000000,
+	eEstopCauseMask_AVAIL_20000000 := 16#20000000,
+	eEstopCauseMask_AVAIL_40000000 := 16#40000000,
+	eEstopCauseMask_AVAIL_80000000 := 16#80000000
+) DWORD; 
+END_TYPE

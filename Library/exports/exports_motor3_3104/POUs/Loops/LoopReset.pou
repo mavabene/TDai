@@ -1,0 +1,19 @@
+
+(********************** Declaration ****************************)
+FUNCTION LoopReset : BOOL
+VAR_INPUT
+	pLOOP: POINTER TO sLoopPID;
+	RESET: BOOL;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+IF RESET AND NOT pLOOP^.RESET_LAST THEN
+	pLOOP^.ERROR := FALSE;
+	pLOOP^.RESET_LAST := TRUE;
+ELSIF NOT RESET THEN
+	pLOOP^.RESET_LAST := FALSE;
+END_IF;
+
+LoopReset := pLOOP^.ERROR;

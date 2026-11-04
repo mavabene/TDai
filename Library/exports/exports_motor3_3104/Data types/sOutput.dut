@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+TYPE sOutput :
+STRUCT
+	(* For the PWM or OCC block... *)
+	POSITIVE: BOOL;
+	MAGNITUDE: WORD;
+
+	DESIRED_CURRENT_PLUS: WORD;
+	ACTUAL_CURRENT_PLUS: WORD;
+
+	DESIRED_CURRENT_MINUS: WORD;
+	ACTUAL_CURRENT_MINUS: WORD;
+
+END_STRUCT
+END_TYPE

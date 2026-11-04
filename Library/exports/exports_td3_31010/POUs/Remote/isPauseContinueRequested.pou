@@ -1,0 +1,10 @@
+
+(********************** Declaration ****************************)
+FUNCTION isPauseContinueRequested : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+isPauseContinueRequested := isPauseRequested() OR isContinueRequested();

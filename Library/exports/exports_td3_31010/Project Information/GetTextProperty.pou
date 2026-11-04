@@ -1,0 +1,27 @@
+
+(********************** Declaration ****************************)
+// This function has been automatically generated from the project information.
+{attribute 'signature_flag' := '1073741824'}
+{attribute 'register_in_runtime'}
+FUNCTION GetTextProperty : WSTRING
+VAR_INPUT
+	stKey: WSTRING;
+END_VAR
+(********************** Implementation ****************************)
+IF stKey = "Author" THEN
+	GetTextProperty := "SMK, JC";
+ELSIF stKey = "Company" THEN
+	GetTextProperty := "Ojjo";
+ELSIF stKey = "DefaultNamespace" THEN
+	GetTextProperty := "td3-1";
+ELSIF stKey = "Description" THEN
+	GetTextProperty := "";
+ELSIF stKey = "Project" THEN
+	GetTextProperty := "td3_31010";
+ELSIF stKey = "Title" THEN
+	GetTextProperty := "TD3-1 Framework";
+ELSIF stKey = "Version string" THEN
+	GetTextProperty := "";
+ELSE
+	GetTextProperty := "";
+END_IF

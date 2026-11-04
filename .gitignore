@@ -11,6 +11,13 @@
 !/AI info/
 !/Production_dev/
 !/Library/
+!/simulator/
+/simulator/node_modules/
+/simulator/dist/
+/simulator/viewer.js
+/simulator/reference/
+!/simulator-stable-v0.1/
+/simulator-stable-v0.1/node_modules/
 
 /Production_dev/*
 !/Production_dev/TD3-Auto/
@@ -31,15 +38,18 @@
 !/Production_dev/libraries/*.library
 /Library/*
 !/Library/*.library
+!/Library/exports/
 
 # Generated files are not maintained source.
 /.export-work/
 /tools/*
 !/tools/codesys_export.py
 !/tools/run_codesys_exports.py
+!/tools/run_library_exports.py
 !/tools/import_latest_projects.py
 !/tools/Copy-ToBox.ps1
 /.daily-update-state.json
+/.project-import.json
 *.opt
 *.~u
 *.precompilecache

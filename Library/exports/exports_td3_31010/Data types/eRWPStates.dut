@@ -1,0 +1,24 @@
+
+(********************** Declaration ****************************)
+TYPE eRWPStates :
+	(
+	(* The idea is that auto mode will allow us to arrive at the Rough Working Point location using a combination of auto and manual functions..
+
+		The state diagram for the is found at:
+
+			https://www.lucidchart.com/  (complete path to be added later)
+	*)
+	RWP_STATE_ENTRY, (* INITIAL ENTRY INTO RWP MODE *)
+	RWP_STATE_MANUAL,
+	RWP_STATE_SELECT_OPERATION,
+	RWP_STATE_WAIT_LEVEL,
+	RWP_STATE_GPS_FAST_TARGET,
+	RWP_STATE_GPS_FINE_TARGET,
+	RWP_STATE_GPS_MANUAL_CYCLE,
+	RWP_STATE_SQUARE_YAW,
+	RWP_STATE_LOCATE_WP,
+	RWP_STATE_EXIT,
+	RWP_STATE_FIND_LSR,
+	RWP_STATE_ORIGIN_TO_LSR
+	);
+END_TYPE

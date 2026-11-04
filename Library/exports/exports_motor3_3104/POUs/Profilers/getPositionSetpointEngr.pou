@@ -1,0 +1,11 @@
+
+(********************** Declaration ****************************)
+FUNCTION getPositionSetpointEngr : REAL
+VAR_INPUT
+	axis: sAxis;
+END_VAR
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+getPositionSetpointEngr := POS_RAW_TO_ENGR(axis.FEEDBACK, axis.SETPOINT.POSITION_RAW);

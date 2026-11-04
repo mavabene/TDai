@@ -1,0 +1,31 @@
+
+(********************** Declaration ****************************)
+FUNCTION AxisCalculateZero : UDINT
+	(* This function calculates the encoder reading at an axis zero position, given the
+		encoder reading at another position.  It will handle rollover in either direction. *)
+VAR_INPUT
+	pCONFIG: POINTER TO sConfig;
+	pFEEDBACK: POINTER TO sFeedback;
+	(* The engineering unit position corresponding to the given raw encoder value. *)
+	ENGR: REAL;
+	(* The raw encoder value that corresponds to the given engineering unit value. *)
+	RAW: UDINT;
+END_VAR
+VAR
+	DI_TMP: DINT;
+	AT_ZERO: UDINT;
+END_VAR
+
+(********************** Implementation ****************************)
+
+DI_TMP := TO_DINT(RAW) - TO_DINT(ENGR * pFEEDBACK^.RAW_PER_ENGR);
+
+IF DI_TMP < 0 THEN
+	AT_ZERO := TO_UDINT(DI_TMP + pFEEDBACK^.ROLLOVER_AT);
+ELSIF DI_TMP > pFEEDBACK^.ROLLOVER_AT THEN
+	AT_ZERO := TO_UDINT(DI_TMP - pFEEDBACK^.ROLLOVER_AT);
+ELSE
+	AT_ZERO := TO_UDINT(DI_TMP);
+END_IF
+
+AxisCalculateZero := AT_ZERO;

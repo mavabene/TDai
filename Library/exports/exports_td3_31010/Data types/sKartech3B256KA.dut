@@ -1,0 +1,108 @@
+
+(********************** Declaration ****************************)
+TYPE sKartech3B256KA :
+STRUCT
+	(* This structure should hold all of the information from the Kartech remote.
+		It will be passed into each state machine, and the state machine should
+		only use this structure for interaction with the operator.  We don't want
+		a zillion direct references to Kartech specific location variables sprinkled
+		throughout the code, because that's going to be a mess if (when!) we switch remotes.
+		This will make it easy to do a generic structure for this eventually, and then make
+		it so it is simple for us to use different remotes.
+
+	Notes:
+		1) Joystick positions are from -100 to +100.  Forward is + on a fwd/back control,
+			left is + on a left/right control.
+		2) BUTTONS MUST BE DEBOUNCED AT THE POINT WHERE THEY ENTER THE CONTROLLER, IF
+			NECESSARY.  THERE SHOULD NOT BE DEBOUNCE LOCIG SCATTERED EVERYWHERE!
+		3) There are states and edges for each button.  These will be handled right
+			where the readings enter the controller, just as debouncing.  The remote
+			should be handled right at the beginning of the scan, and the edges will
+			be valid for a single cycle.
+		4) For two position momentary switches, the maintained contact will be position
+			0, and the momentary position will be contact 1.
+		5) For three position return to center switches, the center contact will be
+			position 0, and the momentar positions will be numbered from outboard to inboard,
+			or left to right.
+		6) For toggle switches, contacts will be numbered from outboard to inboard.
+	*)
+
+	AVAILABLE: BOOL := FALSE;
+	HEARTBEAT: BOOL;
+	RF_CAN: BOOL;
+
+	(* Left and right 2D joysticks, forward and back, left and right.  -100% to 100%. *)
+	LJ_FB: INT := 0;
+	RJ_FB: INT := 0;
+	LJ_LR: INT := 0;
+	RJ_LR: INT := 0;
+
+	(* Rising and falling edges of joystick buttons. *)
+	LJ_B_FE: BOOL := FALSE;
+	RJ_B_FE: BOOL := FALSE;
+	LJ_B_RE: BOOL := FALSE;
+	RJ_B_RE: BOOL := FALSE;
+
+	(* Single axis levers. *)
+	V1_FB: INT := 0;
+	V2_FB: INT := 0;
+	V3_FB: INT := 0;
+	V4_FB: INT := 0;
+
+	(* Return to center, three position switches: 0 is center, 1 is up, 2 is down. *)
+	RTCB1_UP: BOOL := TRUE;
+	RTCB1_UP_RE: BOOL := FALSE;
+	RTCB1_DN: BOOL := TRUE;
+	RTCB1_DN_RE: BOOL := FALSE;
+	RTCB2_UP: BOOL := TRUE;
+	RTCB2_UP_RE: BOOL := FALSE;
+	RTCB2_DN: BOOL := TRUE;
+	RTCB2_DN_RE: BOOL := FALSE;
+
+	(* Toggle, three position. *)
+	T3P1_UP: BOOL := FALSE;
+	T3P1_DN: BOOL := FALSE;
+	T3P2_UP: BOOL := FALSE;
+	T3P2_DN: BOOL := FALSE;
+	T3P3_UP: BOOL := FALSE;
+	T3P3_DN: BOOL := FALSE;
+	T3P4_UP: BOOL := FALSE;
+	T3P4_DN: BOOL := FALSE;
+
+	T3P1_UP_RE: BOOL := FALSE;
+	T3P1_UP_FE: BOOL := FALSE;
+	T3P1_DN_RE: BOOL := FALSE;
+	T3P1_DN_FE: BOOL := FALSE;
+	T3P2_UP_RE: BOOL := FALSE;
+	T3P2_UP_FE: BOOL := FALSE;
+	T3P2_DN_RE: BOOL := FALSE;
+	T3P2_DN_FE: BOOL := FALSE;
+	T3P3_UP_RE: BOOL := FALSE;
+	T3P3_UP_FE: BOOL := FALSE;
+	T3P3_DN_RE: BOOL := FALSE;
+	T3P3_DN_FE: BOOL := FALSE;
+	T3P4_UP_RE: BOOL := FALSE;
+	T3P4_UP_FE: BOOL := FALSE;
+	T3P4_DN_RE: BOOL := FALSE;
+	T3P4_DN_FE: BOOL := FALSE;
+
+	(* Momentary buttons, left and right, numbered outboard to inboard. *)
+	LMB1: BOOL := FALSE;
+	RMB1: BOOL := FALSE;
+	RMB2: BOOL := FALSE;
+
+	(* Edges for the momentary buttons. *)
+	LMB1_RE: BOOL := FALSE;
+	RMB1_RE: BOOL := FALSE;
+	RMB2_RE: BOOL := FALSE;
+	LMB1_FE: BOOL := FALSE;
+	RMB1_FE: BOOL := FALSE;
+	RMB2_FE: BOOL := FALSE;
+
+	E_STOP: BOOL := TRUE;
+
+	BATTERY_VOLTAGE: REAL := 0.0;
+	LOW_VOLTAGE: BOOL := TRUE;
+	
+END_STRUCT
+END_TYPE

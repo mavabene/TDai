@@ -1,0 +1,5 @@
+
+(********************** Declaration ****************************)
+TYPE eTrapezoidStates :
+	(HOLD, ACCEL, CRUISE, DECEL);
+END_TYPE

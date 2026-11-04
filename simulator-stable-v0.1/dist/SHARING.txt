@@ -1,0 +1,26 @@
+TD3 motion study - family 3, version 2 (3.2)
+
+Unzip the entire archive into a folder, then open index.html in Chrome or Edge.
+Keep index.html, style.css, viewer.js and the reference folder together.
+No installation, Node.js, internet, local server or PLC connection is required.
+
+Use signed RPM controls for continuous rotary motion in either direction.
+Stop rotaries stops both; Reset pose stops rotation and restores the reference.
+RPM ranges are demonstration speeds, not measured hydraulic response.
+
+Position controls use 530v2 axesInit command ranges. See LIMITS.md for source
+identity, machine-version selection, unit conversion and known limitations.
+Geometry/pivots are estimates. This viewer is not a machine operation interface.
+
+Sharing: send this ZIP through your usual file-sharing or email service.
+Recipients must extract it before opening index.html. A hosted version could
+later provide a single web link, but this package has not been published.
+
+ET Plumb: screw ends are vertical. A listed size is selected by pin height, with
+3-15 inch reveal closest to 9 inches. Stance and actual reveal are displayed.
+
+ET Plumb mode entry sets this model to mast slide 195 cm and lower crowd 160 cm.
+The mounted cap WP aligns with COR there; both axes can then be adjusted.
+Alignment notes beside the controls and the Align holder button help restore it.
+The lower-crowd 160 cm value is a source default chosen for this model, not a
+verified persistent rig setting. See MEASUREMENTS.md for details.

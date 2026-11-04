@@ -1,0 +1,84 @@
+
+(********************** Declaration ****************************)
+TYPE sConfig :
+STRUCT
+	FORCE_CONTROL: BOOL := TRUE;
+	
+	P_UNIT_NAME: STRING := 'Position units';
+	V_UNIT_NAME: STRING := 'Velocity units';
+	A_UNIT_NAME: STRING := 'Accel units';
+
+	(* Speeds when maximum output is applied, directional.  Generates VFF term. *)
+	SPEED_PLUS_MAX: REAL;
+	SPEED_MINUS_MAX: REAL;
+
+	(* Maximum allowable position setpoint, engineering units. *)
+	COMMAND_LIMIT_MAX: REAL := 10.0;
+	(* Minimum allowable position setpoint, engineering units. *)
+	COMMAND_LIMIT_MIN: REAL := 0.0;
+
+	(* This is the distance from the hardstop that manual control speed will start being reduced. *)
+	MANUAL_HARDSTOP_BAND: REAL := 0.0;
+
+	(* This is the maximum manual output when the axis is right at the hardstop.  The controls should ramp the output down
+		as the axis approaches the hardstop. *)	
+	MANUAL_OUTPUT_AT_HARDSTOP: REAL;
+	(* Max output under manual control.  This should be setup as the highest speed you ever want the operator to control
+		this axis in manual operations.  This would be the situation (for instance) where you are doing maintanence and want
+		to rapidly*)
+	MANUAL_OUTPUT_MAX: REAL; 
+		
+	(* Maximum output, in milliamps for force controlled, in mille percent for position controlled. *)
+	OUTPUT_PLUS_MAX: WORD;
+	OUTPUT_MINUS_MAX: WORD;
+
+	(* Motion parameters for cycling in diagnostircs mode. *)
+	CYCLE_PLUS: REAL;
+	CYCLE_MINUS: REAL;
+	CYCLE_VEL: REAL;
+	CYCLE_ACCEL: REAL;
+	
+	(* Internal velocity feedforward gain *)
+	VFF_MPCT_PER_CPS_PLUS: REAL;
+	VFF_MPCT_PER_CPS_MINUS: REAL;
+	
+	(* Position following error band, engineering *)
+	POS_FOLLOW_BAND: REAL := 0.0;
+	
+	(* Cylinder gain ratio, in (gains_in_+_dir / gains_in_-_dir).  Essentially every axis has
+		an imbalance in speed... when the valve is open 40%, is doesn't translate to the same
+		speed in both plus and minus directions. *)
+	CYL_GAIN_RATIO: REAL := 1.0;
+	(* Does the cylinder extend in the positive direction of feedback? *)
+	CYL_EXT_POSITIVE: BOOL := TRUE;
+
+	(***************************** Settings for force controlled valves (PWM outputs) ******************************)
+
+	(* PWM Output frequency *)
+	PWM_FREQ: WORD := 240;
+	(* PWM Dither divisor (divide PWM_FREQ by this EVEN number to get dither frequency *)
+	DITHER_DIVISOR: WORD := 4;
+	DITHER_FREQ: WORD := 60;
+	(* Dither peak to peak as a tenths of a percent of maximum valve output *)
+	DITHER_MAGNITUDE: WORD := 200;
+
+	(* Working range of the output, milliamps. *)
+	OUTPUT_WORKING_PLUS: WORD;
+	OUTPUT_WORKING_MINUS: WORD;
+	(* Output channel for positive motion *)
+	CHANNEL_PLUS:BYTE := 0;
+	(* Output channel for negative motion *)
+	CHANNEL_MINUS:BYTE := 0;
+	(* Whether or not the channels are on the extended section. *)
+	CHANNELS_EXTENDED: BOOL := FALSE;
+	(* Valve deadband, in milliamps. *)
+	DEADBAND_PLUS: WORD;
+	DEADBAND_MINUS: WORD;
+
+	(***************************** Settings for position controlled valves (CanBus connected) ******************************)
+
+		HAWE_VPOC: sHaweVpoc;
+		
+
+END_STRUCT
+END_TYPE

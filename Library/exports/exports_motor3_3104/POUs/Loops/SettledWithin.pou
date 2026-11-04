@@ -1,0 +1,16 @@
+
+(********************** Declaration ****************************)
+FUNCTION SettledWithin : BOOL
+VAR_INPUT
+	pLOOP: POINTER TO sLoopPID;
+	BAND: REAL;
+END_VAR
+VAR
+END_VAR
+
+(********************** Implementation ****************************)
+IF (ABS(pLOOP^.PERR_ENGR) < BAND) THEN
+	SettledWithin := TRUE;
+ELSE
+	SettledWithin := FALSE;
+END_IF;

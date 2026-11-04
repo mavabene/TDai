@@ -1,0 +1,9 @@
+
+(********************** Declaration ****************************)
+FUNCTION f2MonitorStop: BOOL
+VAR
+END_VAR
+(********************** Implementation ****************************)
+
+F2_MONITORED := FALSE;
+f2MonitorStop := FALSE;
